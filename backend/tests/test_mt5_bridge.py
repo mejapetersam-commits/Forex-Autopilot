@@ -8,8 +8,11 @@ TOKEN = "test-only-bridge-token"
 
 
 @pytest.fixture(autouse=True)
-def bridge_token(monkeypatch):
+def bridge_token(monkeypatch, tmp_path):
     monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", TOKEN)
+    monkeypatch.setenv(
+        "FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "telemetry.sqlite3")
+    )
 
 
 def test_bridge_rejects_missing_token():
@@ -129,3 +132,93 @@ def test_rejects_extra_fields_on_heartbeat():
         },
     )
     assert response.status_code == 422
+
+
+
+def test_persists_and_returns_latest_account_snapshot():
+    response = client.post(
+        "/api/v1/mt5/account",
+        headers={"X-Bridge-Token": TOKEN},
+        json={
+            "server": "ExnessKE-MT5Trial9",
+            "account_currency": "USD",
+            "balance": 10000,
+            "equity": 10025,
+            "margin": 50,
+            "free_margin": 9975,
+            "leverage": 200,
+            "observed_at": "2026-11-18T12:00:00Z",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["stored"] is True
+
+    latest = client.get(
+        "/api/v1/mt5/latest/account",
+        headers={"X-Bridge-Token": TOKEN},
+    )
+    assert latest.status_code == 200
+    assert latest.json()["data"]["balance"] == 10000
+    assert latest.json()["data"]["equity"] == 10025
+    assert "login" not in latest.json()["data"]
+    assert "password" not in latest.json()["data"]
+
+
+def test_persists_latest_quote_per_symbol_and_returns_history():
+    headers = {"X-Bridge-Token": TOKEN}
+    first = client.post(
+        "/api/v1/mt5/quote",
+        headers=headers,
+        json={
+            "symbol": "eurusd",
+            "bid": 1.08,
+            "ask": 1.0801,
+            "timestamp": "2026-11-18T12:00:00Z",
+        },
+    )
+    second = client.post(
+        "/api/v1/mt5/quote",
+        headers=headers,
+        json={
+            "symbol": "EURUSD",
+            "bid": 1.081,
+            "ask": 1.0811,
+            "timestamp": "2026-11-18T12:00:15Z",
+        },
+    )
+    assert first.status_code == second.status_code == 200
+    assert second.json()["stored"] is True
+
+    latest = client.get("/api/v1/mt5/latest/quotes", headers=headers)
+    assert latest.status_code == 200
+    assert len(latest.json()["data"]) == 1
+    assert latest.json()["data"][0]["bid"] == 1.081
+
+    history = client.get(
+        "/api/v1/mt5/history/quotes/EURUSD?limit=10",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    assert len(history.json()["data"]) == 2
+
+
+def test_persists_and_returns_latest_heartbeat():
+    headers = {"X-Bridge-Token": TOKEN}
+    response = client.post(
+        "/api/v1/mt5/heartbeat",
+        headers=headers,
+        json={
+            "server": "ExnessKE-MT5Trial9",
+            "terminal_connected": True,
+            "observed_at": "2026-11-18T12:00:00Z",
+        },
+    )
+    assert response.status_code == 200
+    latest = client.get("/api/v1/mt5/latest/heartbeat", headers=headers)
+    assert latest.status_code == 200
+    assert latest.json()["data"]["terminal_connected"] is True
+
+
+def test_telemetry_read_endpoints_require_authentication():
+    response = client.get("/api/v1/mt5/latest/quotes")
+    assert response.status_code == 401
