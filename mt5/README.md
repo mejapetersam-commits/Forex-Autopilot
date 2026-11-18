@@ -58,3 +58,6 @@ The repository includes a container build at `backend/Dockerfile` and a hardened
 Set `FOREX_AUTOPILOT_BRIDGE_TOKEN` in the deployment environment to a cryptographically random secret of at least 32 characters. Do not store it in Git, source code, screenshots or chat. Compose persists SQLite data in the named `telemetry_data` volume and runs the API as a non-root user. Back up that volume and verify restore before relying on the telemetry history.
 
 The API container health check verifies process readiness only; it does not verify Exness connectivity or MT5 telemetry. The EA must be compiled in MetaEditor and tested against a deployed HTTPS endpoint before this integration is considered operational.
+
+
+The authenticated monitoring endpoint `GET /api/v1/mt5/status` summarizes heartbeat and quote freshness. Its default stale threshold is 60 seconds and can be changed with `FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS`. This is a monitoring aid, not proof that the broker is healthy and not a permission to trade.
