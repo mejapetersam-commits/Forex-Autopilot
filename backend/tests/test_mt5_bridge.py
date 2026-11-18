@@ -222,3 +222,62 @@ def test_persists_and_returns_latest_heartbeat():
 def test_telemetry_read_endpoints_require_authentication():
     response = client.get("/api/v1/mt5/latest/quotes")
     assert response.status_code == 401
+
+
+
+def test_latest_quote_uses_observation_time_not_arrival_order():
+    headers = {"X-Bridge-Token": TOKEN}
+    newer = client.post(
+        "/api/v1/mt5/quote",
+        headers=headers,
+        json={
+            "symbol": "EURUSD",
+            "bid": 1.09,
+            "ask": 1.0901,
+            "timestamp": "2026-11-18T12:05:00Z",
+        },
+    )
+    delayed_old = client.post(
+        "/api/v1/mt5/quote",
+        headers=headers,
+        json={
+            "symbol": "EURUSD",
+            "bid": 1.08,
+            "ask": 1.0801,
+            "timestamp": "2026-11-18T12:04:00Z",
+        },
+    )
+    assert newer.status_code == delayed_old.status_code == 200
+
+    latest = client.get("/api/v1/mt5/latest/quotes", headers=headers)
+    assert latest.status_code == 200
+    assert latest.json()["data"][0]["bid"] == 1.09
+
+
+def test_rejects_quote_with_ask_below_bid():
+    response = client.post(
+        "/api/v1/mt5/quote",
+        headers={"X-Bridge-Token": TOKEN},
+        json={
+            "symbol": "EURUSD",
+            "bid": 1.081,
+            "ask": 1.08,
+            "timestamp": "2026-11-18T12:00:00Z",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_rejects_account_snapshot_with_missing_required_fields():
+    response = client.post(
+        "/api/v1/mt5/account",
+        headers={"X-Bridge-Token": TOKEN},
+        json={
+            "server": "ExnessKE-MT5Trial9",
+            "account_currency": "USD",
+            "balance": 10000,
+            "equity": 10000,
+            "observed_at": "2026-11-18T12:00:00Z",
+        },
+    )
+    assert response.status_code == 422
