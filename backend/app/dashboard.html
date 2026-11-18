@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>Forex Autopilot · Monitor</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d30;--line:#26354d;--muted:#91a2bb;--text:#edf3fb;--green:#38d996;--red:#ff7185;--amber:#f3bd62;--blue:#79aaff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% -10%,#1b3151 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.title{font-size:clamp(28px,4vw,40px);letter-spacing:-.04em;margin:5px 0}.sub{color:var(--muted);margin:0}.pill{border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:28px}.panel{background:linear-gradient(145deg,#152239,#101a2b);border:1px solid var(--line);border-radius:16px;padding:19px;min-width:0}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:25px;font-weight:700;letter-spacing:-.03em;margin:8px 0 2px;overflow-wrap:anywhere}.hint{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}.ok{background:var(--green)}.bad{background:var(--red)}.warn{background:var(--amber)}.section{margin-top:20px}.section h2{font-size:17px;margin:0 0 12px}.wide{grid-column:span 2}.quote{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line)}.quote:first-child{border-top:0}.quote strong{font-size:16px}.price{text-align:right;font-variant-numeric:tabular-nums}.empty{color:var(--muted);padding:18px 0}.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:20px}.notice{margin-top:20px;border:1px solid #725b32;background:#2a2418;color:#f5d99e;border-radius:12px;padding:12px 15px;font-size:13px}button{background:#203452;border:1px solid #385276;color:var(--text);padding:8px 12px;border-radius:9px;cursor:pointer}button:hover{background:#294366}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){main{padding:24px 15px}.grid{grid-template-columns:1fr}.wide{grid-column:span 1}}
+</style>
+</head>
+<body><main>
+<header class="top"><div><div class="eyebrow">Forex Autopilot / Operations</div><h1 class="title">System monitor</h1><p class="sub">Read-only view of the local demo telemetry pipeline.</p></div><div><span class="pill"><span class="dot warn" id="apiDot"></span><span id="apiText">Connecting…</span></span> <button id="refresh">Refresh</button></div></header>
+<section class="grid">
+<div class="panel"><div class="label">MT5 bridge</div><div class="value" id="bridge">—</div><div class="hint" id="bridgeHint">Waiting for telemetry</div></div>
+<div class="panel"><div class="label">Account balance</div><div class="value" id="balance">—</div><div class="hint" id="currency">No account snapshot</div></div>
+<div class="panel"><div class="label">Equity</div><div class="value" id="equity">—</div><div class="hint" id="accountAge">No account snapshot</div></div>
+<div class="panel"><div class="label">Terminal heartbeat</div><div class="value" id="heartbeat">—</div><div class="hint" id="heartbeatAge">Waiting for heartbeat</div></div>
+<div class="panel wide"><h2>Market quotes</h2><div id="quotes" class="empty">No quotes received yet.</div></div>
+<div class="panel wide"><h2>Safety & runtime</h2><div class="quote"><span>Environment</span><strong>DEMO</strong></div><div class="quote"><span>Execution</span><strong id="execution">DISABLED</strong></div><div class="quote"><span>Trading enabled</span><strong id="trading">NO</strong></div><div class="quote"><span>Freshness limit</span><strong id="freshness">60 seconds</strong></div></div>
+</section>
+<div class="notice">Local monitoring only. This dashboard displays stored telemetry; it does not place, modify, or close trades. Current sample records may be simulated.</div>
+<footer class="foot"><span id="updated">Not yet updated</span><span>Auto-refresh every 5 seconds · Local API</span></footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
+function statusDot(ok){return ok?'ok':'bad'}
+function money(n,c){return n==null?'—':new Intl.NumberFormat(undefined,{style:'currency',currency:c||'USD',maximumFractionDigits:2}).format(n)}
+async function refresh(){
+ try{
+  const response=await fetch('/api/v1/dashboard/overview',{cache:'no-store'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const d=await response.json(),h=d.heartbeat,a=d.account;
+  $('apiDot').className='dot ok';$('apiText').textContent='API online';
+  $('bridge').innerHTML='<span class="dot '+statusDot(d.bridge_connected)+'"></span>'+(d.bridge_connected?'Connected':'Disconnected');
+  $('bridgeHint').textContent=h?'Server: '+h.server:'No heartbeat received';
+  $('balance').textContent=money(a?.balance,a?.account_currency);
+  $('currency').textContent=a?a.account_currency+' account':'No account snapshot';
+  $('equity').textContent=money(a?.equity,a?.account_currency);
+  $('accountAge').textContent=a?'Updated '+ageLabel(a.age_seconds):'No account snapshot';
+  $('heartbeat').innerHTML=h?'<span class="dot '+statusDot(h.fresh&&h.terminal_connected)+'"></span>'+(h.terminal_connected?'Connected':'Terminal offline'):'—';
+  $('heartbeatAge').textContent=h?'Last seen '+ageLabel(h.age_seconds):'Waiting for heartbeat';
+  $('execution').textContent=d.execution_mode.toUpperCase();$('trading').textContent=d.trading_enabled?'YES':'NO';$('freshness').textContent=d.stale_after_seconds+' seconds';
+  $('quotes').innerHTML=d.quotes.length?d.quotes.map(q=>'<div class="quote"><div><strong>'+q.symbol+'</strong><div class="hint">'+(q.fresh?'Fresh':'Stale')+' · '+ageLabel(q.age_seconds)+'</div></div><div class="price"><strong>'+Number(q.bid).toFixed(5)+' / '+Number(q.ask).toFixed(5)+'</strong><div class="hint">Bid / Ask</div></div></div>').join(''):'No quotes received yet.';
+  $('updated').textContent='Last refreshed '+new Date().toLocaleTimeString();
+ }catch(e){$('apiDot').className='dot bad';$('apiText').textContent='API unavailable';$('updated').textContent='Refresh failed: '+e.message}
+}
+$('refresh').addEventListener('click',refresh);refresh();setInterval(refresh,5000);
+</script></body></html>
