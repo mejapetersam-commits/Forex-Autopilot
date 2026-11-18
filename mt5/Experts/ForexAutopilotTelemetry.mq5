@@ -123,22 +123,9 @@ void SendQuotes()
       }
 
       string body = StringFormat(
-         "{\"symbol\":\"%s\",\"bid\":%.10f,\"ask\":%.10f,\"timestamp\":\"%s\"}",
-         JsonEscape(symbol), tick.bid, tick.ask,
-         TimeToString(tick.time, TIME_DATE | TIME_SECONDS)
+         "{\\"symbol\\":\\"%s\\",\\"bid\\":%.10f,\\"ask\\":%.10f,\\"timestamp\\":\\"%s\\"}",
+         JsonEscape(symbol), tick.bid, tick.ask, IsoUtcNow()
       );
-      // MT5 tick time is server time and has no UTC offset. Do not label it UTC.
-      // The backend currently requires an offset-aware timestamp, so use GMT now
-      // as the observation timestamp rather than misrepresenting server tick time.
-      string observed = IsoUtcNow();
-      int timestamp_pos = StringFind(body, "\"timestamp\":");
-      if(timestamp_pos >= 0)
-      {
-         int value_start = StringFind(body, "\"", timestamp_pos + 12);
-         int value_end = StringFind(body, "\"", value_start + 1);
-         if(value_start >= 0 && value_end > value_start)
-            body = StringSubstr(body, 0, value_start + 1) + observed + StringSubstr(body, value_end);
-      }
       PostJson("/api/v1/mt5/quote", body);
    }
 }
