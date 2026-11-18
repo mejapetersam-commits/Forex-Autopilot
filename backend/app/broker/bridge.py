@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from math import isfinite
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class MT5Heartbeat(BaseModel):
@@ -89,6 +89,8 @@ class MT5Quote(BaseModel):
     def ask_must_be_positive(cls, value: float) -> float:
         return value
 
-    def validate_spread(self) -> None:
+    @model_validator(mode="after")
+    def validate_spread(self):
         if self.ask < self.bid:
             raise ValueError("Ask price cannot be below bid price.")
+        return self
