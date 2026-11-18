@@ -1,11 +1,12 @@
 import os
 from hmac import compare_digest
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
 from app.broker.bridge import MT5AccountSnapshot, MT5Heartbeat, MT5Quote
+from app.market_data.telemetry_store import TelemetryStore
 
-app = FastAPI(title="FOREX AUTOPILOT API", version="0.2.0")
+app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
 
 
 def require_bridge_token(
@@ -25,6 +26,11 @@ def require_bridge_token(
         )
 
 
+def telemetry_store() -> TelemetryStore:
+    """Create a store using the currently configured persistent database path."""
+    return TelemetryStore()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "environment": "demo", "trading_enabled": False}
@@ -32,7 +38,6 @@ def health():
 
 @app.get("/api/v1/system")
 def system_status():
-    # The bridge is read-only in this development phase.
     return {
         "project": "FOREX AUTOPILOT",
         "stage": "development",
@@ -48,8 +53,10 @@ def system_status():
     dependencies=[Depends(require_bridge_token)],
 )
 def mt5_heartbeat(payload: MT5Heartbeat):
+    telemetry_store().save_heartbeat(payload)
     return {
         "accepted": True,
+        "stored": True,
         "platform": "MT5",
         "server": payload.server,
         "terminal_connected": payload.terminal_connected,
@@ -63,8 +70,10 @@ def mt5_heartbeat(payload: MT5Heartbeat):
     dependencies=[Depends(require_bridge_token)],
 )
 def mt5_account_snapshot(payload: MT5AccountSnapshot):
+    telemetry_store().save_account(payload)
     return {
         "accepted": True,
+        "stored": True,
         "server": payload.server,
         "account_currency": payload.account_currency,
         "equity": payload.equity,
@@ -78,11 +87,48 @@ def mt5_account_snapshot(payload: MT5AccountSnapshot):
     dependencies=[Depends(require_bridge_token)],
 )
 def mt5_quote(payload: MT5Quote):
+    telemetry_store().save_quote(payload)
     return {
         "accepted": True,
+        "stored": True,
         "symbol": payload.symbol,
         "bid": payload.bid,
         "ask": payload.ask,
         "timestamp": payload.timestamp,
         "trading_enabled": False,
     }
+
+
+@app.get(
+    "/api/v1/mt5/latest/heartbeat",
+    dependencies=[Depends(require_bridge_token)],
+)
+def latest_mt5_heartbeat():
+    return {"data": telemetry_store().latest_heartbeat()}
+
+
+@app.get(
+    "/api/v1/mt5/latest/account",
+    dependencies=[Depends(require_bridge_token)],
+)
+def latest_mt5_account():
+    return {"data": telemetry_store().latest_account()}
+
+
+@app.get(
+    "/api/v1/mt5/latest/quotes",
+    dependencies=[Depends(require_bridge_token)],
+)
+def latest_mt5_quotes():
+    return {"data": telemetry_store().latest_quotes()}
+
+
+@app.get(
+    "/api/v1/mt5/history/quotes/{symbol}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_quote_history(
+    symbol: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    return {"data": telemetry_store().quote_history(symbol, limit)}
