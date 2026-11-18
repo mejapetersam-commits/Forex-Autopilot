@@ -3,7 +3,7 @@
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
-#property version   "1.01"
+#property version   "1.02"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
@@ -11,6 +11,10 @@ input string InpBridgeToken = ""; // Set locally in MT5; never commit a real tok
 input string InpSymbols = "EURUSD,GBPUSD";
 input int    InpHeartbeatSeconds = 15;
 input int    InpHttpTimeoutMs = 5000;
+
+string g_symbols[];
+ulong  g_last_quote_time_msc[];
+ulong  g_last_snapshot_ms = 0;
 
 string Trimmed(string value)
 {
@@ -37,7 +41,7 @@ string JsonEscape(string value)
 bool PostJson(string route, string body)
 {
    string url = InpApiBaseUrl + route;
-   string headers = "Content-Type: application/json\r\nX-Bridge-Token: " + InpBridgeToken + "\r\n";
+   string headers = "Content-Type: application/json\\r\\nX-Bridge-Token: " + InpBridgeToken + "\\r\\n";
    char data[];
    char result[];
    string response_headers;
@@ -107,15 +111,13 @@ void SendAccountSnapshot()
    PostJson("/api/v1/mt5/account", body);
 }
 
-// Called on incoming chart-symbol ticks so quote updates are not held
-// behind the slower heartbeat timer.
+// Sample each configured symbol independently on the one-second timer.
+// A quote is posted only when MT5 reports a genuinely newer market tick.
 void SendQuotes()
 {
-   string symbols[];
-   int count = StringSplit(InpSymbols, ',', symbols);
-   for(int i = 0; i < count; i++)
+   for(int i = 0; i < ArraySize(g_symbols); i++)
    {
-      string symbol = Trimmed(symbols[i]);
+      string symbol = g_symbols[i];
       if(symbol == "")
          continue;
 
@@ -127,30 +129,21 @@ void SendQuotes()
 
       MqlTick tick;
       if(!SymbolInfoTick(symbol, tick) || tick.bid <= 0 || tick.ask < tick.bid)
-      {
-         Print("FOREX AUTOPILOT: no valid current tick for ", symbol);
          continue;
-      }
+
+      if(tick.time_msc == 0 || tick.time_msc <= g_last_quote_time_msc[i])
+         continue;
 
       string body = StringFormat(
          "{\"symbol\":\"%s\",\"bid\":%.10f,\"ask\":%.10f,\"timestamp\":\"%s\"}",
          JsonEscape(symbol), tick.bid, tick.ask, IsoUtcNow()
       );
-      PostJson("/api/v1/mt5/quote", body);
-   }
-}
 
-void SendTelemetry()
-{
-   if(!TerminalInfoInteger(TERMINAL_CONNECTED))
-   {
-      Print("FOREX AUTOPILOT: MT5 terminal is not connected; telemetry skipped.");
-      SendHeartbeat();
-      return;
+      // Advance the per-symbol tick marker only after a successful delivery.
+      // Failed requests are retried on the next timer cycle.
+      if(PostJson("/api/v1/mt5/quote", body))
+         g_last_quote_time_msc[i] = tick.time_msc;
    }
-   SendHeartbeat();
-   SendAccountSnapshot();
-   SendQuotes();
 }
 
 int OnInit()
@@ -171,9 +164,40 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    }
 
-   EventSetTimer(InpHeartbeatSeconds);
-   Print("FOREX AUTOPILOT: read-only MT5 telemetry bridge started. Quotes update on incoming chart ticks; heartbeat/account use the timer.");
-   SendTelemetry();
+   string configured_symbols[];
+   int count = StringSplit(InpSymbols, ',', configured_symbols);
+   if(count < 1)
+   {
+      Print("FOREX AUTOPILOT: configure at least one symbol.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   ArrayResize(g_symbols, count);
+   ArrayResize(g_last_quote_time_msc, count);
+   for(int i = 0; i < count; i++)
+   {
+      g_symbols[i] = Trimmed(configured_symbols[i]);
+      g_last_quote_time_msc[i] = 0;
+      if(g_symbols[i] == "")
+      {
+         Print("FOREX AUTOPILOT: empty symbol in InpSymbols.");
+         return INIT_PARAMETERS_INCORRECT;
+      }
+      SymbolSelect(g_symbols[i], true);
+   }
+
+   if(!EventSetTimer(1))
+   {
+      Print("FOREX AUTOPILOT: unable to start the one-second telemetry timer.");
+      return INIT_FAILED;
+   }
+
+   Print("FOREX AUTOPILOT: read-only telemetry bridge started. Quotes are sampled independently every second when a new tick is available; heartbeat/account updates every ", InpHeartbeatSeconds, " seconds.");
+
+   SendHeartbeat();
+   SendAccountSnapshot();
+   SendQuotes();
+   g_last_snapshot_ms = GetTickCount64();
    return INIT_SUCCEEDED;
 }
 
@@ -185,17 +209,32 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
+   ulong now_ms = GetTickCount64();
+   ulong snapshot_interval_ms = (ulong)InpHeartbeatSeconds * 1000;
+
    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
    {
-      SendHeartbeat();
+      if(now_ms - g_last_snapshot_ms >= snapshot_interval_ms)
+      {
+         SendHeartbeat();
+         g_last_snapshot_ms = now_ms;
+      }
       return;
    }
-   SendHeartbeat();
-   SendAccountSnapshot();
+
+   SendQuotes();
+
+   if(now_ms - g_last_snapshot_ms >= snapshot_interval_ms)
+   {
+      SendHeartbeat();
+      SendAccountSnapshot();
+      g_last_snapshot_ms = now_ms;
+   }
 }
 
+// Quotes are intentionally timer-driven so both configured symbols are
+// sampled independently, regardless of which chart hosts this EA.
 void OnTick()
 {
-   if(TerminalInfoInteger(TERMINAL_CONNECTED))
-      SendQuotes();
+   // No action required here.
 }
