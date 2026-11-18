@@ -154,7 +154,11 @@ def mt5_telemetry_status():
         observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         if observed.tzinfo is None or observed.utcoffset() is None:
             return None
-        return max(0.0, (now - observed.astimezone(timezone.utc)).total_seconds())
+        age = (now - observed.astimezone(timezone.utc)).total_seconds()
+        # Allow only tiny clock skew; a materially future-dated report is not fresh.
+        if age < -5:
+            return None
+        return max(0.0, age)
 
     heartbeat_age = age_seconds(heartbeat["observed_at"]) if heartbeat else None
     heartbeat_fresh = heartbeat_age is not None and heartbeat_age <= stale_after
@@ -180,6 +184,7 @@ def mt5_telemetry_status():
         },
         "account": {
             "received": account is not None,
+            "fresh": account_age is not None and account_age <= stale_after,
             "age_seconds": round(account_age, 2) if account_age is not None else None,
         },
         "quotes": quote_status,
