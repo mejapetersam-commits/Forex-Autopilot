@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from hmac import compare_digest
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -132,3 +133,57 @@ def mt5_quote_history(
     limit: int = Query(default=100, ge=1, le=1000),
 ):
     return {"data": telemetry_store().quote_history(symbol, limit)}
+
+
+@app.get(
+    "/api/v1/mt5/status",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_telemetry_status():
+    """Summarize bridge freshness for a future monitoring dashboard."""
+    store = telemetry_store()
+    heartbeat = store.latest_heartbeat()
+    quotes = store.latest_quotes()
+    account = store.latest_account()
+    now = datetime.now(timezone.utc)
+    stale_after = max(5, int(os.getenv("FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS", "60")))
+
+    def age_seconds(timestamp: str | None) -> float | None:
+        if timestamp is None:
+            return None
+        observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            return None
+        return max(0.0, (now - observed.astimezone(timezone.utc)).total_seconds())
+
+    heartbeat_age = age_seconds(heartbeat["observed_at"]) if heartbeat else None
+    heartbeat_fresh = heartbeat_age is not None and heartbeat_age <= stale_after
+    quote_status = []
+    for quote in quotes:
+        quote_age = age_seconds(quote["observed_at"])
+        quote_status.append({
+            "symbol": quote["symbol"],
+            "fresh": quote_age is not None and quote_age <= stale_after,
+            "age_seconds": round(quote_age, 2) if quote_age is not None else None,
+        })
+
+    account_age = age_seconds(account["observed_at"]) if account else None
+    return {
+        "bridge_connected": bool(
+            heartbeat and heartbeat["terminal_connected"] and heartbeat_fresh
+        ),
+        "heartbeat": {
+            "received": heartbeat is not None,
+            "terminal_connected": heartbeat["terminal_connected"] if heartbeat else False,
+            "fresh": heartbeat_fresh,
+            "age_seconds": round(heartbeat_age, 2) if heartbeat_age is not None else None,
+        },
+        "account": {
+            "received": account is not None,
+            "age_seconds": round(account_age, 2) if account_age is not None else None,
+        },
+        "quotes": quote_status,
+        "stale_after_seconds": stale_after,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+    }
