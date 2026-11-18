@@ -27,7 +27,8 @@ main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justi
 </main>
 <script>
 const $=id=>document.getElementById(id);
-function escapeHtml(value){return String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}\nfunction ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
+function escapeHtml(value){return String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}
+function ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
 function statusDot(ok){return ok?'ok':'bad'}
 function money(n,c){return n==null?'—':new Intl.NumberFormat(undefined,{style:'currency',currency:c||'USD',maximumFractionDigits:2}).format(n)}
 async function refresh(){
@@ -45,7 +46,7 @@ async function refresh(){
   $('heartbeat').innerHTML=h?'<span class="dot '+statusDot(h.fresh&&h.terminal_connected)+'"></span>'+(h.terminal_connected?'Connected':'Terminal offline'):'—';
   $('heartbeatAge').textContent=h?'Last seen '+ageLabel(h.age_seconds):'Waiting for heartbeat';
   $('execution').textContent=d.execution_mode.toUpperCase();$('trading').textContent=d.trading_enabled?'YES':'NO';$('freshness').textContent=d.stale_after_seconds+' seconds';
-  $('quotes').innerHTML=d.quotes.length?d.quotes.map(q=>'<div class="quote"><div><strong>'+q.symbol+'</strong><div class="hint">'+(q.fresh?'Fresh':'Stale')+' · '+ageLabel(q.age_seconds)+'</div></div><div class="price"><strong>'+Number(q.bid).toFixed(5)+' / '+Number(q.ask).toFixed(5)+'</strong><div class="hint">Bid / Ask</div></div></div>').join(''):'No quotes received yet.';
+  $('quotes').innerHTML=d.quotes.length?d.quotes.map(q=>'<div class="quote"><div><strong' + escapeHtml(q.symbol) + '</strong><div class="hint">'+(q.fresh?'Fresh':'Stale')+' · '+ageLabel(q.age_seconds)+'</div></div><div class="price"><strong>'+Number(q.bid).toFixed(5)+' / '+Number(q.ask).toFixed(5)+'</strong><div class="hint">Bid / Ask</div></div></div>').join(''):'No quotes received yet.';
   $('updated').textContent='Last refreshed '+new Date().toLocaleTimeString();
  }catch(e){$('apiDot').className='dot bad';$('apiText').textContent='API unavailable';$('updated').textContent='Refresh failed: '+e.message}
 }
