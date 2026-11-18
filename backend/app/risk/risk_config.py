@@ -26,6 +26,12 @@ class RiskConfig(BaseModel):
     # Position limits
     max_open_positions: int = Field(default=2, ge=1, le=10)
 
+    # Correlation controls. Kept disabled until a live market-data
+    # adapter supplies timestamp-aligned historical returns.
+    correlation_check_enabled: bool = False
+    correlation_threshold: float = Field(default=0.80, gt=0, le=1)
+    max_correlated_group_risk_pct: float = Field(default=0.50, gt=0, le=3.0)
+
     # Trading safeguards
     require_stop_loss: bool = True
     allow_martingale: bool = False
