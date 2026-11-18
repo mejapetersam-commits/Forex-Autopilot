@@ -129,9 +129,15 @@ class TelemetryStore:
                 """SELECT q.symbol, q.bid, q.ask, q.observed_at
                    FROM quotes q
                    INNER JOIN (
-                       SELECT symbol, MAX(id) AS latest_id
+                       SELECT symbol, MAX(observed_at) AS latest_observed_at
                        FROM quotes GROUP BY symbol
-                   ) latest ON latest.latest_id = q.id
+                   ) latest ON latest.symbol = q.symbol
+                           AND latest.latest_observed_at = q.observed_at
+                   WHERE q.id = (
+                       SELECT MAX(q2.id) FROM quotes q2
+                       WHERE q2.symbol = q.symbol
+                         AND q2.observed_at = q.observed_at
+                   )
                    ORDER BY q.symbol"""
             ).fetchall()
         return [dict(row) for row in rows]
