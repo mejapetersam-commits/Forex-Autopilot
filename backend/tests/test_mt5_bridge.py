@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
-TOKEN = "test-only-bridge-token"
+TOKEN = "test-only-bridge-token-with-32-plus-chars"
 
 
 @pytest.fixture(autouse=True)
@@ -355,3 +355,13 @@ def test_telemetry_status_does_not_treat_future_timestamp_as_fresh():
     assert response.status_code == 200
     assert response.json()["bridge_connected"] is False
     assert response.json()["heartbeat"]["fresh"] is False
+
+
+
+def test_bridge_is_unavailable_with_weak_server_secret(monkeypatch):
+    monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", "too-short")
+    response = client.get(
+        "/api/v1/mt5/status",
+        headers={"X-Bridge-Token": "too-short"},
+    )
+    assert response.status_code == 503
