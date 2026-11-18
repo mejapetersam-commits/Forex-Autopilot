@@ -40,3 +40,7 @@ Requests require the `X-Bridge-Token` header. The backend reads the expected tok
 The telemetry models intentionally exclude account login numbers, passwords and broker credentials. Timestamps must be timezone-aware, prices and account amounts must be finite, and quote spreads must be valid. These endpoints acknowledge and validate incoming data; they do not yet persist it or establish a live broker connection.
 
 The bridge is strictly read-only: no order-submission endpoint or remote trade command exists, and system status continues to report trading disabled. Before a VPS is exposed to any network, deploy behind HTTPS, restrict inbound access, configure a strong unique secret, and apply host firewall rules. The next implementation step is an MT5 Expert Advisor that sends heartbeat, account and quote telemetry to this API using MT5's explicitly allowed WebRequest URL list. Execution remains out of scope until separately reviewed and explicitly approved.
+
+## MT5 Expert Advisor source
+
+The initial read-only EA source is at `mt5/Experts/ForexAutopilotTelemetry.mq5`, with installation and configuration guidance in `mt5/README.md`. It reports terminal connectivity, account telemetry and configured symbol quotes to the authenticated API. It contains no trade execution functions. The EA must be compiled and exercised in a Windows MT5 terminal; the Python CI workflow does not compile MQL5. Its API URL and bridge token are runtime inputs and must never be committed. Deployment and end-to-end verification remain outstanding.
