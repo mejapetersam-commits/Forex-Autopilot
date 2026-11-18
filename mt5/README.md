@@ -45,7 +45,7 @@ The quote timestamp is the time the EA observed the tick, expressed in UTC. It i
 
 ## Important limitations
 
-- The EA has not been compiled against MetaEditor in this repository's CI environment. Compile and test it on the Windows MT5 terminal before use.
+- The EA has not been compiled against MetaEditor in this repository's CI environment. Python CI now checks its API routes, JSON field contract, HTTPS/token guards and absence of common order-execution calls; these static checks do not replace compilation. Compile and test it on the Windows MT5 terminal before use.
 - This code does not establish a connection by itself; the API must first be deployed and secured.
 - The backend persists heartbeat, account and quote observations in SQLite. The latest-value and bounded quote-history read endpoints are protected by the same bridge token. The deployment uses a persistent Docker volume; backups and retention monitoring must still be configured.
 - Do not use a live account. This stage is demo-only.
