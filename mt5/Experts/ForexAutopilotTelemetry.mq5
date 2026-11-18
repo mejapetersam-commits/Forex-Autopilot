@@ -1,9 +1,9 @@
 // FOREX AUTOPILOT - read-only MT5 telemetry bridge
-// This Expert Advisor sends connection, account and quote telemetry only.
+// This Expert Advisor sends connection, account, quote and OHLC candle telemetry only.
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
-#property version   "1.02"
+#property version   "1.03"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
@@ -11,10 +11,18 @@ input string InpBridgeToken = ""; // Set locally in MT5; never commit a real tok
 input string InpSymbols = "EURUSD,GBPUSD";
 input int    InpHeartbeatSeconds = 15;
 input int    InpHttpTimeoutMs = 5000;
+input int    InpCandleBootstrapBars = 80;
+input int    InpCandleRefreshSeconds = 60;
 
 string g_symbols[];
 ulong  g_last_quote_time_msc[];
 ulong  g_last_snapshot_ms = 0;
+
+ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
+int g_candle_next_index = 0;
+bool g_candle_bootstrap_complete = false;
+ulong g_candle_last_request_ms = 0;
+ulong g_candle_cycle_wait_until_ms = 0;
 
 string Trimmed(string value)
 {
@@ -146,6 +154,131 @@ void SendQuotes()
    }
 }
 
+
+string TimeframeName(ENUM_TIMEFRAMES timeframe)
+{
+   switch(timeframe)
+   {
+      case PERIOD_M5:  return "M5";
+      case PERIOD_M15: return "M15";
+      case PERIOD_H1:  return "H1";
+      case PERIOD_H4:  return "H4";
+   }
+   return "";
+}
+
+// MT5 candle times are broker-server times. Attach the current broker UTC
+// offset explicitly so the API can normalize the instant without guessing.
+string BrokerTimeIso(datetime broker_time, int utc_offset_seconds)
+{
+   string stamp = TimeToString(broker_time, TIME_DATE | TIME_SECONDS);
+   StringReplace(stamp, ".", "-");
+   StringReplace(stamp, " ", "T");
+
+   int absolute_offset = (int)MathAbs(utc_offset_seconds);
+   string sign = (utc_offset_seconds >= 0) ? "+" : "-";
+   int hours = absolute_offset / 3600;
+   int minutes = (absolute_offset % 3600) / 60;
+   return StringFormat("%s%s%02d:%02d", stamp, sign, hours, minutes);
+}
+
+bool SendCandleBatch(string symbol, ENUM_TIMEFRAMES timeframe, int requested_bars)
+{
+   int server_offset = (int)(TimeTradeServer() - TimeGMT());
+   MqlRates rates[];
+   ArraySetAsSeries(rates, false);
+
+   ResetLastError();
+   int copied = CopyRates(symbol, timeframe, 1, requested_bars, rates);
+   if(copied < 1)
+   {
+      Print("FOREX AUTOPILOT: candle history not ready for ", symbol,
+            " ", TimeframeName(timeframe), "; copied=", copied,
+            "; terminal_error=", GetLastError());
+      return false;
+   }
+
+   if(requested_bars > 3 && copied < requested_bars)
+   {
+      Print("FOREX AUTOPILOT: waiting for ", requested_bars,
+            " historical candles for ", symbol, " ", TimeframeName(timeframe),
+            "; currently available=", copied);
+      return false;
+   }
+
+   string body = StringFormat(
+      "{\"symbol\":\"%s\",\"timeframe\":\"%s\",\"candles\":[",
+      JsonEscape(symbol), TimeframeName(timeframe)
+   );
+
+   for(int i = 0; i < copied; i++)
+   {
+      if(i > 0)
+         body += ",";
+
+      body += StringFormat(
+         "{\"opened_at\":\"%s\",\"open\":%.10f,\"high\":%.10f,"
+         "\"low\":%.10f,\"close\":%.10f,\"tick_volume\":%I64d}",
+         BrokerTimeIso(rates[i].time, server_offset),
+         rates[i].open, rates[i].high, rates[i].low, rates[i].close,
+         rates[i].tick_volume
+      );
+   }
+
+   body += "]}";
+   return PostJson("/api/v1/mt5/candles", body);
+}
+
+// Bootstrap each symbol/timeframe once, then refresh the most recent three
+// closed bars. One request is sent every two seconds to avoid network bursts.
+void SendNextCandleBatch(ulong now_ms)
+{
+   if(now_ms - g_candle_last_request_ms < 2000)
+      return;
+   if(g_candle_cycle_wait_until_ms > 0 && now_ms < g_candle_cycle_wait_until_ms)
+      return;
+
+   int combinations = ArraySize(g_symbols) * ArraySize(g_candle_timeframes);
+   if(combinations < 1)
+      return;
+
+   if(g_candle_next_index >= combinations)
+   {
+      g_candle_next_index = 0;
+      g_candle_cycle_wait_until_ms =
+         now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+      return;
+   }
+
+   int symbol_index = g_candle_next_index / ArraySize(g_candle_timeframes);
+   int timeframe_index = g_candle_next_index % ArraySize(g_candle_timeframes);
+   string symbol = g_symbols[symbol_index];
+   ENUM_TIMEFRAMES timeframe = g_candle_timeframes[timeframe_index];
+
+   if(!SymbolSelect(symbol, true))
+   {
+      Print("FOREX AUTOPILOT: cannot select candle symbol ", symbol);
+      g_candle_last_request_ms = now_ms;
+      return;
+   }
+
+   int bars_to_send = g_candle_bootstrap_complete ? 3 : InpCandleBootstrapBars;
+   if(SendCandleBatch(symbol, timeframe, bars_to_send))
+   {
+      Print("FOREX AUTOPILOT: candles accepted for ", symbol, " ",
+            TimeframeName(timeframe), "; bars=", bars_to_send);
+      g_candle_next_index++;
+      if(g_candle_next_index >= combinations && !g_candle_bootstrap_complete)
+      {
+         g_candle_bootstrap_complete = true;
+         g_candle_next_index = 0;
+         Print("FOREX AUTOPILOT: initial candle history bootstrap complete.");
+      }
+   }
+
+   g_candle_last_request_ms = now_ms;
+}
+
 int OnInit()
 {
    if(StringFind(InpApiBaseUrl, "https://") != 0)
@@ -158,7 +291,9 @@ int OnInit()
       Print("FOREX AUTOPILOT: configure a unique bridge token of at least 32 characters locally.");
       return INIT_PARAMETERS_INCORRECT;
    }
-   if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000)
+   if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000 ||
+      InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 200 ||
+      InpCandleRefreshSeconds < 30)
    {
       Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
       return INIT_PARAMETERS_INCORRECT;
@@ -198,6 +333,8 @@ int OnInit()
    SendAccountSnapshot();
    SendQuotes();
    g_last_snapshot_ms = GetTickCount64();
+   g_candle_last_request_ms = GetTickCount64() - 2000;
+   Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Initial history target: ", InpCandleBootstrapBars, " closed bars per combination.");
    return INIT_SUCCEEDED;
 }
 
@@ -223,6 +360,7 @@ void OnTimer()
    }
 
    SendQuotes();
+   SendNextCandleBatch(now_ms);
 
    if(now_ms - g_last_snapshot_ms >= snapshot_interval_ms)
    {
