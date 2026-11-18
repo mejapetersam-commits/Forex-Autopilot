@@ -6,6 +6,8 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
+      - "docker-compose.yml"
+      - ".dockerignore"
   pull_request:
     branches: [main]
     paths:
@@ -42,3 +44,7 @@ jobs:
 
       - name: Run test suite
         run: python -m pytest -v
+
+      - name: Build API container
+        working-directory: .
+        run: docker build -f backend/Dockerfile -t forex-autopilot-api:test backend
