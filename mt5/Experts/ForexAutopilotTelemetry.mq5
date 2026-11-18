@@ -123,7 +123,7 @@ void SendQuotes()
       }
 
       string body = StringFormat(
-         "{\\"symbol\\":\\"%s\\",\\"bid\\":%.10f,\\"ask\\":%.10f,\\"timestamp\\":\\"%s\\"}",
+         "{\"symbol\":\"%s\",\"bid\":%.10f,\"ask\":%.10f,\"timestamp\":\"%s\"}",
          JsonEscape(symbol), tick.bid, tick.ask, IsoUtcNow()
       );
       PostJson("/api/v1/mt5/quote", body);
