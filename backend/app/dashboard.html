@@ -23,12 +23,13 @@ main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justi
 <div class="panel wide"><h2>Safety & runtime</h2><div class="quote"><span>Environment</span><strong>DEMO</strong></div><div class="quote"><span>Execution</span><strong id="execution">DISABLED</strong></div><div class="quote"><span>Trading enabled</span><strong id="trading">NO</strong></div><div class="quote"><span>Freshness limit</span><strong id="freshness">60 seconds</strong></div></div>
 </section>
 <div class="notice">Local monitoring only. This dashboard displays stored telemetry; it does not place, modify, or close trades. Current sample records may be simulated.</div>
-<footer class="foot"><span id="updated">Not yet updated</span><span>Auto-refresh approximately every 1 second · Local API</span></footer>
+<footer class="foot"><span id="updated">Not yet updated</span><span>Auto-refresh approximately every 2 seconds · Local API</span></footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 function ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
 function money(n,c){return n==null?'—':new Intl.NumberFormat(undefined,{style:'currency',currency:c||'USD',maximumFractionDigits:2}).format(n)}
+const REFRESH_INTERVAL_MS=2000;
 let refreshInProgress=false;
 async function refresh(){
  if(refreshInProgress)return;
@@ -66,7 +67,7 @@ async function refresh(){
  }catch(e){$('apiDot').className='dot bad';$('apiText').textContent='API unavailable';$('updated').textContent='Refresh failed: '+e.message}
  finally{
   refreshInProgress=false;
-  window.setTimeout(refresh,1000);
+  window.setTimeout(refresh,REFRESH_INTERVAL_MS);
  }
 }
 $('refresh').addEventListener('click',refresh);refresh();
