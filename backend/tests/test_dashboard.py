@@ -47,14 +47,40 @@ def test_dashboard_overview_returns_stored_read_only_telemetry(monkeypatch, tmp_
         observed_at=now,
     ))
     store.save_quote(MT5Quote(
-        symbol="EURUSD", bid=1.08, ask=1.0801, timestamp=now
+        symbol="EURUSDm", bid=1.08, ask=1.0801, timestamp=now
     ))
 
     data = client.get("/api/v1/dashboard/overview").json()
     assert data["bridge_connected"] is True
     assert data["account"]["balance"] == 10000
     assert data["account"]["equity"] == 10025
-    assert data["quotes"][0]["symbol"] == "EURUSD"
+    assert data["quotes"][0]["symbol"] == "EURUSDM"
     assert data["quotes"][0]["fresh"] is True
     assert data["trading_enabled"] is False
     assert data["execution_mode"] == "disabled"
+
+
+def test_dashboard_hides_legacy_symbols_but_preserves_quote_history(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+
+    from app.broker.bridge import MT5Quote
+    from app.market_data.telemetry_store import TelemetryStore
+
+    monkeypatch.setenv(
+        "FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "dashboard-symbols.sqlite3")
+    )
+    monkeypatch.setenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm,GBPUSDm")
+    store = TelemetryStore()
+    now = datetime.now(timezone.utc)
+
+    for symbol, bid in (("EURUSD", 1.07), ("EURUSDm", 1.08), ("GBPUSDm", 1.27)):
+        store.save_quote(MT5Quote(
+            symbol=symbol, bid=bid, ask=bid + 0.0001, timestamp=now
+        ))
+
+    response = client.get("/api/v1/dashboard/overview")
+    assert response.status_code == 200
+    assert {quote["symbol"] for quote in response.json()["quotes"]} == {
+        "EURUSDM", "GBPUSDM"
+    }
+    assert len(store.quote_history("EURUSD")) == 1
