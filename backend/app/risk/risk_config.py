@@ -16,6 +16,13 @@ class RiskConfig(BaseModel):
     max_daily_loss_pct: float = Field(default=1.0, gt=0, le=3.0)
     max_drawdown_pct: float = Field(default=5.0, gt=0, le=10.0)
 
+    # Currency concentration limits
+    max_currency_exposure_pct: float = Field(
+        default=200.0,
+        gt=0,
+        le=1000.0,
+    )
+
     # Position limits
     max_open_positions: int = Field(default=2, ge=1, le=10)
 
