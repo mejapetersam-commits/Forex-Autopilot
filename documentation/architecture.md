@@ -26,3 +26,17 @@ The backend market-data package defines validated completed OHLC candles, a norm
 Historical return calculations use consecutive candle closes. Correlation calculations require identical candle timestamps and matching timeframes, enforce a configurable minimum observation count, and reject stale or future-dated data. The current implementation deliberately does not fill missing candles, interpolate prices, or silently align partial overlaps.
 
 The provider is responsible for returning completed candles in chronological order. Production adapters must additionally document their source, timezone semantics, candle completion rules, rate limits, outage behaviour and licensing. Correlation checks remain disabled until a real provider and integration tests are in place.
+
+## MT5 bridge foundation (read-only phase)
+
+The FastAPI service now exposes authenticated, read-only endpoints for MT5 heartbeat, account telemetry and individual quotes:
+
+- `POST /api/v1/mt5/heartbeat`
+- `POST /api/v1/mt5/account`
+- `POST /api/v1/mt5/quote`
+
+Requests require the `X-Bridge-Token` header. The backend reads the expected token from `FOREX_AUTOPILOT_BRIDGE_TOKEN`; it returns a service-unavailable response when the secret is not configured and rejects missing or incorrect tokens. The secret must be generated and stored outside source control.
+
+The telemetry models intentionally exclude account login numbers, passwords and broker credentials. Timestamps must be timezone-aware, prices and account amounts must be finite, and quote spreads must be valid. These endpoints acknowledge and validate incoming data; they do not yet persist it or establish a live broker connection.
+
+The bridge is strictly read-only: no order-submission endpoint or remote trade command exists, and system status continues to report trading disabled. Before a VPS is exposed to any network, deploy behind HTTPS, restrict inbound access, configure a strong unique secret, and apply host firewall rules. The next implementation step is an MT5 Expert Advisor that sends heartbeat, account and quote telemetry to this API using MT5's explicitly allowed WebRequest URL list. Execution remains out of scope until separately reviewed and explicitly approved.
