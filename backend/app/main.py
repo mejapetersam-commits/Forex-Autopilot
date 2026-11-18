@@ -34,6 +34,12 @@ def telemetry_store() -> TelemetryStore:
     return TelemetryStore()
 
 
+def dashboard_symbols() -> set[str]:
+    """Return the symbols permitted in the active dashboard view."""
+    configured = os.getenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm,GBPUSDm")
+    return {symbol.strip().upper() for symbol in configured.split(",") if symbol.strip()}
+
+
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
@@ -48,7 +54,11 @@ def dashboard_overview():
     store = telemetry_store()
     heartbeat = store.latest_heartbeat()
     account = store.latest_account()
-    quotes = store.latest_quotes()
+    active_symbols = dashboard_symbols()
+    quotes = [
+        quote for quote in store.latest_quotes()
+        if quote["symbol"].upper() in active_symbols
+    ]
     now = datetime.now(timezone.utc)
 
     def age_seconds(timestamp: str | None) -> float | None:
