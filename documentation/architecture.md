@@ -1,7 +1,7 @@
 # Architecture v1
 
 ## Components
-1. MT5 Expert Advisor (MQL5): local signal evaluation, execution and hard risk checks.
+1. MT5 Expert Advisor (MQL5): eventual local signal evaluation, execution and hard risk checks; the current EA is telemetry-only.
 2. Python research layer: historical data preparation, backtesting and statistical evaluation.
 3. FastAPI: configuration and telemetry interface; never the sole authority for trade safety.
 4. PostgreSQL/Supabase: configurations, trades, events and performance snapshots.
@@ -37,7 +37,7 @@ The FastAPI service now exposes authenticated, read-only endpoints for MT5 heart
 
 Requests require the `X-Bridge-Token` header. The backend reads the expected token from `FOREX_AUTOPILOT_BRIDGE_TOKEN`; it returns a service-unavailable response when the secret is not configured and rejects missing or incorrect tokens. The secret must be generated and stored outside source control.
 
-The telemetry models intentionally exclude account login numbers, passwords and broker credentials. Timestamps must be timezone-aware, prices and account amounts must be finite, and quote spreads must be valid. These endpoints acknowledge and validate incoming data; they do not yet persist it or establish a live broker connection.
+The telemetry models intentionally exclude account login numbers, passwords and broker credentials. Timestamps must be timezone-aware, prices and account amounts must be finite, and quote spreads must be valid. These endpoints validate and persist incoming telemetry in the SQLite store described below; they do not establish a live broker connection.
 
 The bridge is strictly read-only: no order-submission endpoint or remote trade command exists, and system status continues to report trading disabled. Before a VPS is exposed to any network, deploy behind HTTPS, restrict inbound access, configure a strong unique secret, and apply host firewall rules. The next implementation step is an MT5 Expert Advisor that sends heartbeat, account and quote telemetry to this API using MT5's explicitly allowed WebRequest URL list. Execution remains out of scope until separately reviewed and explicitly approved.
 
