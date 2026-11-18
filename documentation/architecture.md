@@ -44,3 +44,12 @@ The bridge is strictly read-only: no order-submission endpoint or remote trade c
 ## MT5 Expert Advisor source
 
 The initial read-only EA source is at `mt5/Experts/ForexAutopilotTelemetry.mq5`, with installation and configuration guidance in `mt5/README.md`. It reports terminal connectivity, account telemetry and configured symbol quotes to the authenticated API. It contains no trade execution functions. The EA must be compiled and exercised in a Windows MT5 terminal; the Python CI workflow does not compile MQL5. Its API URL and bridge token are runtime inputs and must never be committed. Deployment and end-to-end verification remain outstanding.
+
+
+## MT5 telemetry persistence
+
+Read-only MT5 telemetry is persisted in SQLite by `app.market_data.telemetry_store.TelemetryStore`. The database path is configured with `FOREX_AUTOPILOT_TELEMETRY_DB` and defaults to `data/telemetry.sqlite3`. Deployment must mount this path on persistent, access-restricted storage and include it in backups. SQLite WAL mode is enabled for reliable local reads and writes.
+
+The authenticated write endpoints store heartbeat observations, account snapshots and quote observations. Protected read endpoints expose the latest heartbeat, latest account snapshot, latest quote per symbol, and bounded quote history (maximum 1,000 rows). Read routes require the same `X-Bridge-Token` authentication as writes. Account login numbers and passwords are not part of the accepted models or stored records.
+
+This is an initial single-instance persistence layer for demo telemetry. It is not a substitute for a managed production database for multi-instance/high-volume deployment. Retention, backup/restore drills, monitoring and a production database migration must be addressed before live use. The service continues to report execution disabled; no trading endpoints are present.
