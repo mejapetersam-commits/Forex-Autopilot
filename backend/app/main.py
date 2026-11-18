@@ -15,10 +15,10 @@ def require_bridge_token(
 ) -> None:
     """Authenticate the read-only MT5 bridge using a server-side secret."""
     expected = os.getenv("FOREX_AUTOPILOT_BRIDGE_TOKEN")
-    if not expected:
+    if not expected or len(expected) < 32:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MT5 bridge is not configured.",
+            detail="MT5 bridge requires a configured secret of at least 32 characters.",
         )
     if not x_bridge_token or not compare_digest(x_bridge_token, expected):
         raise HTTPException(
