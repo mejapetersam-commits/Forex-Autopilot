@@ -41,7 +41,7 @@ string JsonEscape(string value)
 bool PostJson(string route, string body)
 {
    string url = InpApiBaseUrl + route;
-   string headers = "Content-Type: application/json\\r\\nX-Bridge-Token: " + InpBridgeToken + "\\r\\n";
+   string headers = "Content-Type: application/json\r\nX-Bridge-Token: " + InpBridgeToken + "\r\n";
    char data[];
    char result[];
    string response_headers;
