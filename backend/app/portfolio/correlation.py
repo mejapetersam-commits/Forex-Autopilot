@@ -1,7 +1,7 @@
 from math import isfinite, sqrt
 from statistics import mean
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class InstrumentReturns(BaseModel):
@@ -40,12 +40,33 @@ class CorrelationResult(BaseModel):
     coefficient: float
     observations: int
 
+    @field_validator("symbol_a", "symbol_b")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not value:
+            raise ValueError("Correlation symbols cannot be empty.")
+        return value
+
     @field_validator("coefficient")
     @classmethod
     def validate_coefficient(cls, value: float) -> float:
         if not isfinite(value) or not -1.0 <= value <= 1.0:
             raise ValueError("Correlation coefficient must be between -1 and 1.")
         return value
+
+    @field_validator("observations")
+    @classmethod
+    def validate_observations(cls, value: int) -> int:
+        if value < 2:
+            raise ValueError("Correlation requires at least two observations.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_distinct_symbols(self):
+        if self.symbol_a == self.symbol_b:
+            raise ValueError("Correlation requires two different instruments.")
+        return self
 
 
 class CorrelationCalculator:
