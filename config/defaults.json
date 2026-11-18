@@ -2,16 +2,21 @@
   "environment": "demo",
   "trading_enabled": false,
   "strategy_id": "TrendPullback_v1",
-  "symbols": ["EURUSD"],
+  "symbols": [
+    "EURUSD"
+  ],
   "timeframe": "H1",
   "risk_per_trade_pct": 0.25,
-  "max_daily_loss_pct": 1.0,
-  "max_equity_drawdown_pct": 5.0,
+  "max_daily_loss_pct": 1,
+  "max_equity_drawdown_pct": 5,
   "max_concurrent_positions": 2,
-  "reward_to_risk": 2.0,
+  "reward_to_risk": 2,
   "allow_martingale": false,
   "allow_grid": false,
   "require_stop_loss": true,
   "trade_only_closed_candles": true,
-  "news_filter_enabled": true
+  "news_filter_enabled": true,
+  "correlation_check_enabled": false,
+  "correlation_threshold": 0.8,
+  "max_correlated_group_risk_pct": 0.5
 }
