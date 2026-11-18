@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.broker.bridge import MT5AccountSnapshot, MT5Heartbeat, MT5Quote
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote
 
 
 class TelemetryStore:
@@ -67,6 +67,21 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_quotes_symbol_observed
                     ON quotes(symbol, observed_at DESC);
+
+                CREATE TABLE IF NOT EXISTS candles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    opened_at TEXT NOT NULL,
+                    open REAL NOT NULL,
+                    high REAL NOT NULL,
+                    low REAL NOT NULL,
+                    close REAL NOT NULL,
+                    tick_volume INTEGER NOT NULL,
+                    UNIQUE(symbol, timeframe, opened_at)
+                );
+                CREATE INDEX IF NOT EXISTS idx_candles_lookup
+                    ON candles(symbol, timeframe, opened_at DESC);
                 """
             )
 
@@ -151,3 +166,48 @@ class TelemetryStore:
                 (symbol.strip().upper(), safe_limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def save_candle_batch(self, payload: MT5CandleBatch) -> int:
+        """Insert or refresh candles idempotently by symbol, timeframe and open time."""
+        rows = [
+            (
+                payload.symbol,
+                payload.timeframe,
+                candle.opened_at.isoformat(),
+                candle.open,
+                candle.high,
+                candle.low,
+                candle.close,
+                candle.tick_volume,
+            )
+            for candle in payload.candles
+        ]
+        with self._connect() as connection:
+            connection.executemany(
+                """INSERT INTO candles(
+                    symbol, timeframe, opened_at, open, high, low, close, tick_volume
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol, timeframe, opened_at) DO UPDATE SET
+                    open=excluded.open,
+                    high=excluded.high,
+                    low=excluded.low,
+                    close=excluded.close,
+                    tick_volume=excluded.tick_volume""",
+                rows,
+            )
+        return len(rows)
+
+    def candle_history(
+        self, symbol: str, timeframe: str, limit: int = 500
+    ) -> list[dict[str, Any]]:
+        safe_limit = min(max(int(limit), 1), 5000)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT symbol, timeframe, opened_at, open, high, low, close, tick_volume
+                   FROM candles
+                   WHERE symbol = ? AND timeframe = ?
+                   ORDER BY opened_at DESC, id DESC LIMIT ?""",
+                (symbol.strip().upper(), timeframe.strip().upper(), safe_limit),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
