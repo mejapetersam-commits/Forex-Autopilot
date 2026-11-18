@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from hmac import compare_digest
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 from app.broker.bridge import MT5AccountSnapshot, MT5Heartbeat, MT5Quote
 from app.market_data.telemetry_store import TelemetryStore
@@ -30,6 +32,70 @@ def require_bridge_token(
 def telemetry_store() -> TelemetryStore:
     """Create a store using the currently configured persistent database path."""
     return TelemetryStore()
+
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    """Serve the local read-only dashboard; API port is loopback-bound in Compose."""
+    page = Path(__file__).with_name("dashboard.html")
+    return FileResponse(page, media_type="text/html")
+
+
+@app.get("/api/v1/dashboard/overview", include_in_schema=False)
+def dashboard_overview():
+    """Local read-only dashboard data. Never exposes the bridge token."""
+    store = telemetry_store()
+    heartbeat = store.latest_heartbeat()
+    account = store.latest_account()
+    quotes = store.latest_quotes()
+    now = datetime.now(timezone.utc)
+
+    def age_seconds(timestamp: str | None) -> float | None:
+        if timestamp is None:
+            return None
+        observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            return None
+        age = (now - observed.astimezone(timezone.utc)).total_seconds()
+        if age < -5:
+            return None
+        return max(0.0, age)
+
+    stale_after = max(5, int(os.getenv("FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS", "60")))
+    heartbeat_age = age_seconds(heartbeat["observed_at"]) if heartbeat else None
+    account_age = age_seconds(account["observed_at"]) if account else None
+    quote_rows = []
+    for quote in quotes:
+        age = age_seconds(quote["observed_at"])
+        quote_rows.append({
+            **quote,
+            "age_seconds": round(age, 1) if age is not None else None,
+            "fresh": age is not None and age <= stale_after,
+        })
+    connected = bool(
+        heartbeat and heartbeat["terminal_connected"]
+        and heartbeat_age is not None and heartbeat_age <= stale_after
+    )
+    return {
+        "environment": "demo",
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "bridge_connected": connected,
+        "heartbeat": {
+            **heartbeat,
+            "age_seconds": round(heartbeat_age, 1) if heartbeat_age is not None else None,
+            "fresh": heartbeat_age is not None and heartbeat_age <= stale_after,
+        } if heartbeat else None,
+        "account": {
+            **account,
+            "age_seconds": round(account_age, 1) if account_age is not None else None,
+            "fresh": account_age is not None and account_age <= stale_after,
+        } if account else None,
+        "quotes": quote_rows,
+        "stale_after_seconds": stale_after,
+        "updated_at": now.isoformat(),
+    }
 
 
 @app.get("/health")
