@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5Heartbeat, MT5Quote
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote
 from app.market_data.telemetry_store import TelemetryStore
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
@@ -174,6 +174,37 @@ def mt5_quote(payload: MT5Quote):
         "timestamp": payload.timestamp,
         "trading_enabled": False,
     }
+
+
+@app.post(
+    "/api/v1/mt5/candles",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_candles(payload: MT5CandleBatch):
+    """Store historical OHLC candles received from the read-only MT5 bridge."""
+    stored = telemetry_store().save_candle_batch(payload)
+    return {
+        "accepted": True,
+        "stored": True,
+        "symbol": payload.symbol,
+        "timeframe": payload.timeframe,
+        "candles_received": stored,
+        "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/mt5/history/candles/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_candle_history(
+    symbol: str,
+    timeframe: str,
+    limit: int = Query(default=500, ge=1, le=5000),
+):
+    """Return stored candles in chronological order for analysis and charting."""
+    data = telemetry_store().candle_history(symbol, timeframe, limit)
+    return {"data": data, "count": len(data)}
 
 
 @app.get(
