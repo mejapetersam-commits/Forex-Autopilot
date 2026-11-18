@@ -3,7 +3,7 @@
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
-#property version   "1.00"
+#property version   "1.01"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
@@ -48,7 +48,7 @@ bool PostJson(string route, string body)
       Print("FOREX AUTOPILOT: JSON encoding failed for ", route);
       return false;
    }
-   ArrayResize(data, copied - 1); // Remove terminating null byte.
+   ArrayResize(data, copied - 1);
 
    ResetLastError();
    int status = WebRequest("POST", url, headers, InpHttpTimeoutMs, data, result, response_headers);
@@ -107,6 +107,8 @@ void SendAccountSnapshot()
    PostJson("/api/v1/mt5/account", body);
 }
 
+// Called on incoming chart-symbol ticks so quote updates are not held
+// behind the slower heartbeat timer.
 void SendQuotes()
 {
    string symbols[];
@@ -170,7 +172,7 @@ int OnInit()
    }
 
    EventSetTimer(InpHeartbeatSeconds);
-   Print("FOREX AUTOPILOT: read-only MT5 telemetry bridge started. Trading functions are absent.");
+   Print("FOREX AUTOPILOT: read-only MT5 telemetry bridge started. Quotes update on incoming chart ticks; heartbeat/account use the timer.");
    SendTelemetry();
    return INIT_SUCCEEDED;
 }
@@ -183,5 +185,17 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
-   SendTelemetry();
+   if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+   {
+      SendHeartbeat();
+      return;
+   }
+   SendHeartbeat();
+   SendAccountSnapshot();
+}
+
+void OnTick()
+{
+   if(TerminalInfoInteger(TERMINAL_CONNECTED))
+      SendQuotes();
 }
