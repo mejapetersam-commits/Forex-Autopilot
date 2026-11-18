@@ -52,16 +52,24 @@ bool PostJson(string route, string body)
 
    ResetLastError();
    int status = WebRequest("POST", url, headers, InpHttpTimeoutMs, data, result, response_headers);
-   if(status == -1)
+   int request_error = GetLastError();
+   string response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+
+   if(status == -1 || status < 100 || status > 599)
    {
-      Print("FOREX AUTOPILOT: WebRequest failed for ", route, "; error=", GetLastError());
+      Print("FOREX AUTOPILOT: MT5 WebRequest transport failure for ", route,
+            "; return_code=", status,
+            "; terminal_error=", request_error,
+            "; response_headers=", response_headers,
+            "; response=", response);
       return false;
    }
 
-   string response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
    if(status < 200 || status >= 300)
    {
-      Print("FOREX AUTOPILOT: API returned HTTP ", status, " for ", route, "; response=", response);
+      Print("FOREX AUTOPILOT: API returned HTTP ", status, " for ", route,
+            "; response_headers=", response_headers,
+            "; response=", response);
       return false;
    }
    Print("FOREX AUTOPILOT: telemetry accepted at ", route);
