@@ -16,8 +16,10 @@ class OpenPositionRisk(BaseModel):
     """
     Risk information for one currently open trading position.
 
-    risk_to_stop is the estimated monetary loss if the position's
-    stop-loss is reached, including estimated transaction costs.
+    risk_to_stop represents estimated additional monetary loss
+    from the current market price to the stop-loss, including
+    estimated transaction costs.
+
     All monetary values use the account currency.
     """
 
@@ -39,11 +41,17 @@ class PortfolioSnapshot(BaseModel):
     """
     Current account and portfolio state supplied by an account adapter.
 
-    daily_realized_loss is the net realized loss for the current trading
-    day, expressed as a non-negative amount. Profits should offset losses
-    before this value is supplied.
+    daily_realized_loss:
+        Net realized daily loss, expressed as a non-negative amount.
 
-    current_equity includes the account's current floating P/L.
+    daily_floating_pnl:
+        Current net floating profit or loss for the trading day.
+
+    current_equity:
+        Account equity including current floating P/L.
+
+    peak_equity:
+        Account high-water mark.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -53,6 +61,7 @@ class PortfolioSnapshot(BaseModel):
     peak_equity: float = Field(gt=0)
 
     daily_realized_loss: float = Field(ge=0)
+    daily_floating_pnl: float = 0.0
 
     open_positions: list[OpenPositionRisk] = Field(
         default_factory=list
@@ -65,6 +74,7 @@ class PortfolioSnapshot(BaseModel):
         "day_start_equity",
         "peak_equity",
         "daily_realized_loss",
+        "daily_floating_pnl",
     )
     @classmethod
     def validate_finite_amount(cls, value: float) -> float:
@@ -111,11 +121,18 @@ class PortfolioRiskDecision(BaseModel):
     projected_total_open_risk: float
 
     daily_realized_loss: float
+    daily_floating_pnl: float
+    actual_daily_loss: float
     projected_daily_loss: float
     daily_loss_limit: float
 
     current_drawdown_amount: float
     current_drawdown_pct: float
+
+    projected_equity_after_stops: float
+    projected_drawdown_amount: float
+    projected_drawdown_pct: float
+
     max_drawdown_pct: float
 
     per_trade_risk_limit: float
@@ -154,7 +171,7 @@ class PortfolioRiskManager:
                 "Proposed trade risk must be greater than zero."
             )
 
-        # Calculate current aggregate exposure.
+        # Calculate current aggregate open-position exposure.
         existing_open_risk = sum(
             position.risk_to_stop
             for position in snapshot.open_positions
@@ -164,6 +181,13 @@ class PortfolioRiskManager:
             existing_open_risk + proposed_trade_risk
         )
 
+        # Calculate actual daily loss using realized and floating P/L.
+        actual_daily_loss = max(
+            0.0,
+            snapshot.daily_realized_loss
+            - snapshot.daily_floating_pnl,
+        )
+
         # Calculate the daily risk budget.
         daily_loss_limit = (
             snapshot.day_start_equity
@@ -171,12 +195,13 @@ class PortfolioRiskManager:
             / 100
         )
 
+        # Estimate daily loss if all stops are reached.
         projected_daily_loss = (
-            snapshot.daily_realized_loss
+            actual_daily_loss
             + projected_total_open_risk
         )
 
-        # Calculate the maximum allowed risk per individual trade.
+        # Calculate the maximum permitted individual trade risk.
         per_trade_risk_limit = (
             snapshot.current_equity
             * risk_config.risk_per_trade_pct
@@ -190,6 +215,26 @@ class PortfolioRiskManager:
 
         current_drawdown_pct = (
             current_drawdown_amount
+            / snapshot.peak_equity
+            * 100
+        )
+
+        # Project equity if all existing and proposed positions
+        # reach their stop-loss levels.
+        projected_equity_after_stops = (
+            snapshot.current_equity
+            - projected_total_open_risk
+        )
+
+        # Calculate projected drawdown against the account high-water mark.
+        projected_drawdown_amount = max(
+            0.0,
+            snapshot.peak_equity
+            - projected_equity_after_stops,
+        )
+
+        projected_drawdown_pct = (
+            projected_drawdown_amount
             / snapshot.peak_equity
             * 100
         )
@@ -217,22 +262,28 @@ class PortfolioRiskManager:
                 "Proposed trade exceeds the per-trade risk limit."
             )
 
-        # Aggregate daily risk.
+        # Projected daily loss limit.
         if projected_daily_loss > daily_loss_limit:
             reasons.append(
                 "Projected daily loss would exceed the daily loss limit."
             )
 
         # Existing daily loss limit breach.
-        if snapshot.daily_realized_loss >= daily_loss_limit:
+        if actual_daily_loss >= daily_loss_limit:
             reasons.append(
                 "Daily loss limit has already been reached."
             )
 
-        # Maximum account drawdown.
+        # Current account drawdown.
         if current_drawdown_pct >= risk_config.max_drawdown_pct:
             reasons.append(
                 "Maximum account drawdown limit has been reached."
+            )
+
+        # Projected account drawdown.
+        if projected_drawdown_pct >= risk_config.max_drawdown_pct:
+            reasons.append(
+                "Projected account drawdown would reach or exceed the maximum drawdown limit."
             )
 
         approved = len(reasons) == 0
@@ -250,10 +301,15 @@ class PortfolioRiskManager:
             proposed_trade_risk=proposed_trade_risk,
             projected_total_open_risk=projected_total_open_risk,
             daily_realized_loss=snapshot.daily_realized_loss,
+            daily_floating_pnl=snapshot.daily_floating_pnl,
+            actual_daily_loss=actual_daily_loss,
             projected_daily_loss=projected_daily_loss,
             daily_loss_limit=daily_loss_limit,
             current_drawdown_amount=current_drawdown_amount,
             current_drawdown_pct=current_drawdown_pct,
+            projected_equity_after_stops=projected_equity_after_stops,
+            projected_drawdown_amount=projected_drawdown_amount,
+            projected_drawdown_pct=projected_drawdown_pct,
             max_drawdown_pct=risk_config.max_drawdown_pct,
             per_trade_risk_limit=per_trade_risk_limit,
             emergency_halt=snapshot.emergency_halt,
