@@ -14,6 +14,7 @@ from app.portfolio.currency_exposure import (
     CurrencyExposure,
     CurrencyExposureCalculator,
 )
+from app.portfolio.correlation import CorrelationResult
 
 
 class OpenPositionRisk(BaseModel):
@@ -136,6 +137,12 @@ class PortfolioRiskDecision(BaseModel):
     max_currency_exposure_pct: float
     projected_currency_exposure_pct: dict[str, float]
 
+    correlation_check_enabled: bool
+    correlated_open_risk: float
+    projected_correlated_group_risk: float
+    max_correlated_group_risk: float
+    strongest_correlation: float | None
+
     emergency_halt: bool
 
 
@@ -164,6 +171,8 @@ class PortfolioRiskManager:
         proposed_trade_risk: float,
         risk_config: RiskConfig,
         proposed_currency_exposures: list[CurrencyExposure] | None = None,
+        proposed_symbol: str | None = None,
+        correlation_results: list[CorrelationResult] | None = None,
     ) -> PortfolioRiskDecision:
 
         if not isfinite(proposed_trade_risk):
@@ -328,6 +337,93 @@ class PortfolioRiskManager:
                     f"{risk_config.max_currency_exposure_pct:.2f}%."
                 )
 
+        # Correlation-aware group risk. Correlation checking is explicitly
+        # opt-in until a market-data adapter can provide fresh, aligned data.
+        correlated_open_risk = 0.0
+        projected_correlated_group_risk = 0.0
+        strongest_correlation = None
+        max_correlated_group_risk = (
+            snapshot.current_equity
+            * risk_config.max_correlated_group_risk_pct
+            / 100
+        )
+
+        if risk_config.correlation_check_enabled and snapshot.open_positions:
+            if not proposed_symbol or not proposed_symbol.strip():
+                reasons.append(
+                    "Correlation check requires the proposed instrument symbol."
+                )
+            elif correlation_results is None:
+                reasons.append(
+                    "Correlation data is missing; new trade rejected."
+                )
+            else:
+                proposed_symbol = proposed_symbol.strip().upper()
+                correlations_by_pair = {}
+
+                for correlation in correlation_results:
+                    pair = tuple(sorted((
+                        correlation.symbol_a,
+                        correlation.symbol_b,
+                    )))
+                    if pair in correlations_by_pair:
+                        reasons.append(
+                            f"Duplicate correlation data supplied for "
+                            f"{pair[0]} and {pair[1]}."
+                        )
+                    correlations_by_pair[pair] = correlation
+
+                correlated_positions = []
+                for position in snapshot.open_positions:
+                    existing_symbol = position.symbol.strip().upper()
+                    if existing_symbol == proposed_symbol:
+                        reasons.append(
+                            "A position in the proposed instrument is already open."
+                        )
+                        continue
+
+                    pair = tuple(sorted((proposed_symbol, existing_symbol)))
+                    correlation = correlations_by_pair.get(pair)
+
+                    if correlation is None:
+                        reasons.append(
+                            f"Correlation data is missing for {proposed_symbol} "
+                            f"and {existing_symbol}; new trade rejected."
+                        )
+                        continue
+
+                    coefficient = correlation.coefficient
+                    if (
+                        strongest_correlation is None
+                        or abs(coefficient) > abs(strongest_correlation)
+                    ):
+                        strongest_correlation = coefficient
+
+                    if abs(coefficient) >= risk_config.correlation_threshold:
+                        correlated_positions.append(position)
+
+                correlated_open_risk = sum(
+                    position.risk_to_stop
+                    for position in correlated_positions
+                )
+                projected_correlated_group_risk = (
+                    correlated_open_risk + proposed_trade_risk
+                    if correlated_positions
+                    else proposed_trade_risk
+                )
+
+                if (
+                    correlated_positions
+                    and projected_correlated_group_risk
+                    > max_correlated_group_risk
+                ):
+                    reasons.append(
+                        "Projected correlated-position group risk of "
+                        f"{projected_correlated_group_risk:.2f} exceeds "
+                        "the configured group risk limit of "
+                        f"{max_correlated_group_risk:.2f}."
+                    )
+
         approved = len(reasons) == 0
 
         if approved:
@@ -360,5 +456,10 @@ class PortfolioRiskManager:
             projected_currency_exposure_pct=(
                 projected_currency_exposure_pct
             ),
+            correlation_check_enabled=risk_config.correlation_check_enabled,
+            correlated_open_risk=correlated_open_risk,
+            projected_correlated_group_risk=projected_correlated_group_risk,
+            max_correlated_group_risk=max_correlated_group_risk,
+            strongest_correlation=strongest_correlation,
             emergency_halt=snapshot.emergency_halt,
         )
