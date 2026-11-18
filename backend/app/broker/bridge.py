@@ -94,3 +94,69 @@ class MT5Quote(BaseModel):
         if self.ask < self.bid:
             raise ValueError("Ask price cannot be below bid price.")
         return self
+
+
+
+class MT5Candle(BaseModel):
+    """One completed or forming OHLC candle received from the read-only MT5 bridge."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    opened_at: datetime
+    open: float = Field(gt=0)
+    high: float = Field(gt=0)
+    low: float = Field(gt=0)
+    close: float = Field(gt=0)
+    tick_volume: int = Field(ge=0)
+
+    @field_validator("open", "high", "low", "close")
+    @classmethod
+    def require_finite_prices(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Candle prices must be finite.")
+        return value
+
+    @field_validator("opened_at")
+    @classmethod
+    def normalize_open_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Candle open time must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_ohlc(self):
+        if self.high < max(self.open, self.close, self.low):
+            raise ValueError("Candle high must be the highest OHLC price.")
+        if self.low > min(self.open, self.close, self.high):
+            raise ValueError("Candle low must be the lowest OHLC price.")
+        return self
+
+
+class MT5CandleBatch(BaseModel):
+    """A bounded batch of historical candles for one symbol and timeframe."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=32)
+    timeframe: str = Field(min_length=2, max_length=3)
+    candles: list[MT5Candle] = Field(min_length=1, max_length=500)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("timeframe")
+    @classmethod
+    def validate_timeframe(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"M1", "M5", "M15", "M30", "H1", "H4", "D1"}:
+            raise ValueError("Unsupported timeframe.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_unique_candle_times(self):
+        times = [candle.opened_at for candle in self.candles]
+        if len(times) != len(set(times)):
+            raise ValueError("Candle timestamps must be unique within a batch.")
+        return self
