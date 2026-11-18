@@ -27,7 +27,7 @@ main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justi
 </main>
 <script>
 const $=id=>document.getElementById(id);
-function ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
+function escapeHtml(value){return String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}\nfunction ageLabel(n){return n==null?'Unknown':n<2?'Just now':Math.round(n)+'s ago'}
 function statusDot(ok){return ok?'ok':'bad'}
 function money(n,c){return n==null?'—':new Intl.NumberFormat(undefined,{style:'currency',currency:c||'USD',maximumFractionDigits:2}).format(n)}
 async function refresh(){
