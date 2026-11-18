@@ -10,6 +10,10 @@ from pydantic import (
 )
 
 from app.risk.risk_config import RiskConfig
+from app.portfolio.currency_exposure import (
+    CurrencyExposure,
+    CurrencyExposureCalculator,
+)
 
 
 class OpenPositionRisk(BaseModel):
@@ -20,7 +24,8 @@ class OpenPositionRisk(BaseModel):
     from the current market price to the stop-loss, including
     estimated transaction costs.
 
-    All monetary values use the account currency.
+    currency_exposures represents the position's individual
+    currency exposures, converted into the account currency.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,6 +33,10 @@ class OpenPositionRisk(BaseModel):
     ticket: str = Field(min_length=1)
     symbol: str = Field(min_length=1)
     risk_to_stop: float = Field(gt=0)
+
+    currency_exposures: list[CurrencyExposure] = Field(
+        default_factory=list
+    )
 
     @field_validator("risk_to_stop")
     @classmethod
@@ -40,18 +49,6 @@ class OpenPositionRisk(BaseModel):
 class PortfolioSnapshot(BaseModel):
     """
     Current account and portfolio state supplied by an account adapter.
-
-    daily_realized_loss:
-        Net realized daily loss, expressed as a non-negative amount.
-
-    daily_floating_pnl:
-        Current net floating profit or loss for the trading day.
-
-    current_equity:
-        Account equity including current floating P/L.
-
-    peak_equity:
-        Account high-water mark.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -134,8 +131,11 @@ class PortfolioRiskDecision(BaseModel):
     projected_drawdown_pct: float
 
     max_drawdown_pct: float
-
     per_trade_risk_limit: float
+
+    max_currency_exposure_pct: float
+    projected_currency_exposure_pct: dict[str, float]
+
     emergency_halt: bool
 
 
@@ -143,15 +143,19 @@ class PortfolioRiskManager:
     """
     Central portfolio-level risk approval engine.
 
-    This component evaluates whether a proposed trade can be accepted.
+    Evaluates:
+    - Emergency trading halt.
+    - Maximum open positions.
+    - Individual trade risk.
+    - Daily loss.
+    - Account drawdown.
+    - Projected currency concentration.
 
-    It does not:
-    - Connect to a broker.
-    - Retrieve account information.
-    - Place or close trades.
-    - Automatically liquidate open positions.
+    It does not connect to a broker or execute trades.
 
-    The caller must supply a current and trustworthy portfolio snapshot.
+    The caller must supply a current and trustworthy portfolio
+    snapshot and, when using currency exposure enforcement,
+    the proposed trade's converted currency exposures.
     """
 
     @staticmethod
@@ -159,6 +163,7 @@ class PortfolioRiskManager:
         snapshot: PortfolioSnapshot,
         proposed_trade_risk: float,
         risk_config: RiskConfig,
+        proposed_currency_exposures: list[CurrencyExposure] | None = None,
     ) -> PortfolioRiskDecision:
 
         if not isfinite(proposed_trade_risk):
@@ -171,7 +176,7 @@ class PortfolioRiskManager:
                 "Proposed trade risk must be greater than zero."
             )
 
-        # Calculate current aggregate open-position exposure.
+        # Calculate existing aggregate open-position risk.
         existing_open_risk = sum(
             position.risk_to_stop
             for position in snapshot.open_positions
@@ -181,27 +186,25 @@ class PortfolioRiskManager:
             existing_open_risk + proposed_trade_risk
         )
 
-        # Calculate actual daily loss using realized and floating P/L.
+        # Calculate actual daily loss.
         actual_daily_loss = max(
             0.0,
             snapshot.daily_realized_loss
             - snapshot.daily_floating_pnl,
         )
 
-        # Calculate the daily risk budget.
         daily_loss_limit = (
             snapshot.day_start_equity
             * risk_config.max_daily_loss_pct
             / 100
         )
 
-        # Estimate daily loss if all stops are reached.
         projected_daily_loss = (
             actual_daily_loss
             + projected_total_open_risk
         )
 
-        # Calculate the maximum permitted individual trade risk.
+        # Calculate maximum permitted individual trade risk.
         per_trade_risk_limit = (
             snapshot.current_equity
             * risk_config.risk_per_trade_pct
@@ -219,14 +222,12 @@ class PortfolioRiskManager:
             * 100
         )
 
-        # Project equity if all existing and proposed positions
-        # reach their stop-loss levels.
+        # Project equity if all stops are reached.
         projected_equity_after_stops = (
             snapshot.current_equity
             - projected_total_open_risk
         )
 
-        # Calculate projected drawdown against the account high-water mark.
         projected_drawdown_amount = max(
             0.0,
             snapshot.peak_equity
@@ -238,6 +239,31 @@ class PortfolioRiskManager:
             / snapshot.peak_equity
             * 100
         )
+
+        # Calculate projected currency concentration.
+        projected_currency_exposure_pct = {}
+
+        if proposed_currency_exposures is not None:
+            existing_currency_exposures = [
+                exposure
+                for position in snapshot.open_positions
+                for exposure in position.currency_exposures
+            ]
+
+            all_currency_exposures = (
+                existing_currency_exposures
+                + proposed_currency_exposures
+            )
+
+            exposure_summary = CurrencyExposureCalculator.aggregate(
+                exposures=all_currency_exposures,
+                current_equity=snapshot.current_equity,
+            )
+
+            for currency, summary in exposure_summary.items():
+                projected_currency_exposure_pct[currency] = (
+                    summary.gross_exposure_pct_equity
+                )
 
         reasons = []
 
@@ -283,8 +309,24 @@ class PortfolioRiskManager:
         # Projected account drawdown.
         if projected_drawdown_pct >= risk_config.max_drawdown_pct:
             reasons.append(
-                "Projected account drawdown would reach or exceed the maximum drawdown limit."
+                "Projected account drawdown would reach or exceed "
+                "the maximum drawdown limit."
             )
+
+        # Currency exposure limit.
+        for currency, exposure_pct in (
+            projected_currency_exposure_pct.items()
+        ):
+            if (
+                exposure_pct
+                > risk_config.max_currency_exposure_pct
+            ):
+                reasons.append(
+                    f"Projected gross {currency} exposure of "
+                    f"{exposure_pct:.2f}% exceeds the configured "
+                    f"currency exposure limit of "
+                    f"{risk_config.max_currency_exposure_pct:.2f}%."
+                )
 
         approved = len(reasons) == 0
 
@@ -312,5 +354,11 @@ class PortfolioRiskManager:
             projected_drawdown_pct=projected_drawdown_pct,
             max_drawdown_pct=risk_config.max_drawdown_pct,
             per_trade_risk_limit=per_trade_risk_limit,
+            max_currency_exposure_pct=(
+                risk_config.max_currency_exposure_pct
+            ),
+            projected_currency_exposure_pct=(
+                projected_currency_exposure_pct
+            ),
             emergency_halt=snapshot.emergency_halt,
         )
