@@ -1,0 +1,192 @@
+// FOREX AUTOPILOT - read-only MT5 telemetry bridge
+// This Expert Advisor sends connection, account and quote telemetry only.
+// It contains NO trade execution, order, position modification or close functions.
+
+#property strict
+#property version   "1.00"
+#property description "FOREX AUTOPILOT read-only telemetry bridge"
+
+input string InpApiBaseUrl = "https://YOUR-API-HOST";
+input string InpBridgeToken = ""; // Set locally in MT5; never commit a real token.
+input string InpSymbols = "EURUSD,GBPUSD";
+input int    InpHeartbeatSeconds = 15;
+input int    InpHttpTimeoutMs = 5000;
+
+string Trimmed(string value)
+{
+   StringTrimLeft(value);
+   StringTrimRight(value);
+   return value;
+}
+
+string IsoUtcNow()
+{
+   string value = TimeToString(TimeGMT(), TIME_DATE | TIME_SECONDS);
+   StringReplace(value, ".", "-");
+   StringReplace(value, " ", "T");
+   return value + "Z";
+}
+
+string JsonEscape(string value)
+{
+   StringReplace(value, "\\", "\\\\");
+   StringReplace(value, "\"", "\\\"");
+   return value;
+}
+
+bool PostJson(string route, string body)
+{
+   string url = InpApiBaseUrl + route;
+   string headers = "Content-Type: application/json\r\nX-Bridge-Token: " + InpBridgeToken + "\r\n";
+   char data[];
+   char result[];
+   string response_headers;
+
+   int copied = StringToCharArray(body, data, 0, WHOLE_ARRAY, CP_UTF8);
+   if(copied <= 1)
+   {
+      Print("FOREX AUTOPILOT: JSON encoding failed for ", route);
+      return false;
+   }
+   ArrayResize(data, copied - 1); // Remove terminating null byte.
+
+   ResetLastError();
+   int status = WebRequest("POST", url, headers, InpHttpTimeoutMs, data, result, response_headers);
+   if(status == -1)
+   {
+      Print("FOREX AUTOPILOT: WebRequest failed for ", route, "; error=", GetLastError());
+      return false;
+   }
+
+   string response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   if(status < 200 || status >= 300)
+   {
+      Print("FOREX AUTOPILOT: API returned HTTP ", status, " for ", route, "; response=", response);
+      return false;
+   }
+   Print("FOREX AUTOPILOT: telemetry accepted at ", route);
+   return true;
+}
+
+void SendHeartbeat()
+{
+   string server = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
+   bool connected = (bool)TerminalInfoInteger(TERMINAL_CONNECTED);
+   string body = StringFormat(
+      "{\"server\":\"%s\",\"terminal_connected\":%s,\"observed_at\":\"%s\"}",
+      server, connected ? "true" : "false", IsoUtcNow()
+   );
+   PostJson("/api/v1/mt5/heartbeat", body);
+}
+
+void SendAccountSnapshot()
+{
+   string server = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
+   string currency = JsonEscape(AccountInfoString(ACCOUNT_CURRENCY));
+   long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
+
+   string body = StringFormat(
+      "{\"server\":\"%s\",\"account_currency\":\"%s\",\"balance\":%.8f,"
+      "\"equity\":%.8f,\"margin\":%.8f,\"free_margin\":%.8f,"
+      "\"leverage\":%I64d,\"observed_at\":\"%s\"}",
+      server, currency,
+      AccountInfoDouble(ACCOUNT_BALANCE),
+      AccountInfoDouble(ACCOUNT_EQUITY),
+      AccountInfoDouble(ACCOUNT_MARGIN),
+      AccountInfoDouble(ACCOUNT_MARGIN_FREE),
+      leverage, IsoUtcNow()
+   );
+   PostJson("/api/v1/mt5/account", body);
+}
+
+void SendQuotes()
+{
+   string symbols[];
+   int count = StringSplit(InpSymbols, ',', symbols);
+   for(int i = 0; i < count; i++)
+   {
+      string symbol = Trimmed(symbols[i]);
+      if(symbol == "")
+         continue;
+
+      if(!SymbolSelect(symbol, true))
+      {
+         Print("FOREX AUTOPILOT: symbol unavailable in Market Watch: ", symbol);
+         continue;
+      }
+
+      MqlTick tick;
+      if(!SymbolInfoTick(symbol, tick) || tick.bid <= 0 || tick.ask < tick.bid)
+      {
+         Print("FOREX AUTOPILOT: no valid current tick for ", symbol);
+         continue;
+      }
+
+      string body = StringFormat(
+         "{\"symbol\":\"%s\",\"bid\":%.10f,\"ask\":%.10f,\"timestamp\":\"%s\"}",
+         JsonEscape(symbol), tick.bid, tick.ask,
+         TimeToString(tick.time, TIME_DATE | TIME_SECONDS)
+      );
+      // MT5 tick time is server time and has no UTC offset. Do not label it UTC.
+      // The backend currently requires an offset-aware timestamp, so use GMT now
+      // as the observation timestamp rather than misrepresenting server tick time.
+      string observed = IsoUtcNow();
+      int timestamp_pos = StringFind(body, "\"timestamp\":");
+      if(timestamp_pos >= 0)
+      {
+         int value_start = StringFind(body, "\"", timestamp_pos + 12);
+         int value_end = StringFind(body, "\"", value_start + 1);
+         if(value_start >= 0 && value_end > value_start)
+            body = StringSubstr(body, 0, value_start + 1) + observed + StringSubstr(body, value_end);
+      }
+      PostJson("/api/v1/mt5/quote", body);
+   }
+}
+
+void SendTelemetry()
+{
+   if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+   {
+      Print("FOREX AUTOPILOT: MT5 terminal is not connected; telemetry skipped.");
+      SendHeartbeat();
+      return;
+   }
+   SendHeartbeat();
+   SendAccountSnapshot();
+   SendQuotes();
+}
+
+int OnInit()
+{
+   if(StringFind(InpApiBaseUrl, "https://") != 0)
+   {
+      Print("FOREX AUTOPILOT: configure an HTTPS API base URL before starting.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+   if(StringLen(Trimmed(InpBridgeToken)) < 32)
+   {
+      Print("FOREX AUTOPILOT: configure a unique bridge token of at least 32 characters locally.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+   if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000)
+   {
+      Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   EventSetTimer(InpHeartbeatSeconds);
+   Print("FOREX AUTOPILOT: read-only MT5 telemetry bridge started. Trading functions are absent.");
+   SendTelemetry();
+   return INIT_SUCCEEDED;
+}
+
+void OnDeinit(const int reason)
+{
+   EventKillTimer();
+   Print("FOREX AUTOPILOT: telemetry bridge stopped.");
+}
+
+void OnTimer()
+{
+   SendTelemetry();
+}
