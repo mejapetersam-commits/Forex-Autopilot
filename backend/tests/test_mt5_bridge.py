@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -281,3 +283,55 @@ def test_rejects_account_snapshot_with_missing_required_fields():
         },
     )
     assert response.status_code == 422
+
+
+
+def test_telemetry_status_reports_disconnected_when_no_heartbeat_exists():
+    response = client.get(
+        "/api/v1/mt5/status",
+        headers={"X-Bridge-Token": TOKEN},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["bridge_connected"] is False
+    assert data["heartbeat"]["received"] is False
+    assert data["trading_enabled"] is False
+
+
+def test_telemetry_status_reports_fresh_demo_heartbeat_and_quote():
+    headers = {"X-Bridge-Token": TOKEN}
+    observed_at = datetime.now(timezone.utc).isoformat()
+    heartbeat = client.post(
+        "/api/v1/mt5/heartbeat",
+        headers=headers,
+        json={
+            "server": "ExnessKE-MT5Trial9",
+            "terminal_connected": True,
+            "observed_at": observed_at,
+        },
+    )
+    quote = client.post(
+        "/api/v1/mt5/quote",
+        headers=headers,
+        json={
+            "symbol": "EURUSD",
+            "bid": 1.08,
+            "ask": 1.0801,
+            "timestamp": observed_at,
+        },
+    )
+    assert heartbeat.status_code == quote.status_code == 200
+
+    response = client.get("/api/v1/mt5/status", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["bridge_connected"] is True
+    assert data["heartbeat"]["fresh"] is True
+    assert data["quotes"][0]["symbol"] == "EURUSD"
+    assert data["quotes"][0]["fresh"] is True
+    assert data["execution_mode"] == "disabled"
+
+
+def test_telemetry_status_requires_authentication():
+    response = client.get("/api/v1/mt5/status")
+    assert response.status_code == 401
