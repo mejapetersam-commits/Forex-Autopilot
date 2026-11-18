@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote
 from app.market_data.telemetry_store import TelemetryStore
+from app.market_data.indicators import calculate_indicators
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
 
@@ -205,6 +206,27 @@ def mt5_candle_history(
     """Return stored candles in chronological order for analysis and charting."""
     data = telemetry_store().candle_history(symbol, timeframe, limit)
     return {"data": data, "count": len(data)}
+
+
+@app.get(
+    "/api/v1/market-analysis/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def market_analysis(
+    symbol: str,
+    timeframe: str,
+    limit: int = Query(default=500, ge=1, le=5000),
+):
+    """Calculate deterministic indicators from stored, chronologically ordered candles."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().upper()
+    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "analysis": calculate_indicators(candles),
+        "trading_enabled": False,
+    }
 
 
 @app.get(
