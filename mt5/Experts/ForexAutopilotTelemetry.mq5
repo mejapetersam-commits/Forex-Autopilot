@@ -21,6 +21,9 @@ ulong  g_last_snapshot_ms = 0;
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
 bool g_candle_bootstrap_complete = false;
+int g_candle_attempts[];
+bool g_candle_bootstrap_done[];
+#define CANDLE_MAX_ATTEMPTS 3
 ulong g_candle_last_request_ms = 0;
 ulong g_candle_cycle_wait_until_ms = 0;
 
@@ -231,6 +234,38 @@ bool SendCandleBatch(string symbol, ENUM_TIMEFRAMES timeframe, int requested_bar
 
 // Bootstrap each symbol/timeframe once, then refresh the most recent three
 // closed bars. One request is sent every two seconds to avoid network bursts.
+void AdvanceCandleCombination(int combinations, ulong now_ms)
+{
+   g_candle_next_index++;
+   if(g_candle_next_index < combinations)
+      return;
+
+   g_candle_next_index = 0;
+   bool all_bootstrapped = true;
+   for(int i = 0; i < combinations; i++)
+   {
+      if(!g_candle_bootstrap_done[i])
+      {
+         all_bootstrapped = false;
+         break;
+      }
+   }
+
+   if(all_bootstrapped && !g_candle_bootstrap_complete)
+   {
+      g_candle_bootstrap_complete = true;
+      Print("FOREX AUTOPILOT: initial candle history bootstrap complete for all ",
+            combinations, " symbol/timeframe combinations.");
+   }
+
+   // Retry incomplete bootstrap combinations soon; normal refreshes use the
+   // configured refresh interval after every combination has bootstrapped.
+   ulong wait_ms = g_candle_bootstrap_complete
+                   ? (ulong)InpCandleRefreshSeconds * 1000
+                   : 5000;
+   g_candle_cycle_wait_until_ms = now_ms + wait_ms;
+}
+
 void SendNextCandleBatch(ulong now_ms)
 {
    if(now_ms - g_candle_last_request_ms < 2000)
@@ -242,37 +277,42 @@ void SendNextCandleBatch(ulong now_ms)
    if(combinations < 1)
       return;
 
-   if(g_candle_next_index >= combinations)
-   {
-      g_candle_next_index = 0;
-      g_candle_cycle_wait_until_ms =
-         now_ms + (ulong)InpCandleRefreshSeconds * 1000;
-      return;
-   }
-
-   int symbol_index = g_candle_next_index / ArraySize(g_candle_timeframes);
-   int timeframe_index = g_candle_next_index % ArraySize(g_candle_timeframes);
+   int index = g_candle_next_index;
+   int symbol_index = index / ArraySize(g_candle_timeframes);
+   int timeframe_index = index % ArraySize(g_candle_timeframes);
    string symbol = g_symbols[symbol_index];
    ENUM_TIMEFRAMES timeframe = g_candle_timeframes[timeframe_index];
 
-   if(!SymbolSelect(symbol, true))
-   {
-      Print("FOREX AUTOPILOT: cannot select candle symbol ", symbol);
-      g_candle_last_request_ms = now_ms;
-      return;
-   }
+   int bars_to_send = g_candle_bootstrap_done[index] ? 3 : InpCandleBootstrapBars;
+   Print("FOREX AUTOPILOT: candle scheduler attempting ", symbol, " ",
+         TimeframeName(timeframe), "; bars=", bars_to_send,
+         "; attempt=", g_candle_attempts[index] + 1, "/", CANDLE_MAX_ATTEMPTS);
 
-   int bars_to_send = g_candle_bootstrap_complete ? 3 : InpCandleBootstrapBars;
-   if(SendCandleBatch(symbol, timeframe, bars_to_send))
+   bool accepted = false;
+   if(SymbolSelect(symbol, true))
+      accepted = SendCandleBatch(symbol, timeframe, bars_to_send);
+   else
+      Print("FOREX AUTOPILOT: cannot select candle symbol ", symbol,
+            "; scheduler will retry.");
+
+   if(accepted)
    {
       Print("FOREX AUTOPILOT: candles accepted for ", symbol, " ",
             TimeframeName(timeframe), "; bars=", bars_to_send);
-      g_candle_next_index++;
-      if(g_candle_next_index >= combinations && !g_candle_bootstrap_complete)
+      g_candle_attempts[index] = 0;
+      g_candle_bootstrap_done[index] = true;
+      AdvanceCandleCombination(combinations, now_ms);
+   }
+   else
+   {
+      g_candle_attempts[index]++;
+      if(g_candle_attempts[index] >= CANDLE_MAX_ATTEMPTS)
       {
-         g_candle_bootstrap_complete = true;
-         g_candle_next_index = 0;
-         Print("FOREX AUTOPILOT: initial candle history bootstrap complete.");
+         Print("FOREX AUTOPILOT: moving past ", symbol, " ",
+               TimeframeName(timeframe), " after ", CANDLE_MAX_ATTEMPTS,
+               " failed attempts; it will be retried next cycle.");
+         g_candle_attempts[index] = 0;
+         AdvanceCandleCombination(combinations, now_ms);
       }
    }
 
@@ -309,6 +349,11 @@ int OnInit()
 
    ArrayResize(g_symbols, count);
    ArrayResize(g_last_quote_time_msc, count);
+   int candle_combinations = count * ArraySize(g_candle_timeframes);
+   ArrayResize(g_candle_attempts, candle_combinations);
+   ArrayResize(g_candle_bootstrap_done, candle_combinations);
+   ArrayInitialize(g_candle_attempts, 0);
+   ArrayInitialize(g_candle_bootstrap_done, false);
    for(int i = 0; i < count; i++)
    {
       g_symbols[i] = Trimmed(configured_symbols[i]);
