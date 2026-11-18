@@ -10,3 +10,10 @@
 - On uncertain account state, disconnect, stale data, rejected protection order or invalid configuration: fail closed and alert.
 
 These are conservative design defaults, not guarantees or financial advice. Validate broker-specific calculations on demo before any live use.
+
+- Correlation threshold: absolute Pearson correlation of 0.80 or higher is treated as strongly correlated.
+- Correlated group risk budget: 0.50% of current equity across the proposed trade and directly correlated open positions.
+- Correlation checking remains disabled by default until a market-data adapter supplies fresh, timestamp-aligned return series. When enabled, missing pair data or a missing proposed symbol blocks the new trade.
+- Positive and negative correlation are both considered through the absolute coefficient. Correlation estimates must be calculated from aligned observations; stale or mismatched series must not be treated as valid.
+
+Correlation controls are an additional safeguard, not a substitute for total portfolio, currency, daily-loss or drawdown limits.
