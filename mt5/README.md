@@ -47,5 +47,14 @@ The quote timestamp is the time the EA observed the tick, expressed in UTC. It i
 
 - The EA has not been compiled against MetaEditor in this repository's CI environment. Compile and test it on the Windows MT5 terminal before use.
 - This code does not establish a connection by itself; the API must first be deployed and secured.
-- The backend currently validates and acknowledges telemetry but does not persist it.
+- The backend persists heartbeat, account and quote observations in SQLite. The latest-value and bounded quote-history read endpoints are protected by the same bridge token. The deployment uses a persistent Docker volume; backups and retention monitoring must still be configured.
 - Do not use a live account. This stage is demo-only.
+
+
+## API deployment preparation
+
+The repository includes a container build at `backend/Dockerfile` and a hardened single-service Compose deployment at the repository root. The API binds to loopback port 8000 only; place it behind a reverse proxy or managed ingress that terminates valid HTTPS before allowing the MT5 terminal to connect. Do not expose port 8000 directly to the public internet.
+
+Set `FOREX_AUTOPILOT_BRIDGE_TOKEN` in the deployment environment to a cryptographically random secret of at least 32 characters. Do not store it in Git, source code, screenshots or chat. Compose persists SQLite data in the named `telemetry_data` volume and runs the API as a non-root user. Back up that volume and verify restore before relying on the telemetry history.
+
+The API container health check verifies process readiness only; it does not verify Exness connectivity or MT5 telemetry. The EA must be compiled in MetaEditor and tested against a deployed HTTPS endpoint before this integration is considered operational.
