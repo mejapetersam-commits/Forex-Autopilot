@@ -335,3 +335,23 @@ def test_telemetry_status_reports_fresh_demo_heartbeat_and_quote():
 def test_telemetry_status_requires_authentication():
     response = client.get("/api/v1/mt5/status")
     assert response.status_code == 401
+
+
+
+def test_telemetry_status_does_not_treat_future_timestamp_as_fresh():
+    headers = {"X-Bridge-Token": TOKEN}
+    heartbeat = client.post(
+        "/api/v1/mt5/heartbeat",
+        headers=headers,
+        json={
+            "server": "ExnessKE-MT5Trial9",
+            "terminal_connected": True,
+            "observed_at": "2099-01-01T00:00:00Z",
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    response = client.get("/api/v1/mt5/status", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["bridge_connected"] is False
+    assert response.json()["heartbeat"]["fresh"] is False
