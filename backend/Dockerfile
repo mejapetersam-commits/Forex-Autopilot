@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home-dir /app app \
     && mkdir -p /var/lib/forex-autopilot \
     && chown -R app:app /app /var/lib/forex-autopilot
 
