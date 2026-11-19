@@ -48,8 +48,8 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\", "\\\");
-   StringReplace(value, "\"", "\\"");
+   StringReplace(value, "\\", "\\\\");
+   StringReplace(value, "\"", "\\\"");
    return value;
 }
 
