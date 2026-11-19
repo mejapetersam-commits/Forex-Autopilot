@@ -87,6 +87,22 @@ def reconcile_broker_history(
                         target = "rejected" if broker_state == "rejected" else "cancelled"
                         if current in {"approved", "submitted", "acknowledged", "unknown", "cancel_requested"}:
                             try:
+                                if target == "cancelled" and current == "acknowledged":
+                                    updated = ledger.transition(
+                                        intent_id, "cancel_requested",
+                                        event_type="broker_history_confirms_cancel_request",
+                                        broker_order_id=order_id,
+                                        details={"broker_state": broker_state},
+                                    )
+                                    current = updated["status"]
+                                elif target == "cancelled" and current == "submitted":
+                                    updated = ledger.transition(
+                                        intent_id, "unknown",
+                                        event_type="broker_history_cancel_recovery",
+                                        broker_order_id=order_id,
+                                        details={"broker_state": broker_state},
+                                    )
+                                    current = updated["status"]
                                 updated = ledger.transition(
                                     intent_id, target,
                                     event_type="broker_order_terminal_state_confirmed",
