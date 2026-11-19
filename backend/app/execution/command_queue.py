@@ -128,7 +128,7 @@ class ExecutionCommandQueue:
     def record_result(self, command_id: str, *, terminal_id: str,
                       outcome: str, result: dict[str, Any]) -> dict[str, Any]:
         if outcome not in {"acknowledged", "rejected", "unknown"}:
-            raise ValueError("Terminal outcome must be acknowledged or rejected.")
+            raise ValueError("Terminal outcome must be acknowledged, rejected or unknown.")
         encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
