@@ -40,8 +40,8 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\\", "\\\\");
-   StringReplace(value, "\"", "\\\"");
+   StringReplace(value, "\", "\\\");
+   StringReplace(value, "\"", "\\"");
    return value;
 }
 
@@ -199,7 +199,7 @@ bool BuildCandleBatchJson(string symbol, ENUM_TIMEFRAMES timeframe,
    }
 
    batch_json = StringFormat(
-      "{\\"symbol\\":\\"%s\\",\\"timeframe\\":\\"%s\\",\\"candles\\":[",
+      "{\"symbol\":\"%s\",\"timeframe\":\"%s\",\"candles\":[",
       JsonEscape(symbol), TimeframeName(timeframe)
    );
 
@@ -209,8 +209,8 @@ bool BuildCandleBatchJson(string symbol, ENUM_TIMEFRAMES timeframe,
          batch_json += ",";
 
       batch_json += StringFormat(
-         "{\\"opened_at\\":\\"%s\\",\\"open\\":%.10f,\\"high\\":%.10f,"
-         "\\"low\\":%.10f,\\"close\\":%.10f,\\"tick_volume\\":%I64d}",
+         "{\"opened_at\":\"%s\",\"open\":%.10f,\"high\":%.10f,"
+         "\"low\":%.10f,\"close\":%.10f,\"tick_volume\":%I64d}",
          BrokerTimeIso(rates[i].time, server_offset),
          rates[i].open, rates[i].high, rates[i].low, rates[i].close,
          rates[i].tick_volume
@@ -229,7 +229,7 @@ void SendBulkCandleBatches(ulong now_ms)
       return;
 
    int requested_bars = g_candle_bootstrap_complete ? 3 : InpCandleBootstrapBars;
-   string body = "{\\"batches\\":[";
+   string body = "{\"batches\":[";
    int batch_count = 0;
 
    for(int symbol_index = 0; symbol_index < ArraySize(g_symbols); symbol_index++)
