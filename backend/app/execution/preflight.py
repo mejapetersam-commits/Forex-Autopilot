@@ -21,8 +21,7 @@ class ExecutionSnapshot:
     environment: str
     trading_enabled: bool
     kill_switch_active: bool
-    trading_paused: bool = True
-    broker_connected: bool = True
+    broker_connected: bool
     account_equity: float
     free_margin: float
     quote_bid: float
@@ -36,6 +35,7 @@ class ExecutionSnapshot:
     pip_size: float = 0.0001
     max_open_positions: int = 2
     max_daily_loss_pct: float = 1.0
+    trading_paused: bool = True
 
 
 def evaluate_execution_preflight(
