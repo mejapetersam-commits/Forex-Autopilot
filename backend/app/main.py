@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
@@ -667,6 +667,65 @@ def market_data_quality(
         "trading_enabled": False,
     }
 
+
+
+@app.post(
+    "/api/v1/mt5/execution/state",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_execution_state(payload: MT5ExecutionState):
+    """Persist a read-only open-position snapshot; this endpoint never places orders."""
+    telemetry_store().save_execution_state(payload)
+    return {
+        "accepted": True,
+        "stored": True,
+        "terminal_id": payload.terminal_id,
+        "environment": payload.environment,
+        "positions_received": len(payload.positions),
+        "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/monitoring/execution-state",
+    dependencies=[Depends(require_bridge_token)],
+)
+def latest_execution_state():
+    snapshot = telemetry_store().latest_execution_state()
+    if snapshot is None:
+        return {"status": "critical", "reason": "no_execution_state_received",
+                "trading_enabled": False}
+    observed = datetime.fromisoformat(snapshot["observed_at"].replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - observed).total_seconds()
+    stale_after = max(5, int(os.getenv("FOREX_AUTOPILOT_EXECUTION_STATE_STALE_SECONDS", "20")))
+    expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
+    managed = [p for p in snapshot["positions"] if p["magic"] == expected_magic]
+    stop_alerts = [
+        {"ticket": p["ticket"], "symbol": p["symbol"],
+         "missing_stop_loss": p["stop_loss"] <= 0,
+         "missing_take_profit": p["take_profit"] <= 0}
+        for p in managed if p["stop_loss"] <= 0 or p["take_profit"] <= 0
+    ]
+    issues = []
+    if snapshot["environment"] != "demo":
+        issues.append("terminal_not_on_demo_account")
+    if age < -5 or age > stale_after:
+        issues.append("execution_state_stale")
+    if stop_alerts:
+        issues.append("managed_position_missing_protective_level")
+    return {
+        "status": "critical" if issues else "healthy",
+        "issues": issues,
+        "terminal_id": snapshot["terminal_id"],
+        "environment": snapshot["environment"],
+        "observed_at": snapshot["observed_at"],
+        "age_seconds": round(max(0.0, age), 2),
+        "positions_count": snapshot["positions_count"],
+        "managed_positions_count": len(managed),
+        "protective_stop_alerts": stop_alerts,
+        "positions": snapshot["positions"],
+        "trading_enabled": False,
+    }
 
 @app.get(
     "/api/v1/mt5/latest/heartbeat",
