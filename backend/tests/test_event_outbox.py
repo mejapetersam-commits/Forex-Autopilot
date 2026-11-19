@@ -65,3 +65,28 @@ def test_invalid_severity_and_key_are_rejected(tmp_path):
         outbox.record(event_key="bad key", event_type="X", severity="critical", message="x")
     with pytest.raises(ValueError):
         outbox.record(event_key="valid.key", event_type="X", severity="fatal", message="x")
+
+
+def test_expired_lease_cannot_be_completed_before_reclaim(tmp_path):
+    outbox = EventOutbox(tmp_path / "events.sqlite3")
+    now = datetime(2026, 11, 19, tzinfo=timezone.utc)
+    event = outbox.record(
+        event_key="worker:lease-expiry:1",
+        event_type="WORKER_LEASE_EXPIRY",
+        severity="warning",
+        message="Lease expiry must invalidate the old worker.",
+        occurred_at=now,
+    )
+    lease = outbox.lease_due(now=now, lease_seconds=5)[0]
+    with pytest.raises(ValueError, match="lease"):
+        outbox.complete(
+            event["event_id"], lease["lease_token"],
+            delivered=True, now=now + timedelta(seconds=6),
+        )
+    reclaimed = outbox.lease_due(now=now + timedelta(seconds=6), lease_seconds=5)
+    assert len(reclaimed) == 1
+    assert reclaimed[0]["event_id"] == event["event_id"]
+    assert outbox.complete(
+        event["event_id"], reclaimed[0]["lease_token"],
+        delivered=True, now=now + timedelta(seconds=7),
+    ) == "delivered"
