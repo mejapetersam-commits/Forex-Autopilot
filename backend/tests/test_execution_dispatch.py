@@ -4,12 +4,17 @@ from fastapi import HTTPException
 from app import main
 from app.execution.command_queue import ExecutionCommandQueue
 from app.execution.ledger import ExecutionLedger
+from app.broker.bridge import (
+    MT5AccountSnapshot, MT5ExecutionState, MT5Heartbeat, MT5Quote,
+    MT5SymbolSpecification,
+)
+from app.market_data.telemetry_store import TelemetryStore
 
 
 def make_intent(ledger, key="intent-demo"):
     payload = {
         "symbol": "EURUSDm", "side": "buy", "volume_lots": 0.01,
-        "stop_loss": 1.08, "take_profit": 1.10,
+        "stop_loss": 1.0991, "take_profit": 1.102,
         "requested_at": "2026-11-19T12:00:00+00:00",
     }
     ledger.create_intent(key, payload)
@@ -19,6 +24,28 @@ def make_intent(ledger, key="intent-demo"):
 def configure(monkeypatch, tmp_path, approved=True):
     ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
     queue = ExecutionCommandQueue(str(tmp_path / "execution.sqlite3"))
+    store = TelemetryStore(str(tmp_path / "execution.sqlite3"))
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    server = "Exness-MT5Trial"
+    store.save_heartbeat(MT5Heartbeat(server=server, terminal_connected=True, observed_at=now))
+    store.save_account(MT5AccountSnapshot(
+        server=server, account_currency="USD", balance=1000, equity=1000,
+        margin=0, free_margin=1000, leverage=100, observed_at=now,
+    ))
+    store.save_quote(MT5Quote(symbol="EURUSDm", bid=1.1000, ask=1.1001, timestamp=now))
+    store.save_symbol_specification(MT5SymbolSpecification(
+        symbol="EURUSDm", digits=5, point=0.00001, tick_size=0.00001,
+        tick_value_profit=1, tick_value_loss=1, contract_size=100000,
+        volume_min=0.01, volume_max=100, volume_step=0.01,
+        stops_level_points=10, freeze_level_points=0, trade_allowed=True,
+        base_currency="EUR", profit_currency="USD", margin_currency="EUR",
+        account_currency="USD", observed_at=now,
+    ))
+    store.save_execution_state(MT5ExecutionState(
+        terminal_id="demo-terminal", environment="demo", server=server,
+        observed_at=now, daily_loss_pct=0, positions=[],
+    ))
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
     key = make_intent(ledger)
     if approved:
         ledger.transition(key, "approved", event_type="preflight_approved")
@@ -29,6 +56,8 @@ def configure(monkeypatch, tmp_path, approved=True):
     monkeypatch.setenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo")
     monkeypatch.setenv("FOREX_AUTOPILOT_EXECUTION_SYMBOLS", "EURUSDm")
     monkeypatch.setenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT", "1.0")
+    monkeypatch.setenv("FOREX_AUTOPILOT_MAX_RISK_PER_TRADE_PCT", "0.25")
     return ledger, queue, key
 
 
