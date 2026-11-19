@@ -37,6 +37,7 @@ The API and gateway are bound to loopback addresses. Do not expose the API direc
 
 Use the `X-Bridge-Token` header for authenticated endpoints:
 
+- `/api/v1/mt5/specifications` (broker tick value, tick size, contract and volume constraints)
 - `/api/v1/mt5/history/candles/{symbol}/{timeframe}`
 - `/api/v1/market-analysis/{symbol}/{timeframe}`
 - `/api/v1/strategy/signal/{symbol}/{timeframe}`
