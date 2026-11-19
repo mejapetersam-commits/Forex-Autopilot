@@ -372,3 +372,76 @@ class MT5ExecutionHistory(BaseModel):
         if any(not self.history_from <= deal.occurred_at <= self.history_to for deal in self.deals):
             raise ValueError("Deal timestamp falls outside the declared history window.")
         return self
+
+
+class MT5ExecutionOrder(BaseModel):
+    """Broker order snapshot. State is broker-reported, not inferred from deals."""
+    model_config = ConfigDict(extra="forbid")
+    order_ticket: str = Field(min_length=1, max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    order_type: Literal["buy", "sell", "buy_limit", "sell_limit", "buy_stop", "sell_stop", "buy_stop_limit", "sell_stop_limit"]
+    state: Literal["started", "placed", "canceled", "partial", "filled", "rejected", "expired", "request_add", "request_modify", "request_cancel"]
+    initial_volume: float = Field(gt=0)
+    current_volume: float = Field(ge=0)
+    price: float = Field(ge=0)
+    stop_loss: float = Field(ge=0)
+    take_profit: float = Field(ge=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+    setup_at: datetime
+    done_at: datetime | None = None
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_order_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("initial_volume", "current_volume", "price", "stop_loss", "take_profit")
+    @classmethod
+    def require_finite_order_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Order values must be finite.")
+        return value
+
+    @field_validator("setup_at", "done_at")
+    @classmethod
+    def normalize_order_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None:
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("Order timestamps must include a timezone.")
+            return value.astimezone(timezone.utc)
+        return None
+
+    @model_validator(mode="after")
+    def validate_order_volume(self):
+        if self.current_volume > self.initial_volume:
+            raise ValueError("Remaining order volume cannot exceed initial volume.")
+        return self
+
+
+class MT5ExecutionOrderHistory(BaseModel):
+    """Bounded broker order-history snapshot from a demo terminal."""
+    model_config = ConfigDict(extra="forbid")
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo"]
+    server: str = Field(min_length=1, max_length=128)
+    history_from: datetime
+    history_to: datetime
+    observed_at: datetime
+    orders: list[MT5ExecutionOrder] = Field(max_length=1000)
+
+    @field_validator("history_from", "history_to", "observed_at")
+    @classmethod
+    def normalize_order_history_timestamps(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Order history timestamps must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_order_history_window(self):
+        if self.history_to <= self.history_from or self.history_to > self.observed_at:
+            raise ValueError("Invalid broker order-history window.")
+        tickets = [order.order_ticket for order in self.orders]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Order tickets must be unique in a history snapshot.")
+        return self
