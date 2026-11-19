@@ -103,7 +103,7 @@ class ExecutionCommandQueue:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute(
-                """UPDATE execution_commands SET status='queued', lease_until=NULL
+                """UPDATE execution_commands SET status='expired', lease_until=NULL
                    WHERE status='leased' AND lease_until < ?""", (now_text,)
             )
             row = db.execute(
@@ -143,6 +143,8 @@ class ExecutionCommandQueue:
                 return dict(row)
             if row["status"] != "leased" or row["terminal_id"] != terminal_id:
                 raise ValueError("Command is not leased to this terminal.")
+            if not row["lease_until"] or row["lease_until"] < self._now().isoformat():
+                raise ValueError("Command lease expired; broker reconciliation is required.")
             db.execute(
                 """UPDATE execution_commands SET status=?, result_json=?, lease_until=NULL
                    WHERE command_id=?""", (outcome, encoded, command_id)
