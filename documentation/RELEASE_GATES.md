@@ -14,17 +14,18 @@
 - Fail-closed execution preflight, persistent operator-control enforcement and idempotent order-intent ledger.
 - Separate MT5 demo execution EA source with hard demo-account check, explicit default-off switch, local symbol allowlist, 0.01-lot ceiling, one-position cap, stop/target-side and broker stop-distance checks, margin buffer and terminal-side duplicate-attempt marker.
 - Authenticated demo command polling/result endpoints, admin-gated dispatch of preflight-approved intents, persistent 60-second at-most-once leases and uncertain-result quarantine; execution remains disabled by default.
+- Authenticated demo broker-deal history ingestion, idempotent deal-ticket storage, partial-fill aggregation, full-fill confirmation, deterministic intent-tag recovery for uncertain/expired leases, and manual-review flags for broker identity, magic, symbol, side or volume discrepancies.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
 ## Still required before demo execution can be enabled
 
-- Compile the separate `ForexAutopilotDemoExecution.mq5` in MetaEditor and resolve any compiler warnings/errors; CI checks its source contract but does not compile MQL5.
+- Both MT5 Expert Advisors have been compiled locally in MetaEditor with 0 errors and 0 warnings. Recompile after the latest history/tagging changes; CI does not compile MQL5.
 - Validate EA account-mode detection, symbol specifications, lot step, filling policy, stop/target placement and margin checks on an Exness demo account.
-- Build broker-history reconciliation for orders, deals and positions, including restart recovery and partial fills. Expired or uncertain commands must be reconciled manually/automatically before any further action; never blindly retry them.
-- Complete position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
+- Validate the new broker-history reconciliation against actual Exness demo deal records, including multiple partial fills, no-fill/pending orders, order comments, ticket mapping, disconnects and terminal restarts. Expired or uncertain commands remain quarantined; never blindly retry them.
+- Complete broker-verified position/order state transitions, including pending/cancelled order history, close/reversal deals, and terminal position reconciliation.
 - Broker-side protective-stop monitoring now flags managed positions missing SL/TP; automated repair/flatten escalation remains required.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
-- Restart recovery, duplicate event handling and disconnect recovery.
+- Broker-verified restart/disconnect recovery and end-to-end duplicate-event testing; backend lease quarantine and intent-tag lookup are implemented but not yet proven against live broker demo history.
 - Authenticated local dashboard pause/resume and emergency-stop controls with a separate admin token and audit history are implemented; multi-user role separation remains required.
 - Operational alert delivery and an independently reachable kill switch.
 - Dedicated demo-account integration tests and a sustained forward-demo evaluation.
