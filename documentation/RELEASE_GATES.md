@@ -17,7 +17,7 @@
 ## Still required before any demo order execution
 
 - A broker-specific MT5 execution adapter; current EA is deliberately read-only.
-- A broker symbol-specification synchronisation service.
+- Live adapter verification against the now-ingested broker symbol specifications and account-currency tick values.
 - Durable idempotent order-intent ledger and append-only order/control audit trail are implemented; broker-side reconciliation loop remains required.
 - Position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
 - Broker-side protective stop verification and repair/flatten escalation.
