@@ -38,7 +38,7 @@ class ExecutionCommandQueue:
                     environment TEXT NOT NULL CHECK(environment = 'demo'),
                     payload_json TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status IN
-                        ('queued','leased','acknowledged','rejected','expired')),
+                        ('queued','leased','acknowledged','rejected','unknown','expired')),
                     created_at TEXT NOT NULL,
                     lease_until TEXT,
                     attempts INTEGER NOT NULL DEFAULT 0,
@@ -127,7 +127,7 @@ class ExecutionCommandQueue:
 
     def record_result(self, command_id: str, *, terminal_id: str,
                       outcome: str, result: dict[str, Any]) -> dict[str, Any]:
-        if outcome not in {"acknowledged", "rejected"}:
+        if outcome not in {"acknowledged", "rejected", "unknown"}:
             raise ValueError("Terminal outcome must be acknowledged or rejected.")
         encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
         with self._connect() as db:
@@ -137,7 +137,7 @@ class ExecutionCommandQueue:
             ).fetchone()
             if row is None:
                 raise KeyError("Execution command not found.")
-            if row["status"] in {"acknowledged", "rejected"}:
+            if row["status"] in {"acknowledged", "rejected", "unknown"}:
                 if row["result_json"] != encoded or row["status"] != outcome:
                     raise ValueError("Conflicting duplicate terminal result.")
                 return dict(row)
