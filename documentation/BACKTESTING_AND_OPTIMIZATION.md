@@ -25,7 +25,7 @@ The local dashboard research feed is `GET /api/v1/dashboard/research`.
 - Daily loss and maximum drawdown halts stop new entries.
 - No tick-level order-book or broker execution simulation is implied.
 
-The caller must provide pip value in account currency for one standard lot. Never assume that all symbols or account currencies have the same pip value.
+The MT5 bridge now publishes broker tick size and loss tick value in account currency. Backtest endpoints derive pip size/value from stored specifications where possible. If no specification is available, provide both `pip_size` and `pip_value_per_lot`; the API refuses to guess. Never assume that all symbols or account currencies have the same pip value.
 
 ## Walk-forward process
 
