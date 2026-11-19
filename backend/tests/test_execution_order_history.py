@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.broker.bridge import MT5ExecutionOrder, MT5ExecutionOrderHistory
+from app.broker.bridge import MT5ExecutionDeal, MT5ExecutionHistory, MT5ExecutionOrder, MT5ExecutionOrderHistory
 from app.execution.ledger import ExecutionLedger
 from app.execution.reconciliation import reconcile_broker_history
 from app.market_data.telemetry_store import TelemetryStore
@@ -98,3 +98,27 @@ def test_terminal_order_states_reconcile_without_deal_fills(tmp_path, state, exp
                                       expected_server="Exness-MT5Trial")
     assert result["results"][0]["result"] == expected
     assert ledger.get_intent(key)["status"] == "reconciled"
+
+
+def test_cancelled_order_with_partial_deal_fill_requires_manual_review(tmp_path):
+    path = str(tmp_path / "shared.sqlite3")
+    ledger, store = ExecutionLedger(path), TelemetryStore(path)
+    key = make_intent(ledger)
+    now = datetime.now(timezone.utc)
+    deal = MT5ExecutionDeal(
+        deal_ticket="987", order_ticket="12345", symbol="EURUSDm",
+        side="buy", entry="in", volume_lots=0.004, price=1.1,
+        magic=61119001, comment="", occurred_at=now - timedelta(minutes=1),
+    )
+    store.save_execution_history(MT5ExecutionHistory(
+        terminal_id="demo-terminal", environment="demo", server="Exness-MT5Trial",
+        history_from=now - timedelta(days=1), history_to=now,
+        observed_at=now, deals=[deal],
+    ))
+    store.save_execution_order_history(order_history("canceled", current=0.0))
+    result = reconcile_broker_history(ledger, store, expected_magic=61119001,
+                                      expected_terminal_id="demo-terminal",
+                                      expected_server="Exness-MT5Trial")
+    assert result["results"][0]["result"] == "manual_review_required"
+    assert "broker_order_terminal_with_unfilled_remainder" in result["results"][0]["reasons"]
+    assert ledger.get_intent(key)["status"] == "acknowledged"
