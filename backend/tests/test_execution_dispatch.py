@@ -215,3 +215,63 @@ def test_dispatch_rechecks_daily_loss_immediately_before_queueing(monkeypatch, t
     assert exc.value.status_code == 423
     assert ledger.get_intent(key)["status"] == "rejected"
     assert queue.lease_next(terminal_id="demo-terminal") is None
+
+
+def test_mismatched_terminal_intent_does_not_consume_command(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-bound")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-bound", intent_id=key,
+        payload=ledger.get_intent(key)["payload"],
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-bound")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+    payload = main.MT5ExecutionResult(
+        terminal_id="terminal-bound", outcome="acknowledged",
+        result={"intent_id": "some-other-intent", "broker_order_id": "999"},
+    )
+    with pytest.raises(HTTPException) as exc:
+        main.record_execution_command_result("cmd-bound", payload)
+    assert exc.value.status_code == 409
+    with queue._connect() as db:
+        row = db.execute(
+            "SELECT status, result_json FROM execution_commands WHERE command_id=?",
+            ("cmd-bound",),
+        ).fetchone()
+    assert row["status"] == "leased"
+    assert row["result_json"] is None
+    assert ledger.get_intent(key)["status"] == "approved"
+
+
+def test_terminal_result_requires_intent_id_before_queue_mutation(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-required")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-required", intent_id=key,
+        payload=ledger.get_intent(key)["payload"],
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-required")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+    payload = main.MT5ExecutionResult(
+        terminal_id="terminal-required", outcome="acknowledged",
+        result={"broker_order_id": "123"},
+    )
+    with pytest.raises(HTTPException) as exc:
+        main.record_execution_command_result("cmd-required", payload)
+    assert exc.value.status_code == 422
+    with queue._connect() as db:
+        row = db.execute(
+            "SELECT status, result_json FROM execution_commands WHERE command_id=?",
+            ("cmd-required",),
+        ).fetchone()
+    assert row["status"] == "leased"
+    assert row["result_json"] is None
+    assert ledger.get_intent(key)["status"] == "approved"
