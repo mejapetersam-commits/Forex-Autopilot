@@ -15,6 +15,8 @@ from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
 from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
+from app.backtesting.analytics import analyse_backtest
+from app.strategy.registry import list_strategies
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
 from app.execution.reconciliation import reconcile_broker_history
@@ -889,6 +891,54 @@ def walk_forward_backtest(
         "pip_value_per_lot_used": resolved_pip_value,
         "pip_value_source": pip_value_source,
         **result,
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+    }
+
+
+@app.get("/api/v1/strategies", dependencies=[Depends(require_bridge_token)])
+def registered_strategies():
+    """List available research strategies; registry entries cannot execute trades."""
+    return {
+        "strategies": list_strategies(),
+        "execution_enabled": False,
+        "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/backtests/analytics/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def backtest_analytics(
+    symbol: str,
+    timeframe: str,
+    pip_value_per_lot: float | None = Query(default=None, gt=0),
+    limit: int = Query(default=5000, ge=61, le=5000),
+    initial_equity: float = Query(default=10000, gt=0),
+    risk_per_trade_pct: float = Query(default=0.25, gt=0, le=1.0),
+    pip_size: float | None = Query(default=None, gt=0),
+    spread_pips: float = Query(default=1.0, ge=0, le=100),
+    slippage_pips_per_side: float = Query(default=0.2, ge=0, le=100),
+    commission_per_lot_per_side: float = Query(default=3.5, ge=0, le=1000),
+):
+    """Return supplemental distribution analytics for a fresh historical simulation."""
+    result = run_historical_backtest(
+        symbol=symbol,
+        timeframe=timeframe,
+        pip_value_per_lot=pip_value_per_lot,
+        limit=limit,
+        initial_equity=initial_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        pip_size=pip_size,
+        spread_pips=spread_pips,
+        slippage_pips_per_side=slippage_pips_per_side,
+        commission_per_lot_per_side=commission_per_lot_per_side,
+    )
+    return {
+        "symbol": result["symbol"],
+        "timeframe": result["timeframe"],
+        "analytics": analyse_backtest(result),
         "trading_enabled": False,
         "execution_mode": "disabled",
     }
