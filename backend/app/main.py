@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionHistory, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
@@ -17,6 +17,7 @@ from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
+from app.execution.reconciliation import reconcile_broker_history
 from app.execution.coordinator import ExecutionCoordinator
 from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_with_runtime_controls
 from app.execution.command_queue import ExecutionCommandQueue
@@ -836,6 +837,32 @@ def mt5_execution_state(payload: MT5ExecutionState):
         "positions_received": len(payload.positions),
         "trading_enabled": False,
     }
+
+
+@app.post(
+    "/api/v1/mt5/execution/history",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_execution_history(payload: MT5ExecutionHistory):
+    """Ingest broker deal history from the authenticated demo terminal."""
+    count = telemetry_store().save_execution_history(payload)
+    return {
+        "accepted": True, "stored": True, "deals_received": count,
+        "terminal_id": payload.terminal_id, "environment": payload.environment,
+        "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/monitoring/reconciliation",
+    dependencies=[Depends(require_admin_token)],
+)
+def execution_reconciliation():
+    """Compare known execution intents with persisted broker deal evidence."""
+    return reconcile_broker_history(
+        execution_ledger(), telemetry_store(),
+        expected_magic=int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001")),
+    )
 
 
 @app.get(
