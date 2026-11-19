@@ -59,11 +59,27 @@ def reconcile_broker_history(
             })
             continue
 
+        order_snapshot = (
+            store.execution_orders_for_ticket(order_id)
+            if order_id.isdigit() and int(order_id) > 0 else None
+        )
+        if order_deals and order_snapshot is not None:
+            recorded_entries = [deal for deal in order_deals if deal["entry"] == "in"]
+            recorded_volume = sum(float(deal["volume_lots"]) for deal in recorded_entries)
+            requested_volume = float(intent["payload"]["volume_lots"])
+            if order_snapshot["state"] in {"canceled", "expired", "rejected"} and recorded_volume < requested_volume - 1e-8:
+                reports.append({
+                    "intent_id": intent_id, "broker_order_id": order_id,
+                    "status": current, "result": "manual_review_required",
+                    "reasons": ["broker_order_terminal_with_unfilled_remainder"],
+                    "broker_order_state": order_snapshot["state"],
+                    "filled_volume_lots": round(recorded_volume, 8),
+                    "requested_volume_lots": requested_volume,
+                })
+                continue
+
         if not order_deals:
-            order_evidence = (
-                store.execution_orders_for_ticket(order_id)
-                if order_id.isdigit() and int(order_id) > 0 else None
-            )
+            order_evidence = order_snapshot
             if order_evidence is None and tagged_orders and len(tagged_orders) == 1:
                 order_evidence = tagged_orders[0]
                 order_id = str(order_evidence["order_ticket"])
