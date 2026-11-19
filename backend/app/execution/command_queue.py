@@ -92,7 +92,7 @@ class ExecutionCommandQueue:
             ).fetchone()
         return dict(row)
 
-    def lease_next(self, *, terminal_id: str, lease_seconds: int = 15) -> dict[str, Any] | None:
+    def lease_next(self, *, terminal_id: str, lease_seconds: int = 60) -> dict[str, Any] | None:
         if not terminal_id or len(terminal_id) > 128:
             raise ValueError("Terminal ID is required.")
         if not 5 <= lease_seconds <= 60:
