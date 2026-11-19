@@ -144,7 +144,7 @@ class TelemetryStore:
                     terminal_id, environment, server, observed_at, daily_loss_pct, payload_json
                 ) VALUES (?, ?, ?, ?, ?, ?)""",
                 (payload.terminal_id, payload.environment, payload.server,
-                 payload.observed_at.isoformat(), encoded),
+                 payload.observed_at.isoformat(), payload.daily_loss_pct, encoded),
             )
 
     def latest_execution_state(self) -> dict[str, Any] | None:
