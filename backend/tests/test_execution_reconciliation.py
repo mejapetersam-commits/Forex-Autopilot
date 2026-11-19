@@ -126,3 +126,19 @@ def test_reconciliation_preserves_deal_to_position_link(tmp_path):
     result=reconcile_broker_history(ledger,store,expected_magic=61119001)
     assert result["results"][0]["position_ids"] == ["998877"]
     assert store.execution_deals_for_position("998877")[0]["deal_ticket"] == "21"
+
+
+def test_legacy_deal_can_be_enriched_with_position_identifier(tmp_path):
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    legacy=deal(31,12345,0.01,position_id="")
+    store.save_execution_history(history(legacy))
+    enriched=deal(31,12345,0.01,position_id="887766")
+    store.save_execution_history(history(enriched))
+    assert store.execution_deals_for_position("887766")[0]["deal_ticket"] == "31"
+
+
+def test_conflicting_nonempty_position_identifier_is_rejected(tmp_path):
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    store.save_execution_history(history(deal(32,12345,0.01,position_id="887766")))
+    with pytest.raises(ValueError, match="position_id"):
+        store.save_execution_history(history(deal(32,12345,0.01,position_id="112233")))
