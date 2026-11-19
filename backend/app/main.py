@@ -5,7 +5,7 @@ from hmac import compare_digest
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pathlib import Path
 
 from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
@@ -29,7 +29,7 @@ class RuntimeControlUpdate(BaseModel):
 
 class MT5ExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    terminal_id: str
+    terminal_id: str = Field(min_length=3, max_length=128)
     outcome: str
     result: dict
 
