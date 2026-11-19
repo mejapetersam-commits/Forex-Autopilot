@@ -1,4 +1,4 @@
-from app.strategy.engine import StrategyConfig, evaluate_signal
+import pytest\n\nfrom app.strategy.engine import StrategyConfig, evaluate_signal
 
 
 def make_trend_candles(direction: int, count: int = 100):
@@ -47,3 +47,14 @@ def test_strategy_configuration_rejects_unsafe_parameters():
         assert "50" in str(exc)
     else:
         raise AssertionError("Expected minimum history validation")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("long_rsi_min", float("nan")),
+    ("short_rsi_max", float("inf")),
+    ("atr_stop_multiple", float("nan")),
+    ("reward_risk_ratio", float("inf")),
+])
+def test_strategy_configuration_rejects_non_finite_parameters(field, value):
+    with pytest.raises(ValueError, match="finite"):
+        StrategyConfig(**{field: value})
