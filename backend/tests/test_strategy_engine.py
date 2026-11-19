@@ -5,7 +5,7 @@ def make_trend_candles(direction: int, count: int = 100):
     rows = []
     price = 1.10
     for index in range(count):
-        next_price = price + direction * 0.0005
+        next_price = price + direction * (0.0002 + index * 0.00001)
         rows.append({
             "open": price,
             "high": max(price, next_price) + 0.0002,
