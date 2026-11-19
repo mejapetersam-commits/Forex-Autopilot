@@ -123,6 +123,8 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_deals_order
                     ON execution_deals(order_ticket, entry, occurred_at);
+                CREATE INDEX IF NOT EXISTS idx_execution_deals_position
+                    ON execution_deals(position_id, occurred_at);
 
                 CREATE TABLE IF NOT EXISTS execution_orders (
                     order_ticket TEXT PRIMARY KEY,
