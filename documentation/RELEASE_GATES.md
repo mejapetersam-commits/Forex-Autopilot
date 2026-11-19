@@ -18,12 +18,12 @@
 
 - A broker-specific MT5 execution adapter; current EA is deliberately read-only.
 - A broker symbol-specification synchronisation service.
-- Durable order-intent/idempotency ledger and broker reconciliation loop.
+- Durable idempotent order-intent ledger and append-only order/control audit trail are implemented; broker-side reconciliation loop remains required.
 - Position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
 - Broker-side protective stop verification and repair/flatten escalation.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
 - Restart recovery, duplicate event handling and disconnect recovery.
-- Authenticated dashboard control plane with role separation and audit history.
+- Authenticated local dashboard pause/resume and emergency-stop controls with a separate admin token and audit history are implemented; multi-user role separation remains required.
 - Operational alert delivery and an independently reachable kill switch.
 - Dedicated demo-account integration tests and a sustained forward-demo evaluation.
 
