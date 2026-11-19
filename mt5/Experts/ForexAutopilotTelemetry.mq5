@@ -44,8 +44,8 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\", "\\\");
-   StringReplace(value, "\"", "\\"");
+   StringReplace(value, "\\", "\\\\");
+   StringReplace(value, "\"", "\\\"");
    return value;
 }
 
@@ -163,14 +163,14 @@ void SendSymbolSpecifications()
       }
 
       string body = StringFormat(
-         "{\\"symbol\\":\\"%s\\",\\"digits\\":%I64d,\\"point\\":%.10f,"
-         "\\"tick_size\\":%.10f,\\"tick_value_profit\\":%.10f,"
-         "\\"tick_value_loss\\":%.10f,\\"contract_size\\":%.4f,"
-         "\\"volume_min\\":%.4f,\\"volume_max\\":%.4f,\\"volume_step\\":%.4f,"
-         "\\"stops_level_points\\":%I64d,\\"freeze_level_points\\":%I64d,"
-         "\\"trade_allowed\\":%s,\\"base_currency\\":\\"%s\\","
-         "\\"profit_currency\\":\\"%s\\",\\"margin_currency\\":\\"%s\\","
-         "\\"account_currency\\":\\"%s\\",\\"observed_at\\":\\"%s\\"}",
+         "{\"symbol\":\"%s\",\"digits\":%I64d,\"point\":%.10f,"
+         "\"tick_size\":%.10f,\"tick_value_profit\":%.10f,"
+         "\"tick_value_loss\":%.10f,\"contract_size\":%.4f,"
+         "\"volume_min\":%.4f,\"volume_max\":%.4f,\"volume_step\":%.4f,"
+         "\"stops_level_points\":%I64d,\"freeze_level_points\":%I64d,"
+         "\"trade_allowed\":%s,\"base_currency\":\"%s\","
+         "\"profit_currency\":\"%s\",\"margin_currency\":\"%s\","
+         "\"account_currency\":\"%s\",\"observed_at\":\"%s\"}",
          JsonEscape(symbol), digits,
          point, tick_size, tick_value_profit, tick_value_loss,
          contract_size, volume_min, volume_max, volume_step,
