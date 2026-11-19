@@ -461,7 +461,7 @@ class TelemetryStore:
             for deal in payload.deals
         ]
         immutable_columns = (
-            "order_ticket", "position_id", "terminal_id", "environment", "server", "symbol",
+            "order_ticket", "terminal_id", "environment", "server", "symbol",
             "side", "entry", "volume_lots", "price", "magic", "comment",
             "occurred_at",
         )
@@ -473,16 +473,24 @@ class TelemetryStore:
                 ).fetchone()
                 if existing is not None:
                     for index, column in enumerate(immutable_columns, start=1):
-                        if existing[column] != row[index]:
+                        row_index = index + 1
+                        if existing[column] != row[row_index]:
                             raise ValueError(
                                 f"Conflicting broker evidence for existing deal ticket {row[0]} ({column})."
                             )
+                    if existing["position_id"] and row[2] and existing["position_id"] != row[2]:
+                        raise ValueError(
+                            f"Conflicting broker evidence for existing deal ticket {row[0]} (position_id)."
+                        )
             connection.executemany(
                 """INSERT OR IGNORE INTO execution_deals(
                     deal_ticket, order_ticket, position_id, terminal_id, environment, server,
                     symbol, side, entry, volume_lots, price, magic, comment,
                     occurred_at, observed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(deal_ticket) DO UPDATE SET
+                    position_id=excluded.position_id
+                WHERE execution_deals.position_id='' AND excluded.position_id<>''""",
                 rows,
             )
         return len(rows)
