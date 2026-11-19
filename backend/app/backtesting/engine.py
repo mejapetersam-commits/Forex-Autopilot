@@ -119,7 +119,7 @@ def run_backtest(
             entry = entry_mid + (spread / 2 + slippage) if side == "buy" else entry_mid - (spread / 2 + slippage)
             stop = float(levels["stop_loss"])
             target = float(levels["take_profit"])
-            stop_pips = abs(float(levels["reference_close"]) - stop) / settings.pip_size
+            stop_pips = abs(entry - stop) / settings.pip_size
             risk_budget = equity * settings.risk_per_trade_pct / 100
             risk_per_lot = (
                 (stop_pips + costs_pips) * settings.pip_value_per_lot
