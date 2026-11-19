@@ -7,6 +7,7 @@ out-of-sample backtesting and forward-demo validation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any, Iterable
 
 from app.market_data.indicators import calculate_indicators
@@ -21,6 +22,14 @@ class StrategyConfig:
     reward_risk_ratio: float = 2.0
 
     def __post_init__(self) -> None:
+        numeric_parameters = (
+            self.long_rsi_min,
+            self.short_rsi_max,
+            self.atr_stop_multiple,
+            self.reward_risk_ratio,
+        )
+        if not all(isfinite(float(value)) for value in numeric_parameters):
+            raise ValueError("Strategy parameters must be finite numbers.")
         if self.minimum_candles < 50:
             raise ValueError("minimum_candles cannot be below 50.")
         if not 50 < self.long_rsi_min <= 100:
