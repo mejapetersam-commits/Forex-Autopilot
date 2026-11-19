@@ -39,6 +39,8 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 
 - `/api/v1/mt5/specifications` (broker tick value, tick size, contract and volume constraints)
 - `/api/v1/mt5/execution/state` (read-only open-position and protective-level snapshot)
+- `POST /api/v1/mt5/execution/history` (authenticated demo broker-deal history ingestion)
+- Admin-only `GET /api/v1/monitoring/reconciliation` (compare unresolved intents with fresh matching terminal history)
 - `/api/v1/monitoring/execution-state` (snapshot freshness, daily-loss status and managed-position stop/target alerts)
 - Admin-only `POST /api/v1/admin/execution/intents/preflight` (server-derived preflight; does not submit an order)
 - Admin-only `POST /api/v1/admin/execution/intents/{intent_id}/queue` (revalidates current telemetry before queuing)
@@ -54,12 +56,12 @@ The local dashboard displays connection state, account telemetry, quotes, resear
 
 ## Current safety posture
 
-- `ForexAutopilotTelemetry.mq5` remains read-only and now reports open positions, ticket, side, volume, entry, SL/TP and magic number every five seconds.
-- `ForexAutopilotDemoExecution.mq5` is a separate demo-only adapter source; it has not yet been compiled in MetaEditor or validated against a broker.
+- `ForexAutopilotTelemetry.mq5` remains read-only and reports open positions every five seconds plus bounded demo deal-history snapshots every 60 seconds. It does not submit, modify or close orders.
+- `ForexAutopilotDemoExecution.mq5` is a separate demo-only adapter. The previous version compiled locally with 0 errors and 0 warnings; recompile the latest broker-tag changes before any demo pilot.
 - The demo adapter's `InpEnableDemoExecution` defaults to `false` and refuses non-demo accounts.
 - Backend `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED` defaults to `false`; the execution symbol allowlist defaults to empty.
 - Dispatch requires an admin-authenticated request for an existing preflight-approved ledger intent, explicit demo configuration, an allowlisted symbol, and cleared pause/kill-switch controls.
-- Command delivery uses 60-second at-most-once leases. Expired or uncertain commands are quarantined and must be reconciled; never blindly retry an order.
+- Command delivery uses 60-second at-most-once leases. Expired leases move approved intents to `unknown`; broker-history reconciliation searches by broker order ticket or deterministic `FA:` intent tag. Missing history never becomes an inferred rejection or fill. Never blindly retry an order.
 - Never enable live execution based on a successful build or a profitable-looking in-sample backtest.
 
 
