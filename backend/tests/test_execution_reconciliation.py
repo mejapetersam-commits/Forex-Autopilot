@@ -52,7 +52,7 @@ def test_mismatched_evidence_requires_manual_review(tmp_path,kwargs,reason):
 def test_missing_history_does_not_infer_rejection(tmp_path):
     ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3")); store=TelemetryStore(str(tmp_path/"shared.sqlite3")); key=approved_intent(ledger)
     result=reconcile_broker_history(ledger,store,expected_magic=61119001)
-    assert result["results"][0]["result"]=="awaiting_entry_deal_history" and ledger.get_intent(key)["status"]=="acknowledged"
+    assert result["results"][0]["result"]=="awaiting_broker_history" and ledger.get_intent(key)["status"]=="acknowledged"
 
 
 def test_overfill_requires_manual_review(tmp_path):
