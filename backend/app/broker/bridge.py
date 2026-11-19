@@ -248,6 +248,7 @@ class MT5OpenPosition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ticket: str = Field(min_length=1, max_length=32)
+    position_id: str = Field(min_length=1, max_length=32)
     symbol: str = Field(min_length=1, max_length=32)
     side: Literal["buy", "sell"]
     volume_lots: float = Field(gt=0)
@@ -311,6 +312,7 @@ class MT5ExecutionDeal(BaseModel):
 
     deal_ticket: str = Field(min_length=1, max_length=32)
     order_ticket: str = Field(min_length=1, max_length=32)
+    position_id: str = Field(min_length=1, max_length=32)
     symbol: str = Field(min_length=1, max_length=32)
     side: Literal["buy", "sell"]
     entry: Literal["in", "out", "inout", "out_by"]
