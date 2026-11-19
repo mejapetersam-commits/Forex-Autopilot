@@ -56,7 +56,13 @@ def test_order_history_persists_and_updates_state_idempotently(tmp_path):
     placed = order_history("placed")
     assert store.save_execution_order_history(placed) == 1
     assert store.save_execution_order_history(placed) == 1
-    canceled = order_history("canceled", current=0.0)
+    canceled = placed.model_copy(update={
+        "orders": [placed.orders[0].model_copy(update={
+            "state": "canceled", "current_volume": 0.0,
+            "done_at": datetime.now(timezone.utc),
+        })],
+        "observed_at": datetime.now(timezone.utc),
+    })
     store.save_execution_order_history(canceled)
     result = store.execution_orders_for_ticket("12345")
     assert result["state"] == "canceled"
