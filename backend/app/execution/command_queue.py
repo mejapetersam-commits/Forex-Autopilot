@@ -159,3 +159,16 @@ class ExecutionCommandQueue:
                 "SELECT * FROM execution_commands WHERE command_id=?", (command_id,)
             ).fetchone()
         return dict(updated)
+
+
+    def expired_commands(self, limit: int = 500) -> list[dict[str, Any]]:
+        """Return expired leases for conservative restart/disconnect recovery."""
+        safe_limit = min(max(int(limit), 1), 1000)
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT command_id, intent_id, terminal_id, attempts, created_at
+                   FROM execution_commands WHERE status='expired'
+                   ORDER BY created_at LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
