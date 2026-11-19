@@ -9,6 +9,7 @@ from pathlib import Path
 from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
+from app.strategy.engine import StrategyConfig, evaluate_signal
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
 
@@ -248,6 +249,31 @@ def market_analysis(
         "timeframe": normalized_timeframe,
         "analysis": calculate_indicators(candles),
         "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/strategy/signal/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def strategy_signal(
+    symbol: str,
+    timeframe: str,
+    limit: int = Query(default=500, ge=60, le=5000),
+):
+    """Return a research-only signal candidate; this endpoint cannot execute trades."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().upper()
+    candles = telemetry_store().candle_history(
+        normalized_symbol, normalized_timeframe, limit
+    )
+    result = evaluate_signal(candles, StrategyConfig())
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        **result,
+        "trading_enabled": False,
+        "execution_mode": "disabled",
     }
 
 
