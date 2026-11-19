@@ -14,7 +14,11 @@
 - Fail-closed execution preflight, persistent operator-control enforcement and idempotent order-intent ledger.
 - Separate MT5 demo execution EA source with hard demo-account check, explicit default-off switch, local symbol allowlist, 0.01-lot ceiling, one-position cap, stop/target-side and broker stop-distance checks, margin buffer and terminal-side duplicate-attempt marker.
 - Authenticated demo command polling/result endpoints, admin-gated dispatch of preflight-approved intents, persistent 60-second at-most-once leases and uncertain-result quarantine; execution remains disabled by default.
-- Authenticated demo broker-deal history ingestion, idempotent deal-ticket storage, partial-fill aggregation, full-fill confirmation, deterministic intent-tag recovery for uncertain/expired leases, and manual-review flags for broker identity, magic, symbol, side or volume discrepancies.
+- Authenticated demo broker deal and order-history ingestion, idempotent deal/order ticket storage, partial-fill aggregation, full-fill confirmation, pending/cancelled/rejected/expired order-state reconciliation, deterministic intent-tag recovery for uncertain/expired leases, and manual-review flags for conflicting or incomplete broker evidence.
+- Stable MT5 POSITION_IDENTIFIER and DEAL_POSITION_ID linkage, so open positions can be joined to their entry/exit deals after partial fills and terminal restarts.
+- Strategy-candidate-to-execution-intent integration: closed-candle research signals become deterministic, idempotent intents and pass the same live broker/risk preflight before they can be queued. Queueing remains separately gated and opt-in.
+- Protective-stop guard: missing or wrong-side stops on managed demo positions automatically activate pause + emergency kill switch; it never silently modifies or closes broker positions.
+- Terminal restart protection uses the complete persistent command ID as an MT5 Global Variable marker; expired leases are quarantined to unknown and can only be recovered from authenticated broker order/deal history.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
 ## Still required before demo execution can be enabled
@@ -22,10 +26,10 @@
 - Both MT5 Expert Advisors have been compiled locally in MetaEditor with 0 errors and 0 warnings. Recompile after the latest history/tagging changes; CI does not compile MQL5.
 - Validate EA account-mode detection, symbol specifications, lot step, filling policy, stop/target placement and margin checks on an Exness demo account.
 - Validate the new broker-history reconciliation against actual Exness demo deal records, including multiple partial fills, no-fill/pending orders, order comments, ticket mapping, disconnects and terminal restarts. Expired or uncertain commands remain quarantined; never blindly retry them.
-- Complete broker-verified position/order state transitions, including pending/cancelled order history, close/reversal deals, and terminal position reconciliation.
-- Broker-side protective-stop monitoring now flags managed positions missing SL/TP; automated repair/flatten escalation remains required.
+- Validate broker-verified position/order state transitions, close/reversal deals and position-to-deal links against actual Exness demo history.
+- Protective-stop monitoring and fail-safe pause/kill-switch recovery are implemented; automated broker-side SL modification/flattening is intentionally not automatic and requires an independently reviewed recovery policy.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
-- Broker-verified restart/disconnect recovery and end-to-end duplicate-event testing; backend lease quarantine and intent-tag lookup are implemented but not yet proven against live broker demo history.
+- Broker-verified restart/disconnect recovery and end-to-end duplicate-event testing; backend lease quarantine, terminal identity checks, persistent terminal attempt markers and intent-tag lookup are implemented but not yet proven against live broker demo history.
 - Authenticated local dashboard pause/resume and emergency-stop controls with a separate admin token and audit history are implemented; multi-user role separation remains required.
 - Operational alert delivery and an independently reachable kill switch.
 - Dedicated demo-account integration tests and a sustained forward-demo evaluation.
