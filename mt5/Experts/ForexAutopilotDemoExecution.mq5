@@ -161,14 +161,18 @@ uint CommandHash(string value)
 
 bool WasAttempted(string command_id)
 {
-   string key = "FA.Attempt." + IntegerToString((int)CommandHash(command_id));
-   return GlobalVariableCheck(key);
+   // The complete deterministic command ID fits MT5's 63-character global
+   // variable limit; do not rely on a collision-prone 32-bit hash.
+   if(command_id == "" || StringLen(command_id) > 48)
+      return true;
+   return GlobalVariableCheck("FA.Attempt." + command_id);
 }
 
 void MarkAttempted(string command_id)
 {
-   string key = "FA.Attempt." + IntegerToString((int)CommandHash(command_id));
-   GlobalVariableSet(key, (double)TimeLocal());
+   if(command_id == "" || StringLen(command_id) > 48)
+      return;
+   GlobalVariableSet("FA.Attempt." + command_id, (double)TimeLocal());
 }
 
 int CountOpenPositions()
