@@ -243,7 +243,7 @@ void SendExecutionState()
    string server = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    string body = StringFormat(
       "{\"terminal_id\":\"%s\",\"environment\":\"%s\","
-      "\"server\":\"%s\",\"observed_at\":\"%s\",\"positions\":[",
+      "\"server\":\"%s\",\"observed_at\":\"%s\",\"daily_loss_pct\":%.6f,\"positions\":[",
       JsonEscape(InpTerminalId), AccountEnvironment(), server, IsoUtcNow(), CalculateDailyLossPct()
    );
    int count = 0;
