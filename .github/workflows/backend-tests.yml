@@ -5,6 +5,7 @@ on:
     branches: [main, feature/bulk-candle-ingestion]
     paths:
       - "backend/**"
+      - "dashboard/**"
       - "mt5/**"
       - ".github/workflows/backend-tests.yml"
       - "docker-compose.yml"
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "dashboard/**"
       - ".github/workflows/backend-tests.yml"
   workflow_dispatch:
 
@@ -50,3 +52,27 @@ jobs:
       - name: Build API container
         working-directory: .
         run: docker build -f backend/Dockerfile -t forex-autopilot-api:test backend
+
+  dashboard:
+    name: Dashboard production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        run: npm install
+
+      - name: Build dashboard
+        run: npm run build
