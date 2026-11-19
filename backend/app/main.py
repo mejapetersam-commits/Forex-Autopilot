@@ -10,6 +10,7 @@ from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk,
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
+from app.backtesting.engine import BacktestConfig, run_backtest
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
 
@@ -271,6 +272,46 @@ def strategy_signal(
     return {
         "symbol": normalized_symbol,
         "timeframe": normalized_timeframe,
+        **result,
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+    }
+
+
+@app.get(
+    "/api/v1/backtests/run/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def run_historical_backtest(
+    symbol: str,
+    timeframe: str,
+    pip_value_per_lot: float = Query(..., gt=0),
+    limit: int = Query(default=5000, ge=61, le=5000),
+    initial_equity: float = Query(default=10000, gt=0),
+    risk_per_trade_pct: float = Query(default=0.25, gt=0, le=1.0),
+    pip_size: float = Query(default=0.0001, gt=0),
+    spread_pips: float = Query(default=1.0, ge=0, le=100),
+    slippage_pips_per_side: float = Query(default=0.2, ge=0, le=100),
+    commission_per_lot_per_side: float = Query(default=3.5, ge=0, le=1000),
+):
+    """Run an authenticated historical simulation on stored MT5 OHLC candles."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().upper()
+    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    config = BacktestConfig(
+        initial_equity=initial_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        pip_size=pip_size,
+        pip_value_per_lot=pip_value_per_lot,
+        spread_pips=spread_pips,
+        slippage_pips_per_side=slippage_pips_per_side,
+        commission_per_lot_per_side=commission_per_lot_per_side,
+    )
+    result = run_backtest(candles, config)
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "account_currency_note": "pip_value_per_lot must be supplied in the account currency for one standard lot.",
         **result,
         "trading_enabled": False,
         "execution_mode": "disabled",
