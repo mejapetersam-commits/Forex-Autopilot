@@ -294,7 +294,10 @@ def execution_snapshot_for_symbol(symbol: str) -> ExecutionSnapshot:
     heartbeat_ok = bool(heartbeat and heartbeat["terminal_connected"] and 0 <= heartbeat_age <= 60)
     account_ok = bool(account and 0 <= account_age <= 30)
     state_ok = bool(state and state["environment"] == "demo" and 0 <= state_age <= 20)
-    spec_ok = bool(specification and specification["trade_allowed"] and 0 <= spec_age <= 300)
+    spec_ok = bool(
+        specification and specification["trade_allowed"] and 0 <= spec_age <= 300
+        and account and specification["account_currency"] == account["account_currency"]
+    )
     same_server = bool(
         heartbeat and account and state
         and heartbeat["server"] == account["server"] == state["server"]
