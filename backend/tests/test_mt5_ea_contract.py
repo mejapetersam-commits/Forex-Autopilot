@@ -73,3 +73,21 @@ def test_mt5_ea_publishes_broker_symbol_specifications_read_only():
     assert "SYMBOL_TRADE_MODE_FULL" in source
     assert "OrderSend(" not in source
     assert "CTrade" not in source
+
+
+
+def test_read_only_telemetry_ea_sends_open_position_state():
+    source = EA_SOURCE.read_text(encoding="utf-8")
+    assert "void SendExecutionState()" in source
+    assert 'PostJson("/api/v1/mt5/execution/state", body)' in source
+    for field in (
+        "\\\"ticket\\\"",
+        "\\\"symbol\\\"",
+        "\\\"volume_lots\\\"",
+        "\\\"stop_loss\\\"",
+        "\\\"take_profit\\\"",
+        "\\\"magic\\\"",
+    ):
+        assert field in source
+    assert "OrderSend(" not in source
+    assert "CTrade" not in source
