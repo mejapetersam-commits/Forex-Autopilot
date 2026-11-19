@@ -77,7 +77,7 @@ def test_unknown_intent_can_recover_by_broker_comment_tag(tmp_path):
     store.save_execution_history(tagged)
     result=reconcile_broker_history(ledger,store,expected_magic=61119001,expected_terminal_id="demo-terminal",expected_server="Exness-MT5Trial")
     assert result["results"][0]["status"]=="reconciled"
-    assert ledger.get_intent(key)["status"]=="filled"
+    assert ledger.get_intent(key)["status"]=="reconciled"
 
 
 
