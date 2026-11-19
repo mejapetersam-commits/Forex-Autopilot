@@ -31,7 +31,7 @@ def test_walk_forward_requires_minimum_history():
 def test_walk_forward_returns_two_chronological_validation_folds():
     result = optimize_walk_forward(make_candles(), BacktestConfig(), minimum_trades=1)
     assert result["status"] == "completed"
-    assert result["candidate_count_per_fold"] == 8
+    assert result["candidate_count_per_fold"] == 16
     assert result["fold_count"] == 2
     assert result["folds"][0]["training_candles"] < result["folds"][1]["training_candles"]
     assert result["execution_enabled"] is False
