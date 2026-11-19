@@ -27,7 +27,7 @@ def test_partial_fills_accumulate_idempotently(tmp_path):
     ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3")); store=TelemetryStore(str(tmp_path/"shared.sqlite3")); key=approved_intent(ledger)
     snap=history(deal(1,12345,0.004),deal(2,12345,0.003))
     store.save_execution_history(snap); store.save_execution_history(snap)
-    result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001,expected_terminal_id='demo-terminal',expected_server='Exness-MT5Trial')
     assert result["status"]=="complete" and ledger.get_intent(key)["status"]=="partially_filled"
     assert result["results"][0]["filled_volume_lots"]==pytest.approx(0.007)
 
