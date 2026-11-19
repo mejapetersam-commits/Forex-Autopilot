@@ -64,9 +64,9 @@ export default function App() {
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard data unavailable: {error}. Check that the local API is running.</span></div>}
 
     <section className="metrics">
-      <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
-      <Metric label="EQUITY" value={money(account?.equity, account?.currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
-      <Metric label="FREE MARGIN" value={money(account?.margin_free, account?.currency)} detail="Broker-reported available margin"/>
+      <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
+      <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
+      <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail="Broker-reported available margin"/>
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : "No reported alerts"}/>
     </section>
 
