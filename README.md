@@ -16,10 +16,10 @@ A demo-first MT5 market-data, research, risk-management and execution platform.
 - `backend/app/strategy/`: closed-candle EMA, RSI and MACD candidate signal generation.
 - `backend/app/backtesting/`: next-candle-open OHLC simulation, transaction costs and walk-forward optimisation.
 - `backend/app/risk/` and `backend/app/portfolio/`: position sizing, currency exposure, correlation and portfolio risk controls.
-- `backend/app/execution/`: fail-closed preflight, intent ledger, audit trail and at-most-once command queue.
+- `backend/app/execution/`: fail-closed preflight, intent ledger, audit trail, at-most-once command queue, partial-fill reconciliation and expired-lease recovery.
 - `backend/app/monitoring/`: telemetry freshness, connectivity and operational health checks.
 - `backend/app/dashboard.html`: local read-only dashboard.
-- `mt5/Experts/ForexAutopilotTelemetry.mq5`: read-only MT5 telemetry bridge.
+- `mt5/Experts/ForexAutopilotTelemetry.mq5`: read-only MT5 telemetry bridge, including demo broker deal-history upload.
 - `mt5/Experts/ForexAutopilotDemoExecution.mq5`: separate demo-only execution adapter; disabled by default.
 - `deploy/telemetry-gateway/` and `docker-compose.yml`: loopback-bound API and restricted telemetry gateway.
 - `documentation/`: operations, backtesting, architecture and release gates.
