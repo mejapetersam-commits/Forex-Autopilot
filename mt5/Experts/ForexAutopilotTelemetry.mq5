@@ -295,6 +295,8 @@ void SendExecutionState()
    PostJson("/api/v1/mt5/execution/state", body);
 }
 
+string BrokerTimeIso(datetime broker_time, int utc_offset_seconds); // forward declaration
+
 // Read-only demo deal-history upload. This reports broker records only;
 // it never submits, changes, or closes an order.
 void SendExecutionHistory()
