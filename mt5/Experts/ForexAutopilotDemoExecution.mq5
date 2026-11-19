@@ -394,9 +394,18 @@ int OnInit()
       Print("FOREX AUTOPILOT EXECUTION: disabled. Set InpEnableDemoExecution=true only on a DEMO terminal after backend configuration.");
       return INIT_PARAMETERS_INCORRECT;
    }
+   string terminal_id_check = TrimValue(InpTerminalId);
+   bool terminal_id_safe = (StringLen(terminal_id_check) >= 3);
+   for(int id_char = 0; id_char < StringLen(terminal_id_check); id_char++)
+   {
+      ushort ch = StringGetCharacter(terminal_id_check, id_char);
+      if(!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+         || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_'))
+         terminal_id_safe = false;
+   }
    if(StringFind(InpApiBaseUrl, "https://") != 0
       || StringLen(TrimValue(InpBridgeToken)) < 32
-      || StringLen(TrimValue(InpTerminalId)) < 3
+      || !terminal_id_safe
       || InpMaxLotsPerTrade <= 0 || InpMaxLotsPerTrade > 0.01
       || InpMaxOpenPositions < 1 || InpMaxOpenPositions > 1
       || InpPollSeconds < 1 || InpPollSeconds > 10
