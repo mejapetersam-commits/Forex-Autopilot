@@ -3,7 +3,7 @@
 // This EA refuses to run unless explicitly enabled AND the logged-in account is DEMO.
 
 #property strict
-#property version   "0.10"
+#property version   "1.100"
 #property description "FOREX AUTOPILOT demo-only execution adapter"
 
 #include <Trade/Trade.mqh>
