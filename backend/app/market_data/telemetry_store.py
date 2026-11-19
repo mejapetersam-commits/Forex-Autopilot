@@ -480,9 +480,12 @@ class TelemetryStore:
              payload.observed_at.isoformat())
             for order in payload.orders
         ]
-        immutable = ("terminal_id", "environment", "server", "symbol", "order_type",
-                     "initial_volume", "price", "stop_loss", "take_profit", "magic",
-                     "comment", "setup_at")
+        immutable = {
+            "terminal_id": 1, "environment": 2, "server": 3, "symbol": 4,
+            "order_type": 5, "initial_volume": 7, "price": 9,
+            "stop_loss": 10, "take_profit": 11, "magic": 12,
+            "comment": 13, "setup_at": 14,
+        }
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             for row in rows:
@@ -490,7 +493,7 @@ class TelemetryStore:
                     "SELECT * FROM execution_orders WHERE order_ticket=?", (row[0],)
                 ).fetchone()
                 if existing is not None:
-                    for index, column in enumerate(immutable, start=1):
+                    for column, index in immutable.items():
                         if existing[column] != row[index]:
                             raise ValueError(
                                 f"Conflicting broker evidence for existing order ticket {row[0]} ({column})."
