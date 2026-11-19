@@ -71,3 +71,9 @@ def test_get_intent_returns_decoded_payload_and_status(tmp_path):
     assert result["status"] == "created"
     assert result["payload"] == payload
     assert ledger.get_intent("missing") is None
+
+
+def test_intent_id_rejects_unsafe_transport_characters(tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    with pytest.raises(ValueError, match="letters, digits"):
+        ledger.create_intent("intent/with/slash", {"symbol": "EURUSDm"})
