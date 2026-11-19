@@ -75,3 +75,47 @@ def test_dispatch_refuses_when_kill_switch_active(monkeypatch, tmp_path):
     with pytest.raises(HTTPException) as exc:
         main.queue_approved_demo_intent(key)
     assert exc.value.status_code == 423
+
+
+
+def test_terminal_acknowledgement_updates_order_ledger(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-ack")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-ack", intent_id=key,
+        payload=ledger.get_intent(key)["payload"],
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-ack")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+    payload = main.MT5ExecutionResult(
+        terminal_id="terminal-ack", outcome="acknowledged",
+        result={"intent_id": key, "broker_order_id": "123456", "filled_volume": 0.01},
+    )
+    response = main.record_execution_command_result("cmd-ack", payload)
+    assert response["intent_status"] == "acknowledged"
+    assert ledger.get_intent(key)["broker_order_id"] == "123456"
+
+
+def test_uncertain_terminal_result_is_recorded_as_unknown(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-unknown")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-unknown", intent_id=key,
+        payload=ledger.get_intent(key)["payload"],
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-unknown")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+    payload = main.MT5ExecutionResult(
+        terminal_id="terminal-unknown", outcome="unknown",
+        result={"intent_id": key, "reason": "terminal_result_uncertain"},
+    )
+    response = main.record_execution_command_result("cmd-unknown", payload)
+    assert response["intent_status"] == "unknown"
