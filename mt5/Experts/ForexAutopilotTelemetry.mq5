@@ -1,5 +1,5 @@
 // FOREX AUTOPILOT - read-only MT5 telemetry bridge
-// This Expert Advisor sends connection, account, quote and OHLC candle telemetry only.
+// This Expert Advisor sends read-only connection, market, position and demo deal-history telemetry.
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
@@ -15,12 +15,16 @@ input int    InpHeartbeatSeconds = 15;
 input int    InpHttpTimeoutMs = 15000;
 input int    InpCandleBootstrapBars = 500;
 input int    InpCandleRefreshSeconds = 60;
+input int    InpHistoryRefreshSeconds = 60;
+input int    InpHistoryLookbackDays = 2;
+input ulong  InpExecutionMagicNumber = 61119001;
 
 string g_symbols[];
 ulong  g_last_quote_time_msc[];
 ulong  g_last_snapshot_ms = 0;
 ulong  g_last_specification_ms = 0;
 ulong  g_last_execution_state_ms = 0;
+ulong  g_last_history_ms = 0;
 
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
@@ -291,6 +295,85 @@ void SendExecutionState()
    PostJson("/api/v1/mt5/execution/state", body);
 }
 
+// Read-only demo deal-history upload. This reports broker records only;
+// it never submits, changes, or closes an order.
+void SendExecutionHistory()
+{
+   if(AccountEnvironment() != "demo")
+      return;
+
+   datetime server_now = TimeTradeServer();
+   datetime history_start = server_now - (datetime)(InpHistoryLookbackDays * 86400);
+   if(!HistorySelect(history_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: broker execution history unavailable; reconciliation remains pending.");
+      return;
+   }
+
+   int total = HistoryDealsTotal();
+   if(total > 1000)
+   {
+      Print("FOREX AUTOPILOT: execution history exceeds 1000-deal safety batch; not uploading an incomplete snapshot.");
+      return;
+   }
+
+   int server_offset = (int)(TimeTradeServer() - TimeGMT());
+   string body = StringFormat(
+      "{\\"terminal_id\\":\\"%s\\",\\"environment\\":\\"demo\\","
+      "\\"server\\":\\"%s\\",\\"history_from\\":\\"%s\\","
+      "\\"history_to\\":\\"%s\\",\\"observed_at\\":\\"%s\\",\\"deals\\":[",
+      JsonEscape(InpTerminalId), JsonEscape(AccountInfoString(ACCOUNT_SERVER)),
+      BrokerTimeIso(history_start, server_offset),
+      BrokerTimeIso(server_now, server_offset), IsoUtcNow()
+   );
+
+   int included = 0;
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0 || (ulong)HistoryDealGetInteger(ticket, DEAL_MAGIC) != InpExecutionMagicNumber)
+         continue;
+
+      long deal_type = HistoryDealGetInteger(ticket, DEAL_TYPE);
+      if(deal_type != DEAL_TYPE_BUY && deal_type != DEAL_TYPE_SELL)
+         continue;
+
+      long entry_type = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      string entry = "";
+      if(entry_type == DEAL_ENTRY_IN) entry = "in";
+      else if(entry_type == DEAL_ENTRY_OUT) entry = "out";
+      else if(entry_type == DEAL_ENTRY_INOUT) entry = "inout";
+      else if(entry_type == DEAL_ENTRY_OUT_BY) entry = "out_by";
+      else continue;
+
+      ulong order_ticket = (ulong)HistoryDealGetInteger(ticket, DEAL_ORDER);
+      double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+      double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+      datetime deal_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+      string symbol = JsonEscape(HistoryDealGetString(ticket, DEAL_SYMBOL));
+      string comment = JsonEscape(HistoryDealGetString(ticket, DEAL_COMMENT));
+      string side = (deal_type == DEAL_TYPE_BUY) ? "buy" : "sell";
+      if(order_ticket == 0 || volume <= 0 || price <= 0 || deal_time <= 0 || symbol == "")
+         continue;
+
+      if(included > 0)
+         body += ",";
+      body += StringFormat(
+         "{\\"deal_ticket\\":\\"%I64u\\",\\"order_ticket\\":\\"%I64u\\","
+         "\\"symbol\\":\\"%s\\",\\"side\\":\\"%s\\",\\"entry\\":\\"%s\\","
+         "\\"volume_lots\\":%.4f,\\"price\\":%.10f,\\"magic\\":%I64u,"
+         "\\"comment\\":\\"%s\\",\\"occurred_at\\":\\"%s\\"}",
+         ticket, order_ticket, symbol, side, entry, volume, price,
+         InpExecutionMagicNumber, comment, BrokerTimeIso(deal_time, server_offset)
+      );
+      included++;
+   }
+
+   body += "]}";
+   if(PostJson("/api/v1/mt5/execution/history", body))
+      Print("FOREX AUTOPILOT: demo broker history accepted; matching deals=", included);
+}
+
 // Sample each configured symbol independently on the one-second timer.
 // A quote is posted only when MT5 reports a genuinely newer market tick.
 void SendQuotes()
@@ -475,7 +558,7 @@ int OnInit()
    }
    if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000 ||
       InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 500 ||
-      InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || StringLen(Trimmed(InpTerminalId)) < 3)
+      InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || InpHistoryRefreshSeconds < 30 || InpHistoryRefreshSeconds > 3600 || InpHistoryLookbackDays < 1 || InpHistoryLookbackDays > 7 || StringLen(Trimmed(InpTerminalId)) < 3)
    {
       Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
       return INIT_PARAMETERS_INCORRECT;
@@ -515,7 +598,9 @@ int OnInit()
    SendAccountSnapshot();
    SendSymbolSpecifications();
    SendExecutionState();
+   SendExecutionHistory();
    SendQuotes();
+   g_last_history_ms = GetTickCount64();
    g_last_snapshot_ms = GetTickCount64();
    g_last_execution_state_ms = GetTickCount64();
    g_candle_next_upload_ms = GetTickCount64();
@@ -546,6 +631,12 @@ void OnTimer()
 
    SendQuotes();
    SendBulkCandleBatches(now_ms);
+
+   if(now_ms - g_last_history_ms >= (ulong)InpHistoryRefreshSeconds * 1000)
+   {
+      SendExecutionHistory();
+      g_last_history_ms = now_ms;
+   }
 
    if(now_ms - g_last_execution_state_ms >= (ulong)InpExecutionStateSeconds * 1000)
    {
