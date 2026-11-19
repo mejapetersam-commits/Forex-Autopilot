@@ -87,3 +87,22 @@ def test_execution_state_monitor_ignores_unmanaged_positions(monkeypatch, tmp_pa
     result = main.latest_execution_state()
     assert result["status"] == "healthy"
     assert result["managed_positions_count"] == 0
+
+
+def test_execution_state_monitor_flags_non_demo_terminal(monkeypatch, tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    store.save_execution_state(sample_state(environment="real"))
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    result = main.latest_execution_state()
+    assert result["status"] == "critical"
+    assert "terminal_not_on_demo_account" in result["issues"]
+
+
+def test_execution_state_monitor_flags_stale_snapshot(monkeypatch, tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    stale = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    store.save_execution_state(sample_state(observed_at=stale))
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    result = main.latest_execution_state()
+    assert result["status"] == "critical"
+    assert "execution_state_stale" in result["issues"]
