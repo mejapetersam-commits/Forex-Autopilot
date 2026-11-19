@@ -7,8 +7,8 @@ export interface DashboardOverview {
   account: {
     balance?: number;
     equity?: number;
-    margin_free?: number;
-    currency?: string;
+    free_margin?: number;
+    account_currency?: string;
     observed_at?: string;
     fresh: boolean;
   } | null;
