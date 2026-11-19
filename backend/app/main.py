@@ -11,6 +11,8 @@ from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
 from app.backtesting.engine import BacktestConfig, run_backtest
+from app.backtesting.optimization import optimize_walk_forward
+from app.market_data.quality import assess_candle_quality
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
 
@@ -315,6 +317,67 @@ def run_historical_backtest(
         **result,
         "trading_enabled": False,
         "execution_mode": "disabled",
+    }
+
+
+@app.get(
+    "/api/v1/backtests/walk-forward/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def walk_forward_backtest(
+    symbol: str,
+    timeframe: str,
+    pip_value_per_lot: float = Query(..., gt=0),
+    limit: int = Query(default=1500, ge=400, le=5000),
+    initial_equity: float = Query(default=10000, gt=0),
+    risk_per_trade_pct: float = Query(default=0.25, gt=0, le=1.0),
+    pip_size: float = Query(default=0.0001, gt=0),
+    spread_pips: float = Query(default=1.0, ge=0, le=100),
+    slippage_pips_per_side: float = Query(default=0.2, ge=0, le=100),
+    commission_per_lot_per_side: float = Query(default=3.5, ge=0, le=1000),
+    minimum_trades: int = Query(default=5, ge=1, le=100),
+):
+    """Tune on earlier candles and evaluate on later, untouched windows."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().upper()
+    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    config = BacktestConfig(
+        initial_equity=initial_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        pip_size=pip_size,
+        pip_value_per_lot=pip_value_per_lot,
+        spread_pips=spread_pips,
+        slippage_pips_per_side=slippage_pips_per_side,
+        commission_per_lot_per_side=commission_per_lot_per_side,
+    )
+    result = optimize_walk_forward(candles, config, minimum_trades=minimum_trades)
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        **result,
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+    }
+
+
+@app.get(
+    "/api/v1/market-data/quality/{symbol}/{timeframe}",
+    dependencies=[Depends(require_bridge_token)],
+)
+def market_data_quality(
+    symbol: str,
+    timeframe: str,
+    limit: int = Query(default=5000, ge=1, le=5000),
+):
+    """Inspect candle OHLC integrity, timestamp ordering and interval gaps."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().upper()
+    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        **assess_candle_quality(candles, normalized_timeframe),
+        "trading_enabled": False,
     }
 
 
