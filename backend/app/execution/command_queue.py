@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -61,8 +62,8 @@ class ExecutionCommandQueue:
             raise ValueError("Execution command transport is restricted to demo.")
         if not trading_enabled:
             raise ValueError("Trading is disabled; command was not queued.")
-        if not command_id or len(command_id) > 128 or not intent_id or len(intent_id) > 128:
-            raise ValueError("Command and intent IDs must contain 1 to 128 characters.")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", command_id or "") or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", intent_id or ""):
+            raise ValueError("Command and intent IDs must use 1 to 128 letters, digits, hyphens or underscores.")
         required = {"symbol", "side", "volume_lots", "stop_loss", "take_profit"}
         if not required.issubset(payload):
             raise ValueError("Protected order payload is incomplete.")
