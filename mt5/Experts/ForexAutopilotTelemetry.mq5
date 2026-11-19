@@ -48,8 +48,11 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\\", "\\\\");
-   StringReplace(value, "\"", "\\\"");
+   // Build escape characters numerically to avoid source-editor backslash parsing issues.
+   string slash = ShortToString(92);
+   string quote = ShortToString(34);
+   StringReplace(value, slash, slash + slash);
+   StringReplace(value, quote, slash + quote);
    return value;
 }
 
@@ -384,29 +387,31 @@ void SendExecutionHistory()
 // Read-only broker order-history snapshot; this function never sends or edits orders.
 string BrokerOrderType(long value)
 {
-   if(value == ORDER_TYPE_BUY) return "buy";
-   if(value == ORDER_TYPE_SELL) return "sell";
-   if(value == ORDER_TYPE_BUY_LIMIT) return "buy_limit";
-   if(value == ORDER_TYPE_SELL_LIMIT) return "sell_limit";
-   if(value == ORDER_TYPE_BUY_STOP) return "buy_stop";
-   if(value == ORDER_TYPE_SELL_STOP) return "sell_stop";
-   if(value == ORDER_TYPE_BUY_STOP_LIMIT) return "buy_stop_limit";
-   if(value == ORDER_TYPE_SELL_STOP_LIMIT) return "sell_stop_limit";
+   int order_type = (int)value;
+   if(order_type == (int)ORDER_TYPE_BUY) return "buy";
+   if(order_type == (int)ORDER_TYPE_SELL) return "sell";
+   if(order_type == (int)ORDER_TYPE_BUY_LIMIT) return "buy_limit";
+   if(order_type == (int)ORDER_TYPE_SELL_LIMIT) return "sell_limit";
+   if(order_type == (int)ORDER_TYPE_BUY_STOP) return "buy_stop";
+   if(order_type == (int)ORDER_TYPE_SELL_STOP) return "sell_stop";
+   if(order_type == (int)ORDER_TYPE_BUY_STOP_LIMIT) return "buy_stop_limit";
+   if(order_type == (int)ORDER_TYPE_SELL_STOP_LIMIT) return "sell_stop_limit";
    return "";
 }
 
 string BrokerOrderState(long value)
 {
-   if(value == ORDER_STATE_STARTED) return "started";
-   if(value == ORDER_STATE_PLACED) return "placed";
-   if(value == ORDER_STATE_CANCELED) return "canceled";
-   if(value == ORDER_STATE_PARTIAL) return "partial";
-   if(value == ORDER_STATE_FILLED) return "filled";
-   if(value == ORDER_STATE_REJECTED) return "rejected";
-   if(value == ORDER_STATE_EXPIRED) return "expired";
-   if(value == ORDER_STATE_REQUEST_ADD) return "request_add";
-   if(value == ORDER_STATE_REQUEST_MODIFY) return "request_modify";
-   if(value == ORDER_STATE_REQUEST_CANCEL) return "request_cancel";
+   int order_state = (int)value;
+   if(order_state == (int)ORDER_STATE_STARTED) return "started";
+   if(order_state == (int)ORDER_STATE_PLACED) return "placed";
+   if(order_state == (int)ORDER_STATE_CANCELED) return "canceled";
+   if(order_state == (int)ORDER_STATE_PARTIAL) return "partial";
+   if(order_state == (int)ORDER_STATE_FILLED) return "filled";
+   if(order_state == (int)ORDER_STATE_REJECTED) return "rejected";
+   if(order_state == (int)ORDER_STATE_EXPIRED) return "expired";
+   if(order_state == (int)ORDER_STATE_REQUEST_ADD) return "request_add";
+   if(order_state == (int)ORDER_STATE_REQUEST_MODIFY) return "request_modify";
+   if(order_state == (int)ORDER_STATE_REQUEST_CANCEL) return "request_cancel";
    return "";
 }
 
