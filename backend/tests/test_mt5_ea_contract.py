@@ -80,6 +80,8 @@ def test_read_only_telemetry_ea_sends_open_position_state():
     source = EA_SOURCE.read_text(encoding="utf-8")
     assert "void SendExecutionState()" in source
     assert 'PostJson("/api/v1/mt5/execution/state", body)' in source
+    assert "CalculateDailyLossPct()" in source
+    assert "daily_loss_pct" in source
     for field in (
         "\\\"ticket\\\"",
         "\\\"symbol\\\"",
