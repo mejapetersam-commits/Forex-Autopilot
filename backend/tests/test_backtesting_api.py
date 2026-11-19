@@ -38,7 +38,7 @@ def test_backtest_api_uses_stored_candles_and_is_research_only(monkeypatch, tmp_
     assert stored.status_code == 200
 
     response = client.get(
-        "/api/v1/backtests/run/EURUSDm/H1?pip_value_per_lot=10&spread_pips=1.2",
+        "/api/v1/backtests/run/EURUSDm/H1?pip_value_per_lot=10&pip_size=0.0001&spread_pips=1.2",
         headers=headers,
     )
     assert response.status_code == 200
