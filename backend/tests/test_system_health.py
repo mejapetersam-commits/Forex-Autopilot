@@ -35,3 +35,22 @@ def test_health_warns_on_low_margin_and_stale_quote():
     assert "MARGIN_LEVEL_WARNING" in codes
     assert "QUOTE_STALE" in codes
     assert result["status"] == "degraded"
+
+
+
+def test_monitoring_health_api_is_authenticated(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", "test-health-monitoring-token-32-chars")
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "health-api.sqlite3"))
+    client = TestClient(app)
+    denied = client.get("/api/v1/monitoring/health")
+    assert denied.status_code == 401
+    accepted = client.get(
+        "/api/v1/monitoring/health",
+        headers={"X-Bridge-Token": "test-health-monitoring-token-32-chars"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "critical"
+    assert accepted.json()["trading_enabled"] is False
