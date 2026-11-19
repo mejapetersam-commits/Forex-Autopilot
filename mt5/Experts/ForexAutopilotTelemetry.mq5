@@ -57,8 +57,8 @@ bool PostJson(string route, string body)
 {
    string url = InpApiBaseUrl + route;
    string headers = "Content-Type: application/json\r\nX-Bridge-Token: " + InpBridgeToken + "\r\n";
-   char data[];
-   char result[];
+   uchar data[];
+   uchar result[];
    string response_headers;
 
    int copied = StringToCharArray(body, data, 0, WHOLE_ARRAY, CP_UTF8);
