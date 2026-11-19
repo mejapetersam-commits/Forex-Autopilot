@@ -1,38 +1,59 @@
 # FOREX AUTOPILOT
 
-A demo-first, configurable MT5 trading research and execution platform.
+A demo-first MT5 market-data, research, risk-management and execution platform.
 
-## Safety status
-- Initial mode: research/demo only.
-- No broker credentials or live-trading capability are included.
-- Strategy parameters are hypotheses, not validated profitable settings.
-- Live execution must remain disabled until backtesting, forward-demo testing, risk controls, and operational checks pass.
+## Current safety posture
+
+- The telemetry Expert Advisor is read-only.
+- The separate demo execution Expert Advisor is default-off and refuses non-demo accounts.
+- Backend demo dispatch is disabled by default and requires an explicit symbol allowlist, fresh broker telemetry, preflight approval, and inactive pause/kill-switch controls.
+- Live trading is not enabled. Strategy rules remain research hypotheses until validated through out-of-sample and sustained forward-demo testing.
+- Never enable execution merely because the software compiles or a backtest looks profitable.
 
 ## Architecture
-- `trading-engine/`: MQL5 Expert Advisor and modular strategy/risk components.
-- `research/`: historical data, backtesting and strategy evaluation.
-- `backend/`: FastAPI service for configuration, monitoring and records.
-- `dashboard/`: React/TypeScript web dashboard (scaffold stage).
-- `config/`: versioned, non-secret application defaults.
-- `documentation/`: architecture, trading rules and risk policy.
 
-## Local setup (macOS Apple Silicon)
-1. Install Xcode Command Line Tools: `xcode-select --install`
-2. Install Homebrew using https://brew.sh
-3. Install tools: `brew install python node git`
-4. Create a Python environment: `cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
-5. Run API: `uvicorn app.main:app --reload`
+- `backend/app/market_data/`: MT5 telemetry validation, candle quality and persistent SQLite storage.
+- `backend/app/strategy/`: closed-candle EMA, RSI and MACD candidate signal generation.
+- `backend/app/backtesting/`: next-candle-open OHLC simulation, transaction costs and walk-forward optimisation.
+- `backend/app/risk/` and `backend/app/portfolio/`: position sizing, currency exposure, correlation and portfolio risk controls.
+- `backend/app/execution/`: fail-closed preflight, intent ledger, audit trail and at-most-once command queue.
+- `backend/app/monitoring/`: telemetry freshness, connectivity and operational health checks.
+- `backend/app/dashboard.html`: local read-only dashboard.
+- `mt5/Experts/ForexAutopilotTelemetry.mq5`: read-only MT5 telemetry bridge.
+- `mt5/Experts/ForexAutopilotDemoExecution.mq5`: separate demo-only execution adapter; disabled by default.
+- `deploy/telemetry-gateway/` and `docker-compose.yml`: loopback-bound API and restricted telemetry gateway.
+- `documentation/`: operations, backtesting, architecture and release gates.
 
-The MT5 terminal and MQL5 compilation/testing are performed in MetaTrader 5. For repeatable automated testing and eventual 24/5 operation, use a Windows environment/VPS after the demo prototype is validated.
+## Local setup (macOS)
 
-## Development order
-1. Verify local toolchain and create a private GitHub repository.
-2. Implement and test deterministic risk calculations.
-3. Implement strategy signals using closed candles only.
-4. Implement the MT5 EA in demo-only mode.
-5. Backtest with realistic spread, commission and slippage assumptions.
-6. Add database/API and dashboard.
-7. Run forward demo tests and operational failure tests.
+1. Install Xcode Command Line Tools: `xcode-select --install`.
+2. Install Homebrew, then run `brew install python git`.
+3. Create the backend environment:
+   ```bash
+   cd backend
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+4. Configure local secrets from `backend/.env.example`. Never commit the resulting `.env` file.
+5. Start the API locally with `uvicorn app.main:app --reload`, or use the repository's Docker Compose deployment from the project root.
+
+## Verification
+
+Run the backend suite from `backend/`:
+
+```bash
+pytest -q
+```
+
+Compile both MQL5 Expert Advisors in MetaEditor. CI can test source contracts and backend behavior, but does not replace MetaEditor compilation or broker-demo integration tests.
+
+## Release discipline
+
+Before any demo execution is enabled, complete broker-history reconciliation, partial-fill and restart recovery, protective-stop verification, terminal disconnect tests, and sustained Exness demo validation. Keep the public telemetry gateway restricted to its explicitly allowed telemetry routes; do not expose admin or execution command routes through the public tunnel.
+
+For repeatable 24/5 operation, evaluate a dedicated Windows VPS only after the demo prototype and recovery controls have passed validation.
 
 ## Never commit
-Broker passwords, investor passwords, API keys, `.env` files, account numbers, or private keys.
+
+Broker passwords, investor passwords, API keys, bridge/admin tokens, `.env` files, account numbers, private keys, or personal account identifiers.
