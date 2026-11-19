@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,8 +90,8 @@ class ExecutionLedger:
         return datetime.now(timezone.utc).isoformat()
 
     def create_intent(self, idempotency_key: str, payload: dict[str, Any]) -> dict[str, Any]:
-        if not idempotency_key or len(idempotency_key) > 128:
-            raise ValueError("Idempotency key must contain 1 to 128 characters.")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", idempotency_key or ""):
+            raise ValueError("Idempotency key must use 1 to 128 letters, digits, hyphens or underscores.")
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
         now = self._now()
         with self._connect() as connection:
