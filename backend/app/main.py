@@ -113,6 +113,35 @@ def dashboard_overview():
     }
 
 
+@app.get("/api/v1/dashboard/research", include_in_schema=False)
+def dashboard_research():
+    """Local dashboard research summary; exposes no credentials or execution controls."""
+    store = telemetry_store()
+    rows = []
+    for symbol in sorted(dashboard_symbols()):
+        for timeframe in ("M15", "H1", "H4"):
+            candles = store.candle_history(symbol, timeframe, 500)
+            signal = evaluate_signal(candles, StrategyConfig())
+            quality = assess_candle_quality(candles, timeframe)
+            rows.append({
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "candles": len(candles),
+                "signal": signal["signal"],
+                "reason": signal.get("reason", "Insufficient historical candles."),
+                "latest_close": signal.get("indicators", {}).get("latest_close"),
+                "research_status": signal.get("research_status", "insufficient_data"),
+                "data_quality": quality["status"],
+                "gap_count": quality["gap_count"],
+            })
+    return {
+        "items": rows,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "environment": "demo", "trading_enabled": False}
