@@ -60,3 +60,21 @@ def test_preflight_denies_live_environment_and_unapproved_symbol():
     assert result["approved"] is False
     assert any("demo" in reason for reason in result["reasons"])
     assert any("allowlisted" in reason for reason in result["reasons"])
+
+
+
+def test_persisted_pause_and_kill_switch_override_preflight(tmp_path):
+    from app.execution.ledger import ExecutionLedger
+    from app.execution.preflight import evaluate_with_runtime_controls
+
+    intent, snapshot = valid_inputs()
+    ledger = ExecutionLedger(str(tmp_path / "runtime-controls.sqlite3"))
+    paused = evaluate_with_runtime_controls(intent, snapshot, ledger)
+    assert paused["approved"] is False
+    assert any("paused" in reason for reason in paused["reasons"])
+
+    ledger.set_control("trading_paused", False)
+    ledger.set_control("kill_switch_active", False)
+    allowed = evaluate_with_runtime_controls(intent, snapshot, ledger)
+    assert allowed["approved"] is True
+    assert allowed["execution_submitted"] is False
