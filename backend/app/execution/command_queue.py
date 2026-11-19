@@ -172,3 +172,23 @@ class ExecutionCommandQueue:
                 (safe_limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def expire_leases(self) -> list[dict[str, Any]]:
+        """Atomically quarantine timed-out leases and return only newly expired rows."""
+        now_text = self._now().isoformat()
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                """SELECT command_id, intent_id, terminal_id, attempts, created_at
+                   FROM execution_commands
+                   WHERE status='leased' AND lease_until < ?
+                   ORDER BY created_at""",
+                (now_text,),
+            ).fetchall()
+            db.execute(
+                """UPDATE execution_commands SET status='expired', lease_until=NULL
+                   WHERE status='leased' AND lease_until < ?""",
+                (now_text,),
+            )
+        return [dict(row) for row in rows]
