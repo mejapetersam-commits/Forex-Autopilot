@@ -6,7 +6,7 @@ from app.execution.ledger import ExecutionLedger
 from app.market_data.telemetry_store import TelemetryStore
 
 
-def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, expected_magic: int, limit: int = 500) -> dict[str, Any]:
+def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, expected_magic: int, expected_terminal_id: str | None = None, expected_server: str | None = None, limit: int = 500) -> dict[str, Any]:
     reports: list[dict[str, Any]] = []
     for intent in ledger.intents_requiring_reconciliation(limit):
         order_id = str(intent.get("broker_order_id") or "")
@@ -22,6 +22,8 @@ def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, 
         reasons = []
         for deal in entries:
             if deal["environment"] != "demo": reasons.append("broker_deal_not_demo")
+            if expected_terminal_id and deal["terminal_id"] != expected_terminal_id: reasons.append("broker_terminal_mismatch")
+            if expected_server and deal["server"] != expected_server: reasons.append("broker_server_mismatch")
             if deal["magic"] != expected_magic: reasons.append("broker_magic_mismatch")
             if deal["symbol"] != payload["symbol"].upper(): reasons.append("broker_symbol_mismatch")
             if deal["side"] != payload["side"]: reasons.append("broker_side_mismatch")
