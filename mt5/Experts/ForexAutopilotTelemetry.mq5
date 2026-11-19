@@ -137,6 +137,27 @@ void SendSymbolSpecifications()
       string base_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE));
       string profit_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT));
       string margin_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_MARGIN));
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tick_value_profit = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_PROFIT);
+      double tick_value_loss = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
+      double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+      double volume_min = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+      double volume_max = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+      double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+      bool trade_allowed = (
+         trade_mode == SYMBOL_TRADE_MODE_FULL ||
+         trade_mode == SYMBOL_TRADE_MODE_LONGONLY ||
+         trade_mode == SYMBOL_TRADE_MODE_SHORTONLY
+      );
+      if(point <= 0 || tick_size <= 0 || tick_value_loss <= 0 ||
+         contract_size <= 0 || volume_min <= 0 || volume_max < volume_min ||
+         volume_step <= 0)
+      {
+         Print("FOREX AUTOPILOT: broker specifications not ready for ", symbol,
+               "; will retry on the next refresh.");
+         continue;
+      }
 
       string body = StringFormat(
          "{\\"symbol\\":\\"%s\\",\\"digits\\":%I64d,\\"point\\":%.10f,"
@@ -148,16 +169,10 @@ void SendSymbolSpecifications()
          "\\"profit_currency\\":\\"%s\\",\\"margin_currency\\":\\"%s\\","
          "\\"account_currency\\":\\"%s\\",\\"observed_at\\":\\"%s\\"}",
          JsonEscape(symbol), digits,
-         SymbolInfoDouble(symbol, SYMBOL_POINT),
-         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE),
-         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_PROFIT),
-         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_LOSS),
-         SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE),
-         SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN),
-         SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX),
-         SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP),
+         point, tick_size, tick_value_profit, tick_value_loss,
+         contract_size, volume_min, volume_max, volume_step,
          stops_level, freeze_level,
-         trade_mode == SYMBOL_TRADE_MODE_DISABLED ? "false" : "true",
+         trade_allowed ? "true" : "false",
          base_currency, profit_currency, margin_currency,
          account_currency, IsoUtcNow()
       );
