@@ -388,6 +388,30 @@ def queue_approved_demo_intent(intent_id: str):
     if not allowed or intent["payload"].get("symbol", "").upper() not in allowed:
         raise HTTPException(status_code=403, detail="Symbol is not in the explicit execution allowlist.")
     try:
+        saved_payload = intent["payload"]
+        current_intent = TradeIntent(
+            symbol=saved_payload["symbol"], side=saved_payload["side"],
+            volume_lots=float(saved_payload["volume_lots"]),
+            stop_loss=float(saved_payload["stop_loss"]),
+            take_profit=float(saved_payload["take_profit"]),
+            requested_at=datetime.fromisoformat(saved_payload["requested_at"]),
+        )
+        current_snapshot = execution_snapshot_for_symbol(current_intent.symbol)
+        current_decision = evaluate_with_runtime_controls(
+            current_intent, current_snapshot, execution_ledger()
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="Stored intent cannot be safely revalidated.") from exc
+    if not current_decision["approved"]:
+        execution_ledger().transition(
+            intent_id, "rejected", event_type="dispatch_recheck_failed",
+            details={"reasons": current_decision["reasons"]},
+        )
+        raise HTTPException(status_code=423, detail={
+            "message": "Current broker/risk conditions no longer pass preflight.",
+            "reasons": current_decision["reasons"],
+        })
+    try:
         queued = execution_command_queue().enqueue_approved_intent(
             command_id="cmd-" + hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32], intent_id=intent_id,
             payload=intent["payload"], environment="demo", trading_enabled=True,
