@@ -10,7 +10,7 @@
 
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
 input string InpBridgeToken = "";          // Set locally; never commit credentials.
-input string InpTerminalId = "";            // Unique label for this MT5 terminal.
+input string InpTerminalId = "mt5-terminal-1"; // Match the telemetry EA terminal ID.
 input string InpAllowedSymbols = "EURUSDm,GBPUSDm";
 input bool   InpEnableDemoExecution = false; // Explicit opt-in; default OFF.
 input double InpMaxLotsPerTrade = 0.01;     // Hard local ceiling for initial demo tests.
