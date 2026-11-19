@@ -1,4 +1,5 @@
 import os
+import hashlib
 from datetime import datetime, timezone
 from hmac import compare_digest
 
@@ -264,7 +265,7 @@ def queue_approved_demo_intent(intent_id: str):
         raise HTTPException(status_code=403, detail="Symbol is not in the explicit execution allowlist.")
     try:
         queued = execution_command_queue().enqueue_approved_intent(
-            command_id="cmd-" + intent_id, intent_id=intent_id,
+            command_id="cmd-" + hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32], intent_id=intent_id,
             payload=intent["payload"], environment="demo", trading_enabled=True,
         )
     except ValueError as exc:
@@ -299,9 +300,30 @@ def record_execution_command_result(command_id: str, payload: MT5ExecutionResult
         raise HTTPException(status_code=404, detail="Execution command not found.")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return {"command_id": result["command_id"], "status": result["status"],
-            "execution_mode": "demo_transport", "trading_enabled": False}
 
+    ledger = execution_ledger()
+    intent = ledger.get_intent(result["intent_id"])
+    if intent is None:
+        raise HTTPException(status_code=409, detail="Command has no matching order intent.")
+    reported_intent = payload.result.get("intent_id")
+    if reported_intent is not None and reported_intent != result["intent_id"]:
+        raise HTTPException(status_code=409, detail="Terminal result intent does not match command.")
+    if intent["status"] == "approved":
+        if result["status"] == "rejected":
+            ledger.transition(result["intent_id"], "rejected",
+                              event_type="mt5_demo_rejected", details=payload.result)
+        else:
+            order_id = payload.result.get("broker_order_id")
+            ledger.transition(result["intent_id"], "submitted",
+                              event_type="mt5_demo_submission_result",
+                              broker_order_id=str(order_id) if order_id else None,
+                              details={"command_id": command_id})
+            next_status = "acknowledged" if result["status"] == "acknowledged" else "unknown"
+            ledger.transition(result["intent_id"], next_status,
+                              event_type="mt5_demo_" + next_status, details=payload.result)
+    return {"command_id": result["command_id"], "status": result["status"],
+            "intent_status": ledger.get_intent(result["intent_id"])["status"],
+            "execution_mode": "demo_transport", "trading_enabled": False}
 
 
 @app.get("/health")
