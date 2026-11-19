@@ -48,8 +48,8 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\\", "\\\\");
-   StringReplace(value, "\"", "\\\"");
+   StringReplace(value, "\", "\\\");
+   StringReplace(value, "\"", "\\"");
    return value;
 }
 
@@ -319,9 +319,9 @@ void SendExecutionHistory()
 
    int server_offset = (int)(TimeTradeServer() - TimeGMT());
    string body = StringFormat(
-      "{\\"terminal_id\\":\\"%s\\",\\"environment\\":\\"demo\\","
-      "\\"server\\":\\"%s\\",\\"history_from\\":\\"%s\\","
-      "\\"history_to\\":\\"%s\\",\\"observed_at\\":\\"%s\\",\\"deals\\":[",
+      "{\"terminal_id\":\"%s\",\"environment\":\"demo\","
+      "\"server\":\"%s\",\"history_from\":\"%s\","
+      "\"history_to\":\"%s\",\"observed_at\":\"%s\",\"deals\":[",
       JsonEscape(InpTerminalId), JsonEscape(AccountInfoString(ACCOUNT_SERVER)),
       BrokerTimeIso(history_start, server_offset),
       BrokerTimeIso(server_now, server_offset), IsoUtcNow()
@@ -359,10 +359,10 @@ void SendExecutionHistory()
       if(included > 0)
          body += ",";
       body += StringFormat(
-         "{\\"deal_ticket\\":\\"%I64u\\",\\"order_ticket\\":\\"%I64u\\","
-         "\\"symbol\\":\\"%s\\",\\"side\\":\\"%s\\",\\"entry\\":\\"%s\\","
-         "\\"volume_lots\\":%.4f,\\"price\\":%.10f,\\"magic\\":%I64u,"
-         "\\"comment\\":\\"%s\\",\\"occurred_at\\":\\"%s\\"}",
+         "{\"deal_ticket\":\"%I64u\",\"order_ticket\":\"%I64u\","
+         "\"symbol\":\"%s\",\"side\":\"%s\",\"entry\":\"%s\","
+         "\"volume_lots\":%.4f,\"price\":%.10f,\"magic\":%I64u,"
+         "\"comment\":\"%s\",\"occurred_at\":\"%s\"}",
          ticket, order_ticket, symbol, side, entry, volume, price,
          InpExecutionMagicNumber, comment, BrokerTimeIso(deal_time, server_offset)
       );
