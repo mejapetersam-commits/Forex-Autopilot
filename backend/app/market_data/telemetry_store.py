@@ -123,8 +123,6 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_deals_order
                     ON execution_deals(order_ticket, entry, occurred_at);
-                CREATE INDEX IF NOT EXISTS idx_execution_deals_position
-                    ON execution_deals(position_id, occurred_at);
 
                 CREATE TABLE IF NOT EXISTS execution_orders (
                     order_ticket TEXT PRIMARY KEY,
@@ -178,6 +176,10 @@ class TelemetryStore:
                 connection.execute(
                     "ALTER TABLE execution_deals ADD COLUMN position_id TEXT NOT NULL DEFAULT ''"
                 )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_execution_deals_position "
+                "ON execution_deals(position_id, occurred_at)"
+            )
             position_columns = {
                 row["name"] for row in connection.execute(
                     "PRAGMA table_info(execution_state_snapshots)"
