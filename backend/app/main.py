@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 
@@ -191,6 +191,28 @@ def mt5_candles(payload: MT5CandleBatch):
         "timeframe": payload.timeframe,
         "candles_received": stored,
         "trading_enabled": False,
+    }
+
+
+@app.post(
+    "/api/v1/mt5/candles/bulk",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_candles_bulk(payload: MT5CandleBulk):
+    """Validate and atomically store a multi-symbol/timeframe candle upload."""
+    counts = telemetry_store().save_candle_batches(payload.batches)
+    return {
+        "accepted": True,
+        "stored": True,
+        "batches_received": len(payload.batches),
+        "candles_received": sum(counts.values()),
+        "groups": [
+            {"symbol": batch.symbol, "timeframe": batch.timeframe,
+             "candles_received": len(batch.candles)}
+            for batch in payload.batches
+        ],
+        "trading_enabled": False,
+        "execution_mode": "disabled",
     }
 
 
