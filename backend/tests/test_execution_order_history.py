@@ -39,8 +39,16 @@ def make_intent(ledger, key="order-state-intent"):
 def test_order_history_validates_and_normalizes_symbol():
     payload = order_history()
     assert payload.orders[0].symbol == "EURUSDM"
+    original = payload.orders[0]
     with pytest.raises(ValidationError):
-        payload.model_copy(update={"orders": [payload.orders[0].model_copy(update={"current_volume": 0.02})]})
+        MT5ExecutionOrder(
+            order_ticket=original.order_ticket, symbol=original.symbol,
+            order_type=original.order_type, state=original.state,
+            initial_volume=original.initial_volume, current_volume=0.02,
+            price=original.price, stop_loss=original.stop_loss,
+            take_profit=original.take_profit, magic=original.magic,
+            comment=original.comment, setup_at=original.setup_at,
+        )
 
 
 def test_order_history_persists_and_updates_state_idempotently(tmp_path):
