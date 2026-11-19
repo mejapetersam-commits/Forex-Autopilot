@@ -9,6 +9,8 @@
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
 input string InpBridgeToken = ""; // Set locally in MT5; never commit a real token.
 input string InpSymbols = "EURUSDm,GBPUSDm";
+input string InpTerminalId = "mt5-terminal-1";
+input int    InpExecutionStateSeconds = 5;
 input int    InpHeartbeatSeconds = 15;
 input int    InpHttpTimeoutMs = 15000;
 input int    InpCandleBootstrapBars = 500;
@@ -18,6 +20,7 @@ string g_symbols[];
 ulong  g_last_quote_time_msc[];
 ulong  g_last_snapshot_ms = 0;
 ulong  g_last_specification_ms = 0;
+ulong  g_last_execution_state_ms = 0;
 
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
@@ -178,6 +181,54 @@ void SendSymbolSpecifications()
       );
       PostJson("/api/v1/mt5/specifications", body);
    }
+}
+
+
+string AccountEnvironment()
+{
+   long mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   if(mode == ACCOUNT_TRADE_MODE_DEMO)
+      return "demo";
+   if(mode == ACCOUNT_TRADE_MODE_REAL)
+      return "real";
+   return "contest";
+}
+
+// Read-only snapshot of open positions. No trade or position-modification calls.
+void SendExecutionState()
+{
+   string server = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
+   string body = StringFormat(
+      "{\"terminal_id\":\"%s\",\"environment\":\"%s\","
+      "\"server\":\"%s\",\"observed_at\":\"%s\",\"positions\":[",
+      JsonEscape(InpTerminalId), AccountEnvironment(), server, IsoUtcNow()
+   );
+   int count = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      string symbol = JsonEscape(PositionGetString(POSITION_SYMBOL));
+      string side = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? "buy" : "sell";
+      string comment = JsonEscape(PositionGetString(POSITION_COMMENT));
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+      double stop_loss = PositionGetDouble(POSITION_SL);
+      double take_profit = PositionGetDouble(POSITION_TP);
+      ulong magic = (ulong)PositionGetInteger(POSITION_MAGIC);
+      if(count > 0)
+         body += ",";
+      body += StringFormat(
+         "{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"side\":\"%s\","
+         "\"volume_lots\":%.4f,\"open_price\":%.10f,\"stop_loss\":%.10f,"
+         "\"take_profit\":%.10f,\"magic\":%I64u,\"comment\":\"%s\"}",
+         ticket, symbol, side, volume, open_price, stop_loss, take_profit, magic, comment
+      );
+      count++;
+   }
+   body += "]}";
+   PostJson("/api/v1/mt5/execution/state", body);
 }
 
 // Sample each configured symbol independently on the one-second timer.
@@ -363,7 +414,7 @@ int OnInit()
    }
    if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000 ||
       InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 500 ||
-      InpCandleRefreshSeconds < 30)
+      InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || StringLen(Trimmed(InpTerminalId)) < 3)
    {
       Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
       return INIT_PARAMETERS_INCORRECT;
@@ -402,8 +453,10 @@ int OnInit()
    SendHeartbeat();
    SendAccountSnapshot();
    SendSymbolSpecifications();
+   SendExecutionState();
    SendQuotes();
    g_last_snapshot_ms = GetTickCount64();
+   g_last_execution_state_ms = GetTickCount64();
    g_candle_next_upload_ms = GetTickCount64();
    Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Initial history target: ", InpCandleBootstrapBars, " closed bars per combination.");
    return INIT_SUCCEEDED;
@@ -432,6 +485,12 @@ void OnTimer()
 
    SendQuotes();
    SendBulkCandleBatches(now_ms);
+
+   if(now_ms - g_last_execution_state_ms >= (ulong)InpExecutionStateSeconds * 1000)
+   {
+      SendExecutionState();
+      g_last_execution_state_ms = now_ms;
+   }
 
    if(now_ms - g_last_specification_ms >= 300000)
    {
