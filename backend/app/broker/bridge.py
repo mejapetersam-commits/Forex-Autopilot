@@ -160,3 +160,22 @@ class MT5CandleBatch(BaseModel):
         if len(times) != len(set(times)):
             raise ValueError("Candle timestamps must be unique within a batch.")
         return self
+
+
+
+class MT5CandleBulk(BaseModel):
+    """Atomic upload of multiple bounded symbol/timeframe candle batches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    batches: list[MT5CandleBatch] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_bulk_batches(self):
+        keys = [(batch.symbol, batch.timeframe) for batch in self.batches]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Bulk candle batches must have unique symbol/timeframe pairs.")
+        total = sum(len(batch.candles) for batch in self.batches)
+        if total > 4000:
+            raise ValueError("Bulk candle upload cannot exceed 4000 candles.")
+        return self
