@@ -491,11 +491,11 @@ def run_historical_backtest(
 def walk_forward_backtest(
     symbol: str,
     timeframe: str,
-    pip_value_per_lot: float = Query(..., gt=0),
+    pip_value_per_lot: float | None = Query(default=None, gt=0),
     limit: int = Query(default=1500, ge=400, le=5000),
     initial_equity: float = Query(default=10000, gt=0),
     risk_per_trade_pct: float = Query(default=0.25, gt=0, le=1.0),
-    pip_size: float = Query(default=0.0001, gt=0),
+    pip_size: float | None = Query(default=None, gt=0),
     spread_pips: float = Query(default=1.0, ge=0, le=100),
     slippage_pips_per_side: float = Query(default=0.2, ge=0, le=100),
     commission_per_lot_per_side: float = Query(default=3.5, ge=0, le=1000),
@@ -504,12 +504,16 @@ def walk_forward_backtest(
     """Tune on earlier candles and evaluate on later, untouched windows."""
     normalized_symbol = symbol.strip().upper()
     normalized_timeframe = timeframe.strip().upper()
-    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    store = telemetry_store()
+    candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
+    resolved_pip_size, resolved_pip_value, pip_value_source = resolve_backtest_pip_values(
+        store, normalized_symbol, pip_size, pip_value_per_lot
+    )
     config = BacktestConfig(
         initial_equity=initial_equity,
         risk_per_trade_pct=risk_per_trade_pct,
-        pip_size=pip_size,
-        pip_value_per_lot=pip_value_per_lot,
+        pip_size=resolved_pip_size,
+        pip_value_per_lot=resolved_pip_value,
         spread_pips=spread_pips,
         slippage_pips_per_side=slippage_pips_per_side,
         commission_per_lot_per_side=commission_per_lot_per_side,
@@ -518,6 +522,9 @@ def walk_forward_backtest(
     return {
         "symbol": normalized_symbol,
         "timeframe": normalized_timeframe,
+        "pip_size_used": resolved_pip_size,
+        "pip_value_per_lot_used": resolved_pip_value,
+        "pip_value_source": pip_value_source,
         **result,
         "trading_enabled": False,
         "execution_mode": "disabled",
