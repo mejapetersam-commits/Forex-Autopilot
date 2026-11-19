@@ -711,6 +711,9 @@ def latest_execution_state():
         issues.append("terminal_not_on_demo_account")
     if age < -5 or age > stale_after:
         issues.append("execution_state_stale")
+    max_daily_loss = float(os.getenv("FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT", "1.0"))
+    if snapshot["daily_loss_pct"] >= max_daily_loss:
+        issues.append("daily_loss_limit_reached")
     if stop_alerts:
         issues.append("managed_position_missing_protective_level")
     return {
@@ -721,6 +724,7 @@ def latest_execution_state():
         "observed_at": snapshot["observed_at"],
         "age_seconds": round(max(0.0, age), 2),
         "positions_count": snapshot["positions_count"],
+        "daily_loss_pct": snapshot["daily_loss_pct"],
         "managed_positions_count": len(managed),
         "protective_stop_alerts": stop_alerts,
         "positions": snapshot["positions"],
