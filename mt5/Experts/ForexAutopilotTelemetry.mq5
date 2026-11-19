@@ -208,7 +208,24 @@ double CalculateDailyLossPct()
       if(deal_ticket == 0)
          continue;
       long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
-      if(deal_type != DEAL_TYPE_BUY && deal_type != DEAL_TYPE_SELL)
+      if(deal_type == DEAL_TYPE_BALANCE || deal_type == DEAL_TYPE_CREDIT
+         || deal_type == DEAL_TYPE_BONUS || deal_type == DEAL_TYPE_CORRECTION
+         || deal_type == DEAL_TYPE_INTEREST || deal_type == DEAL_TYPE_DIVIDEND
+         || deal_type == DEAL_TYPE_DIVIDEND_FRANKED || deal_type == DEAL_TYPE_TAX)
+      {
+         Print("FOREX AUTOPILOT: non-trading balance operation detected today; daily-loss gate will fail closed.");
+         return 1000.0;
+      }
+      bool trade_deal = (deal_type == DEAL_TYPE_BUY || deal_type == DEAL_TYPE_SELL);
+      bool commission_deal = (
+         deal_type == DEAL_TYPE_COMMISSION
+         || deal_type == DEAL_TYPE_COMMISSION_DAILY
+         || deal_type == DEAL_TYPE_COMMISSION_MONTHLY
+         || deal_type == DEAL_TYPE_COMMISSION_AGENT_DAILY
+         || deal_type == DEAL_TYPE_COMMISSION_AGENT_MONTHLY
+         || deal_type == DEAL_TYPE_CHARGE
+      );
+      if(!trade_deal && !commission_deal)
          continue;
       realized_net += HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
       realized_net += HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
