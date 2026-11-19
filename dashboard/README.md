@@ -1,3 +1,30 @@
-# Dashboard scaffold
+# Forex Autopilot dashboard
 
-Planned stack: React + TypeScript + Vite. First milestone: read-only system status and configuration review. Any future control that changes trading behaviour must require authentication, validation, audit logging and explicit confirmation.
+React + TypeScript + Vite read-only monitoring and research interface.
+
+## Run locally
+
+1. Start the backend API from the repository root (Docker Compose or the documented local Uvicorn command).
+2. In a second terminal:
+
+   ```bash
+   cd dashboard
+   npm install
+   npm run dev
+   ```
+
+3. Open the local Vite URL (normally http://127.0.0.1:5173).
+
+Vite proxies `/api/*` requests to `http://127.0.0.1:8000`. The dashboard uses only local, unauthenticated, read-only dashboard endpoints:
+- `GET /api/v1/dashboard/overview`
+- `GET /api/v1/dashboard/research`
+
+No bridge or admin token is embedded in browser code. No trading controls or order submission are exposed. Trading remains disabled by the backend.
+
+## Build
+
+```bash
+npm run build
+```
+
+This scaffold is intentionally read-only. Authenticated administrative controls, user/session management, configuration editing and remote deployment are separate future work and must not be added as unauthenticated browser features.
