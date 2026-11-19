@@ -184,6 +184,49 @@ void SendSymbolSpecifications()
 }
 
 
+
+double CalculateDailyLossPct()
+{
+   datetime server_now = TimeTradeServer();
+   MqlDateTime day_parts;
+   TimeToStruct(server_now, day_parts);
+   day_parts.hour = 0;
+   day_parts.min = 0;
+   day_parts.sec = 0;
+   datetime day_start = StructToTime(day_parts);
+
+   double realized_net = 0.0;
+   if(!HistorySelect(day_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: unable to read today's broker deal history; daily-loss gate will fail closed.");
+      return 1000.0;
+   }
+   int deals = HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      ulong deal_ticket = HistoryDealGetTicket(i);
+      if(deal_ticket == 0)
+         continue;
+      long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+      if(deal_type != DEAL_TYPE_BUY && deal_type != DEAL_TYPE_SELL)
+         continue;
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_SWAP);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_FEE);
+   }
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double floating_net = equity - AccountInfoDouble(ACCOUNT_BALANCE);
+   double total_day_net = realized_net + floating_net;
+   double estimated_start_equity = equity - total_day_net;
+   if(estimated_start_equity <= 0.0)
+      return 1000.0;
+   return (total_day_net < 0.0)
+      ? (-total_day_net / estimated_start_equity) * 100.0
+      : 0.0;
+}
+
 string AccountEnvironment()
 {
    long mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
@@ -201,7 +244,7 @@ void SendExecutionState()
    string body = StringFormat(
       "{\"terminal_id\":\"%s\",\"environment\":\"%s\","
       "\"server\":\"%s\",\"observed_at\":\"%s\",\"positions\":[",
-      JsonEscape(InpTerminalId), AccountEnvironment(), server, IsoUtcNow()
+      JsonEscape(InpTerminalId), AccountEnvironment(), server, IsoUtcNow(), CalculateDailyLossPct()
    );
    int count = 0;
    for(int i = 0; i < PositionsTotal(); i++)
