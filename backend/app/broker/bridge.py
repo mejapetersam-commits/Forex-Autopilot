@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from math import isfinite
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -237,4 +238,59 @@ class MT5SymbolSpecification(BaseModel):
     def validate_volume_constraints(self):
         if self.volume_max < self.volume_min or self.volume_step > self.volume_max:
             raise ValueError("Invalid broker volume constraints.")
+        return self
+
+
+
+class MT5OpenPosition(BaseModel):
+    """Read-only broker position details used for reconciliation and stop audits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ticket: str = Field(min_length=1, max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    side: Literal["buy", "sell"]
+    volume_lots: float = Field(gt=0)
+    open_price: float = Field(gt=0)
+    stop_loss: float = Field(ge=0)
+    take_profit: float = Field(ge=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_position_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("volume_lots", "open_price", "stop_loss", "take_profit")
+    @classmethod
+    def require_finite_position_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Position values must be finite.")
+        return value
+
+
+class MT5ExecutionState(BaseModel):
+    """Point-in-time open-position snapshot from a specific MT5 terminal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo", "real", "contest"]
+    server: str = Field(min_length=1, max_length=128)
+    observed_at: datetime
+    positions: list[MT5OpenPosition] = Field(max_length=100)
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_execution_state_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Execution-state timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_unique_position_tickets(self):
+        tickets = [position.ticket for position in self.positions]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Position tickets must be unique in a snapshot.")
         return self
