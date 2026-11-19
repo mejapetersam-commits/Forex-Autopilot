@@ -6,8 +6,8 @@ from app.execution.reconciliation import reconcile_broker_history
 from app.market_data.telemetry_store import TelemetryStore
 
 
-def deal(ticket, order, volume, *, symbol="EURUSDm", side="buy", magic=61119001):
-    return MT5ExecutionDeal(deal_ticket=str(ticket), order_ticket=str(order), symbol=symbol, side=side, entry="in", volume_lots=volume, price=1.1, magic=magic, occurred_at=datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc))
+def deal(ticket, order, volume, *, symbol="EURUSDm", side="buy", magic=61119001, position_id="555"):
+    return MT5ExecutionDeal(deal_ticket=str(ticket), order_ticket=str(order), position_id=position_id, symbol=symbol, side=side, entry="in", volume_lots=volume, price=1.1, magic=magic, occurred_at=datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc))
 
 
 def history(*deals):
@@ -116,3 +116,13 @@ def test_reversal_deal_requires_manual_review(tmp_path):
     assert result["results"][0]["result"]=="manual_review_required"
     assert "broker_reversal_deal_requires_position_review" in result["results"][0]["reasons"]
     assert ledger.get_intent(key)["status"]=="acknowledged"
+
+
+def test_reconciliation_preserves_deal_to_position_link(tmp_path):
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger)
+    store.save_execution_history(history(deal(21,12345,0.01,position_id="998877")))
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert result["results"][0]["position_ids"] == ["998877"]
+    assert store.execution_deals_for_position("998877")[0]["deal_ticket"] == "21"
