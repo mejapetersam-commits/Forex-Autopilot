@@ -11,15 +11,17 @@
 - Bounded parameter grid search with chronological walk-forward validation.
 - Candle integrity, timestamp ordering and gap assessment.
 - Local dashboard research feed and severity-ranked operational health alerts.
-- Fail-closed execution preflight, persistent operator-control enforcement and execution coordinator that records decisions idempotently without submitting orders.
+- Fail-closed execution preflight, persistent operator-control enforcement and idempotent order-intent ledger.
+- Separate MT5 demo execution EA source with hard demo-account check, explicit default-off switch, local symbol allowlist, 0.01-lot ceiling, one-position cap, stop/target-side and broker stop-distance checks, margin buffer and terminal-side duplicate-attempt marker.
+- Authenticated demo command polling/result endpoints, admin-gated dispatch of preflight-approved intents, persistent 60-second at-most-once leases and uncertain-result quarantine; execution remains disabled by default.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
-## Still required before any demo order execution
+## Still required before demo execution can be enabled
 
-- A broker-specific MT5 execution adapter; current EA is deliberately read-only.
-- Live adapter verification against the now-ingested broker symbol specifications and account-currency tick values.
-- Durable idempotent order-intent ledger, state-transition rules and append-only order/control audit trail are implemented; broker-side reconciliation loop remains required.
-- Position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
+- Compile the separate `ForexAutopilotDemoExecution.mq5` in MetaEditor and resolve any compiler warnings/errors; CI checks its source contract but does not compile MQL5.
+- Validate EA account-mode detection, symbol specifications, lot step, filling policy, stop/target placement and margin checks on an Exness demo account.
+- Build broker-history reconciliation for orders, deals and positions, including restart recovery and partial fills. Expired or uncertain commands must be reconciled manually/automatically before any further action; never blindly retry them.
+- Complete position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
 - Broker-side protective stop verification and repair/flatten escalation.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
 - Restart recovery, duplicate event handling and disconnect recovery.
