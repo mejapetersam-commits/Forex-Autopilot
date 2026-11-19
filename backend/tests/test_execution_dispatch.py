@@ -119,3 +119,11 @@ def test_uncertain_terminal_result_is_recorded_as_unknown(monkeypatch, tmp_path)
     )
     response = main.record_execution_command_result("cmd-unknown", payload)
     assert response["intent_status"] == "unknown"
+
+
+def test_command_polling_is_disabled_by_default(monkeypatch, tmp_path):
+    ledger, queue, key = configure(monkeypatch, tmp_path)
+    monkeypatch.setenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false")
+    response = main.lease_next_execution_command("demo-terminal")
+    assert response["command"] is None
+    assert response["reason"] == "demo_execution_disabled"
