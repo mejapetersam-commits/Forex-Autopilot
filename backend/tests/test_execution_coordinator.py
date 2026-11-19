@@ -49,8 +49,9 @@ def test_coordinator_prevents_duplicate_intent_reprocessing(tmp_path):
     ledger.set_control("trading_paused", False)
     ledger.set_control("kill_switch_active", False)
     coordinator = ExecutionCoordinator(ledger)
-    first = coordinator.preflight_and_record("coord-003", intent(), snapshot())
-    replay = coordinator.preflight_and_record("coord-003", intent(), snapshot())
+    order_intent = intent()
+    first = coordinator.preflight_and_record("coord-003", order_intent, snapshot())
+    replay = coordinator.preflight_and_record("coord-003", order_intent, snapshot())
     assert first["status"] == "approved"
     assert replay["idempotent_replay"] is True
     assert replay["broker_submission_attempted"] is False
