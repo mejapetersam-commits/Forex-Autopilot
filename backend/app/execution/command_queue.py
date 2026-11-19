@@ -127,7 +127,8 @@ class ExecutionCommandQueue:
         return result
 
     def record_result(self, command_id: str, *, terminal_id: str,
-                      outcome: str, result: dict[str, Any]) -> dict[str, Any]:
+                      outcome: str, result: dict[str, Any],
+                      expected_intent_id: str | None = None) -> dict[str, Any]:
         if outcome not in {"acknowledged", "rejected", "unknown"}:
             raise ValueError("Terminal outcome must be acknowledged, rejected or unknown.")
         encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -138,6 +139,10 @@ class ExecutionCommandQueue:
             ).fetchone()
             if row is None:
                 raise KeyError("Execution command not found.")
+            # Bind the terminal callback to the command's immutable intent before
+            # accepting either a first result or an idempotent duplicate.
+            if expected_intent_id is not None and row["intent_id"] != expected_intent_id:
+                raise ValueError("Terminal result intent does not match command.")
             if row["status"] in {"acknowledged", "rejected", "unknown"}:
                 if row["result_json"] != encoded or row["status"] != outcome:
                     raise ValueError("Conflicting duplicate terminal result.")
