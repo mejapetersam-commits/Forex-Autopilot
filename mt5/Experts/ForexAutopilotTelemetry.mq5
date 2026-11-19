@@ -3,7 +3,7 @@
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
-#property version   "1.11"
+#property version   "1.120"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
 input string InpApiBaseUrl = "https://YOUR-API-HOST";
