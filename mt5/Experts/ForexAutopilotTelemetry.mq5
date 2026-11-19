@@ -281,13 +281,17 @@ void SendExecutionState()
       double stop_loss = PositionGetDouble(POSITION_SL);
       double take_profit = PositionGetDouble(POSITION_TP);
       ulong magic = (ulong)PositionGetInteger(POSITION_MAGIC);
+      ulong position_id = (ulong)PositionGetInteger(POSITION_IDENTIFIER);
+      if(position_id == 0)
+         continue;
       if(count > 0)
          body += ",";
       body += StringFormat(
-         "{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"side\":\"%s\","
+         "{\"ticket\":\"%I64u\",\"position_id\":\"%I64u\","
+         "\"symbol\":\"%s\",\"side\":\"%s\","
          "\"volume_lots\":%.4f,\"open_price\":%.10f,\"stop_loss\":%.10f,"
          "\"take_profit\":%.10f,\"magic\":%I64u,\"comment\":\"%s\"}",
-         ticket, symbol, side, volume, open_price, stop_loss, take_profit, magic, comment
+         ticket, position_id, symbol, side, volume, open_price, stop_loss, take_profit, magic, comment
       );
       count++;
    }
@@ -343,13 +347,14 @@ void SendExecutionHistory()
       else continue;
 
       ulong order_ticket = (ulong)HistoryDealGetInteger(ticket, DEAL_ORDER);
+      ulong position_id = (ulong)HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
       double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
       double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
       datetime deal_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
       string symbol = JsonEscape(HistoryDealGetString(ticket, DEAL_SYMBOL));
       string comment = JsonEscape(HistoryDealGetString(ticket, DEAL_COMMENT));
       string side = (deal_type == DEAL_TYPE_BUY) ? "buy" : "sell";
-      if(order_ticket == 0 || volume <= 0 || price <= 0 || deal_time <= 0 || symbol == "")
+      if(order_ticket == 0 || position_id == 0 || volume <= 0 || price <= 0 || deal_time <= 0 || symbol == "")
          continue;
       if(included >= 1000)
       {
@@ -361,10 +366,11 @@ void SendExecutionHistory()
          body += ",";
       body += StringFormat(
          "{\"deal_ticket\":\"%I64u\",\"order_ticket\":\"%I64u\","
-         "\"symbol\":\"%s\",\"side\":\"%s\",\"entry\":\"%s\","
+         "\"position_id\":\"%I64u\",\"symbol\":\"%s\","
+         "\"side\":\"%s\",\"entry\":\"%s\","
          "\"volume_lots\":%.4f,\"price\":%.10f,\"magic\":%I64u,"
          "\"comment\":\"%s\",\"occurred_at\":\"%s\"}",
-         ticket, order_ticket, symbol, side, entry, volume, price,
+         ticket, order_ticket, position_id, symbol, side, entry, volume, price,
          InpExecutionMagicNumber, comment, BrokerTimeIso(deal_time, server_offset)
       );
       included++;
