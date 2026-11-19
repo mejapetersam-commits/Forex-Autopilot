@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5ExecutionState, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
 
 
 class TelemetryStore:
@@ -91,6 +91,18 @@ class TelemetryStore:
                 CREATE INDEX IF NOT EXISTS idx_symbol_specs_observed
                     ON symbol_specifications(observed_at DESC);
 
+
+                CREATE TABLE IF NOT EXISTS execution_state_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    terminal_id TEXT NOT NULL,
+                    environment TEXT NOT NULL,
+                    server TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_execution_state_observed
+                    ON execution_state_snapshots(observed_at DESC);
+
                 CREATE TABLE IF NOT EXISTS candles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     symbol TEXT NOT NULL,
@@ -107,6 +119,36 @@ class TelemetryStore:
                     ON candles(symbol, timeframe, opened_at DESC);
                 """
             )
+
+
+    def save_execution_state(self, payload: MT5ExecutionState) -> None:
+        import json
+        encoded = json.dumps(
+            [position.model_dump(mode="json") for position in payload.positions],
+            sort_keys=True, separators=(",", ":"), allow_nan=False,
+        )
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO execution_state_snapshots(
+                    terminal_id, environment, server, observed_at, payload_json
+                ) VALUES (?, ?, ?, ?, ?)""",
+                (payload.terminal_id, payload.environment, payload.server,
+                 payload.observed_at.isoformat(), encoded),
+            )
+
+    def latest_execution_state(self) -> dict[str, Any] | None:
+        import json
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT terminal_id, environment, server, observed_at, payload_json
+                   FROM execution_state_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"""
+            ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["positions"] = json.loads(result.pop("payload_json"))
+        result["positions_count"] = len(result["positions"])
+        return result
 
     def save_heartbeat(self, payload: MT5Heartbeat) -> None:
         with self._connect() as connection:
