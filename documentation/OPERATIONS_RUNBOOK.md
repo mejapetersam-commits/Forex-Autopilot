@@ -21,7 +21,7 @@ Open `http://127.0.0.1:8000/dashboard`.
 
 ## Docker deployment
 
-From the repository root, ensure the deployment environment contains a long random `FOREX_AUTOPILOT_BRIDGE_TOKEN` (at least 32 characters). Do not put it in source control or paste it into chat.
+From the repository root, ensure the deployment environment contains a long random `FOREX_AUTOPILOT_BRIDGE_TOKEN` (at least 32 characters). Do not put it in source control or paste it into chat. Configure a separate random `FOREX_AUTOPILOT_ADMIN_TOKEN` (at least 32 characters) if the local dashboard pause and emergency-stop controls are to be administered.
 
 ```bash
 docker compose config -q
@@ -44,7 +44,7 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 - `/api/v1/backtests/walk-forward/{symbol}/{timeframe}`
 - `/api/v1/market-data/quality/{symbol}/{timeframe}`
 
-The local dashboard displays connection state, account telemetry, quotes, research signals and candle-quality summaries. It is not a trade-control panel.
+The local dashboard displays connection state, account telemetry, quotes, research signals and candle-quality summaries. Its pause/resume and emergency-stop controls require the separate admin token and write an audit trail. Clearing the pause or kill switch does not enable trading; trading remains hard-disabled in this build.
 
 ## Current safety posture
 
