@@ -52,3 +52,20 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const getOverview = () => getJson<DashboardOverview>("/api/v1/dashboard/overview");
 export const getResearch = () => getJson<ResearchResponse>("/api/v1/dashboard/research");
+
+export interface OperationalEvent {
+  event_id: string;
+  event_type: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  occurred_at: string;
+  delivery_status: string;
+  attempts: number;
+}
+export interface OperationalEventsResponse {
+  items: OperationalEvent[];
+  execution_mode: string;
+  trading_enabled: boolean;
+  updated_at: string;
+}
+export const getOperationalEvents = () => getJson<OperationalEventsResponse>("/api/v1/dashboard/events?limit=50");
