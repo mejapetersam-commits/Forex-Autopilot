@@ -418,7 +418,8 @@ def queue_approved_demo_intent(intent_id: str):
     try:
         queued = execution_command_queue().enqueue_approved_intent(
             command_id="cmd-" + hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32], intent_id=intent_id,
-            payload=intent["payload"], environment="demo", trading_enabled=True,
+            payload={**intent["payload"], "broker_tag": hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:12]},
+            environment="demo", trading_enabled=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
@@ -435,7 +436,19 @@ def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_leng
     controls = execution_ledger().controls()
     if controls["trading_paused"] or controls["kill_switch_active"]:
         return {"command": None, "reason": "execution_safeguards_active"}
-    command = execution_command_queue().lease_next(terminal_id=terminal_id)
+    queue = execution_command_queue()
+    command = queue.lease_next(terminal_id=terminal_id)
+    # Expired leases are quarantined, never re-delivered. Mark the corresponding
+    # approved intent unknown so history reconciliation can recover it by broker tag.
+    for expired in queue.expired_commands():
+        intent = execution_ledger().get_intent(expired["intent_id"])
+        if intent and intent["status"] == "approved":
+            execution_ledger().transition(
+                expired["intent_id"], "unknown",
+                event_type="command_lease_expired",
+                details={"command_id": expired["command_id"], "terminal_id": expired["terminal_id"],
+                         "attempts": expired["attempts"], "recovery": "broker_history_required"},
+            )
     return {"command": command, "environment": "demo"} if command else {"command": None}
 
 
