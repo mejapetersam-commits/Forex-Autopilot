@@ -78,3 +78,36 @@ def test_persisted_pause_and_kill_switch_override_preflight(tmp_path):
     allowed = evaluate_with_runtime_controls(intent, snapshot, ledger)
     assert allowed["approved"] is True
     assert allowed["execution_submitted"] is False
+
+
+def test_preflight_enforces_broker_volume_step_and_trade_permission():
+    from dataclasses import replace
+    intent, snapshot = valid_inputs()
+    broker = replace(
+        snapshot, require_broker_specification=True,
+        broker_trade_allowed=True, broker_volume_min=0.01,
+        broker_volume_max=10.0, broker_volume_step=0.01,
+        broker_tick_size=0.00001, broker_tick_value_loss=1.0,
+    )
+    result = evaluate_execution_preflight(intent, broker)
+    assert result["approved"] is False
+    assert any("risk ceiling" in reason for reason in result["reasons"])
+
+    safe_intent = replace(intent, stop_loss=1.0991)
+    safe = evaluate_execution_preflight(safe_intent, broker)
+    assert safe["approved"] is True
+
+    invalid_volume = replace(intent, volume_lots=0.015, stop_loss=1.0991)
+    result = evaluate_execution_preflight(invalid_volume, broker)
+    assert result["approved"] is False
+    assert any("volume step" in reason for reason in result["reasons"])
+
+
+def test_preflight_fails_closed_without_trade_enabled_broker_specification():
+    from dataclasses import replace
+    intent, snapshot = valid_inputs()
+    result = evaluate_execution_preflight(
+        intent, replace(snapshot, require_broker_specification=True)
+    )
+    assert result["approved"] is False
+    assert any("broker symbol specifications" in reason for reason in result["reasons"])
