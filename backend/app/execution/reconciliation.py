@@ -1,61 +1,179 @@
-"""Conservative reconciliation of known order IDs against broker deal history."""
+"""Conservative, idempotent reconciliation of execution intents to MT5 deal history."""
 from __future__ import annotations
+
 import hashlib
 from math import isclose
 from typing import Any
+
 from app.execution.ledger import ExecutionLedger
 from app.market_data.telemetry_store import TelemetryStore
 
 
-def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, expected_magic: int, expected_terminal_id: str | None = None, expected_server: str | None = None, limit: int = 500) -> dict[str, Any]:
+def reconcile_broker_history(
+    ledger: ExecutionLedger,
+    store: TelemetryStore,
+    *,
+    expected_magic: int,
+    expected_terminal_id: str | None = None,
+    expected_server: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Reconcile fills only from immutable, identity-matched broker deal evidence.
+
+    A full requested entry volume is moved through filled to reconciled.
+    Partial fills remain open to further broker evidence; missing evidence never
+    implies rejection or cancellation.
+    """
     reports: list[dict[str, Any]] = []
     for intent in ledger.intents_requiring_reconciliation(limit):
+        intent_id = intent["idempotency_key"]
+        current = intent["status"]
         order_id = str(intent.get("broker_order_id") or "")
-        broker_tag = hashlib.sha256(
-            intent["idempotency_key"].encode("utf-8")
-        ).hexdigest()[:12]
-        deals = store.execution_deals_for_order(order_id) if order_id.isdigit() and int(order_id) > 0 else []
+        broker_tag = hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:12]
+
+        order_deals = (
+            store.execution_deals_for_order(order_id)
+            if order_id.isdigit() and int(order_id) > 0 else []
+        )
         tagged_deals = store.execution_deals_for_tag(broker_tag)
         tagged_order_ids = sorted({str(deal["order_ticket"]) for deal in tagged_deals})
+
         if len(tagged_order_ids) > 1:
-            reports.append({"intent_id": intent["idempotency_key"], "status": intent["status"], "result": "manual_review_required", "reasons": ["multiple_broker_orders_match_intent_tag"], "broker_order_ids": tagged_order_ids})
+            reports.append({
+                "intent_id": intent_id, "status": current,
+                "result": "manual_review_required",
+                "reasons": ["multiple_broker_orders_match_intent_tag"],
+                "broker_order_ids": tagged_order_ids,
+            })
             continue
-        if not deals and tagged_deals:
-            deals = tagged_deals
+        if not order_deals and tagged_deals:
+            order_deals = tagged_deals
             order_id = tagged_order_ids[0]
-        elif deals and tagged_deals and tagged_order_ids != [order_id]:
-            reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": intent["status"], "result": "manual_review_required", "reasons": ["broker_order_id_and_intent_tag_disagree"]})
+        elif order_deals and tagged_deals and tagged_order_ids != [order_id]:
+            reports.append({
+                "intent_id": intent_id, "broker_order_id": order_id,
+                "status": current, "result": "manual_review_required",
+                "reasons": ["broker_order_id_and_intent_tag_disagree"],
+            })
             continue
-        if not deals:
-            reports.append({"intent_id": intent["idempotency_key"], "status": intent["status"], "result": "awaiting_broker_history", "filled_volume_lots": 0.0})
+
+        if not order_deals:
+            reports.append({
+                "intent_id": intent_id, "status": current,
+                "result": "awaiting_broker_history", "filled_volume_lots": 0.0,
+            })
             continue
-        entries = [d for d in deals if d["entry"] == "in"]
+
+        # Reversal/in-out deals need position-level treatment; do not miscount
+        # them as fresh entry fills or silently reconcile them as a normal order.
+        if any(deal["entry"] == "inout" for deal in order_deals):
+            reports.append({
+                "intent_id": intent_id, "broker_order_id": order_id,
+                "status": current, "result": "manual_review_required",
+                "reasons": ["broker_reversal_deal_requires_position_review"],
+            })
+            continue
+
+        entries = [deal for deal in order_deals if deal["entry"] == "in"]
         if not entries:
-            reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": intent["status"], "result": "awaiting_entry_deal_history", "filled_volume_lots": 0.0})
+            reports.append({
+                "intent_id": intent_id, "broker_order_id": order_id,
+                "status": current, "result": "awaiting_entry_deal_history",
+                "filled_volume_lots": 0.0,
+            })
             continue
+
         payload = intent["payload"]
-        reasons = []
+        reasons: list[str] = []
+        for deal in order_deals:
+            if deal["environment"] != "demo":
+                reasons.append("broker_deal_not_demo")
+            if expected_terminal_id and deal["terminal_id"] != expected_terminal_id:
+                reasons.append("broker_terminal_mismatch")
+            if expected_server and deal["server"] != expected_server:
+                reasons.append("broker_server_mismatch")
+            if deal["magic"] != expected_magic:
+                reasons.append("broker_magic_mismatch")
+            if deal["symbol"] != payload["symbol"].upper():
+                reasons.append("broker_symbol_mismatch")
         for deal in entries:
-            if deal["environment"] != "demo": reasons.append("broker_deal_not_demo")
-            if expected_terminal_id and deal["terminal_id"] != expected_terminal_id: reasons.append("broker_terminal_mismatch")
-            if expected_server and deal["server"] != expected_server: reasons.append("broker_server_mismatch")
-            if deal["magic"] != expected_magic: reasons.append("broker_magic_mismatch")
-            if deal["symbol"] != payload["symbol"].upper(): reasons.append("broker_symbol_mismatch")
-            if deal["side"] != payload["side"]: reasons.append("broker_side_mismatch")
-        filled = sum(float(d["volume_lots"]) for d in entries)
+            if deal["side"] != payload["side"]:
+                reasons.append("broker_side_mismatch")
+
+        filled = sum(float(deal["volume_lots"]) for deal in entries)
         requested = float(payload["volume_lots"])
-        if filled > requested + 1e-8: reasons.append("broker_fill_exceeds_requested_volume")
+        if filled > requested + 1e-8:
+            reasons.append("broker_fill_exceeds_requested_volume")
         if reasons:
-            reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": intent["status"], "result": "manual_review_required", "reasons": sorted(set(reasons)), "filled_volume_lots": round(filled, 8)})
+            reports.append({
+                "intent_id": intent_id, "broker_order_id": order_id,
+                "status": current, "result": "manual_review_required",
+                "reasons": sorted(set(reasons)),
+                "filled_volume_lots": round(filled, 8),
+            })
             continue
-        target = "filled" if isclose(filled, requested, rel_tol=0.0, abs_tol=1e-8) else ("partially_filled" if 0 < filled < requested else None)
-        current = intent["status"]
-        if target and target != current:
-            try:
-                updated = ledger.transition(intent["idempotency_key"], target, event_type="broker_history_reconciled", details={"broker_order_id": order_id, "filled_volume_lots": round(filled, 8), "requested_volume_lots": requested, "deal_tickets": [d["deal_ticket"] for d in entries]}, broker_order_id=order_id)
+
+        full_fill = isclose(filled, requested, rel_tol=0.0, abs_tol=1e-8)
+        partial_fill = 0 < filled < requested
+        deal_tickets = sorted(deal["deal_ticket"] for deal in entries)
+        details = {
+            "broker_order_id": order_id,
+            "filled_volume_lots": round(filled, 8),
+            "requested_volume_lots": requested,
+            "deal_tickets": deal_tickets,
+            "evidence": "authenticated_mt5_demo_deal_history",
+        }
+
+        try:
+            if full_fill:
+                if current != "filled":
+                    updated = ledger.transition(
+                        intent_id, "filled",
+                        event_type="broker_history_full_fill_confirmed",
+                        details=details, broker_order_id=order_id,
+                    )
+                    current = updated["status"]
+                if current == "filled":
+                    updated = ledger.transition(
+                        intent_id, "reconciled",
+                        event_type="broker_history_reconciled",
+                        details=details, broker_order_id=order_id,
+                    )
+                    current = updated["status"]
+            elif partial_fill and current != "partially_filled":
+                updated = ledger.transition(
+                    intent_id, "partially_filled",
+                    event_type="broker_history_partial_fill",
+                    details=details, broker_order_id=order_id,
+                )
                 current = updated["status"]
-            except ValueError:
-                reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": current, "result": "manual_review_required", "reasons": ["illegal_reconciliation_state_transition"], "filled_volume_lots": round(filled, 8)})
-                continue
-        reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": current, "result": "reconciled_fill" if target else "no_fill_evidence", "filled_volume_lots": round(filled, 8), "requested_volume_lots": requested, "deal_count": len(entries)})
-    return {"status": "review_required" if any(r["result"] == "manual_review_required" for r in reports) else "complete", "intents_checked": len(reports), "results": reports, "trading_enabled": False}
+        except (KeyError, ValueError):
+            reports.append({
+                "intent_id": intent_id, "broker_order_id": order_id,
+                "status": current, "result": "manual_review_required",
+                "reasons": ["illegal_reconciliation_state_transition"],
+                "filled_volume_lots": round(filled, 8),
+            })
+            continue
+
+        reports.append({
+            "intent_id": intent_id, "broker_order_id": order_id,
+            "status": current,
+            "result": "reconciled_full_fill" if full_fill else (
+                "reconciled_partial_fill" if partial_fill else "no_fill_evidence"
+            ),
+            "filled_volume_lots": round(filled, 8),
+            "requested_volume_lots": requested,
+            "deal_count": len(entries),
+            "deal_tickets": deal_tickets,
+        })
+
+    needs_review = any(
+        report["result"] == "manual_review_required" for report in reports
+    )
+    return {
+        "status": "review_required" if needs_review else "complete",
+        "intents_checked": len(reports),
+        "results": reports,
+        "trading_enabled": False,
+    }
