@@ -456,3 +456,18 @@ class TelemetryStore:
                 (str(order_ticket),),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def execution_deals_for_tag(self, broker_tag: str) -> list[dict[str, Any]]:
+        """Find broker fills carrying the deterministic FOREX AUTOPILOT order tag."""
+        prefix = "FA:" + broker_tag
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT deal_ticket, order_ticket, terminal_id, environment,
+                          server, symbol, side, entry, volume_lots, price,
+                          magic, comment, occurred_at, observed_at
+                   FROM execution_deals WHERE comment LIKE ?
+                   ORDER BY occurred_at, deal_ticket""",
+                (prefix + "%",),
+            ).fetchall()
+        return [dict(row) for row in rows]
