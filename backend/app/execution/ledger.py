@@ -240,3 +240,21 @@ class ExecutionLedger:
                 (safe_limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def intents_requiring_reconciliation(self, limit: int = 500) -> list[dict[str, Any]]:
+        """List non-terminal intents; callers must reconcile only against broker evidence."""
+        safe_limit = min(max(int(limit), 1), 1000)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM order_intents
+                   WHERE status IN ('submitted','acknowledged','partially_filled','unknown')
+                   ORDER BY updated_at, id LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
