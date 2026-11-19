@@ -75,3 +75,24 @@ def test_idempotency_rejects_changed_payload(tmp_path):
             command_id="c2", intent_id="i1", payload=changed,
             environment="demo", trading_enabled=True,
         )
+
+
+
+def test_expired_lease_is_quarantined_not_redelivered(tmp_path):
+    import sqlite3
+    queue = make_queue(tmp_path)
+    queue.enqueue_approved_intent(
+        command_id="c-expire", intent_id="i-expire", payload=command_payload(),
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-a")
+    with sqlite3.connect(queue.database_path) as db:
+        db.execute(
+            "UPDATE execution_commands SET lease_until='2000-01-01T00:00:00+00:00' WHERE command_id='c-expire'"
+        )
+    assert queue.lease_next(terminal_id="terminal-b") is None
+    with pytest.raises(ValueError, match="not leased"):
+        queue.record_result(
+            "c-expire", terminal_id="terminal-a", outcome="acknowledged",
+            result={"broker_order_id": "maybe-sent"},
+        )
