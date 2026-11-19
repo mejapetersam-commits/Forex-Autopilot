@@ -181,10 +181,10 @@ class EventOutbox:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT attempts,status,lease_token FROM notification_outbox WHERE event_id=?",
+                "SELECT attempts,status,lease_token,lease_until FROM notification_outbox WHERE event_id=?",
                 (event_id,),
             ).fetchone()
-            if not row or row["status"] != "leased" or row["lease_token"] != lease_token:
+            if (not row or row["status"] != "leased" or row["lease_token"] != lease_token\n                    or not row["lease_until"] or row["lease_until"] <= _iso(timestamp)):
                 raise ValueError("Outbox lease is missing, expired or does not belong to this worker.")
             if delivered:
                 status = "delivered"
