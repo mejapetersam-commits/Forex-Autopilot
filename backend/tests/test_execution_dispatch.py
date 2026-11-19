@@ -165,3 +165,37 @@ def test_dispatch_refuses_non_demo_environment(monkeypatch, tmp_path):
         main.queue_approved_demo_intent(key)
     assert exc.value.status_code == 403
     assert queue.lease_next(terminal_id="demo-terminal") is None
+
+
+def test_admin_preflight_creates_approved_intent_from_fresh_demo_telemetry(monkeypatch, tmp_path):
+    ledger, queue, _ = configure(monkeypatch, tmp_path)
+    request = main.ExecutionIntentRequest(
+        idempotency_key="intent-preflight-api", symbol="EURUSDm", side="buy",
+        volume_lots=0.01, stop_loss=1.0991, take_profit=1.102,
+        requested_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+    )
+    result = main.preflight_execution_intent(request)
+    assert result["status"] == "approved"
+    assert result["preflight"]["approved"] is True
+    assert result["broker_submission_attempted"] is False
+    assert queue.lease_next(terminal_id="demo-terminal") is None
+
+
+def test_admin_preflight_fails_closed_when_position_state_is_missing(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "empty.sqlite3"))
+    ledger.set_control("trading_paused", False)
+    ledger.set_control("kill_switch_active", False)
+    store = TelemetryStore(str(tmp_path / "empty.sqlite3"))
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    monkeypatch.setenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("FOREX_AUTOPILOT_EXECUTION_SYMBOLS", "EURUSDm")
+    request = main.ExecutionIntentRequest(
+        idempotency_key="intent-no-state", symbol="EURUSDm", side="buy",
+        volume_lots=0.01, stop_loss=1.0991, take_profit=1.102,
+        requested_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+    )
+    result = main.preflight_execution_intent(request)
+    assert result["status"] == "preflight_rejected"
+    assert result["preflight"]["approved"] is False
+    assert any("connected" in reason.lower() for reason in result["preflight"]["reasons"])
