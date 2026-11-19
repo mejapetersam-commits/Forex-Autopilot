@@ -21,7 +21,8 @@ class ExecutionSnapshot:
     environment: str
     trading_enabled: bool
     kill_switch_active: bool
-    broker_connected: bool
+    trading_paused: bool = True
+    broker_connected: bool = True
     account_equity: float
     free_margin: float
     quote_bid: float
@@ -60,6 +61,8 @@ def evaluate_execution_preflight(
         reasons.append("Trading is disabled by configuration.")
     if snapshot.kill_switch_active:
         reasons.append("Emergency kill switch is active.")
+    if snapshot.trading_paused:
+        reasons.append("Automation is paused.")
     if snapshot.environment.strip().lower() != "demo":
         reasons.append("Only demo environment is permitted by this execution gate.")
     if not snapshot.broker_connected:
