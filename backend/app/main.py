@@ -53,6 +53,12 @@ class ExecutionIntentRequest(BaseModel):
     requested_at: datetime
 
 
+class StrategyDispatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    volume_lots: float = Field(gt=0, le=0.01)
+    queue_if_approved: StrictBool = False
+
+
 
 
 def execution_ledger() -> ExecutionLedger:
@@ -650,6 +656,59 @@ def mt5_candle_history(
     return {"data": data, "count": len(data)}
 
 
+@app.post(
+    "/api/v1/admin/strategy/dispatch/{symbol}/{timeframe}",
+    dependencies=[Depends(require_admin_token)],
+)
+def dispatch_strategy_candidate(
+    symbol: str, timeframe: str, payload: StrategyDispatchRequest,
+):
+    """Convert a validated research candidate into a risk-preflighted intent.
+
+    Queueing remains a separate explicit opt-in and re-runs all live safety gates.
+    """
+    normalized_symbol, normalized_timeframe = symbol.strip().upper(), timeframe.strip().upper()
+    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, 500)
+    signal = evaluate_signal(candles, StrategyConfig())
+    if signal.get("signal") not in {"buy", "sell"} or not signal.get("candidate_levels"):
+        return {
+            "created": False, "reason": signal.get("reason", signal.get("signal")),
+            "signal": signal.get("signal"), "execution_queued": False,
+            "trading_enabled": False,
+        }
+    levels = signal["candidate_levels"]
+    if not levels.get("stop_loss") or not levels.get("take_profit"):
+        raise HTTPException(status_code=409, detail="Strategy candidate has no valid protective levels.")
+    latest_bar = candles[-1]
+    identity = "|".join((
+        normalized_symbol, normalized_timeframe, str(latest_bar["opened_at"]),
+        signal["signal"], signal["strategy"]["version"],
+    ))
+    intent_id = "signal-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
+    intent = TradeIntent(
+        symbol=normalized_symbol, side=signal["signal"],
+        volume_lots=payload.volume_lots,
+        stop_loss=float(levels["stop_loss"]),
+        take_profit=float(levels["take_profit"]),
+        requested_at=datetime.now(timezone.utc),
+    )
+    result = ExecutionCoordinator(execution_ledger()).preflight_and_record(
+        intent_id, intent, execution_snapshot_for_symbol(normalized_symbol)
+    )
+    queued = None
+    if payload.queue_if_approved and result["status"] == "approved":
+        queued = queue_approved_demo_intent(intent_id)
+    return {
+        "created": result["status"] in {"approved", "preflight_rejected"},
+        "intent_id": intent_id, "status": result["status"],
+        "signal": signal["signal"], "candidate_levels": levels,
+        "preflight": result["preflight"],
+        "execution_queued": bool(queued and queued.get("status") == "queued"),
+        "queue": queued, "research_status": signal.get("research_status"),
+        "trading_enabled": False,
+    }
+
+
 @app.get(
     "/api/v1/market-analysis/{symbol}/{timeframe}",
     dependencies=[Depends(require_bridge_token)],
@@ -846,19 +905,68 @@ def market_data_quality(
 
 
 
+def protective_stop_guard(payload: MT5ExecutionState, store: TelemetryStore) -> dict:
+    """Detect absent/invalid broker stops; fail closed rather than modifying positions."""
+    expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
+    quotes = {item["symbol"].upper(): item for item in store.latest_quotes()}
+    alerts, unprotected = [], []
+    for position in payload.positions:
+        if position.magic != expected_magic:
+            continue
+        reasons = []
+        if position.stop_loss <= 0:
+            reasons.append("missing_stop_loss")
+        else:
+            quote = quotes.get(position.symbol.upper())
+            specification = store.latest_symbol_specification(position.symbol)
+            if quote and specification:
+                observed = datetime.fromisoformat(quote["observed_at"].replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - observed).total_seconds()
+                if -5 <= age <= 10:
+                    minimum = max(
+                        float(specification["stops_level_points"]) * float(specification["point"]),
+                        float(specification["freeze_level_points"]) * float(specification["point"]),
+                    )
+                    if position.side == "buy" and position.stop_loss >= float(quote["bid"]) - minimum:
+                        reasons.append("buy_stop_wrong_side_or_inside_broker_distance")
+                    elif position.side == "sell" and position.stop_loss <= float(quote["ask"]) + minimum:
+                        reasons.append("sell_stop_wrong_side_or_inside_broker_distance")
+        if reasons:
+            item = {"ticket": position.ticket, "position_id": position.position_id,
+                    "symbol": position.symbol, "side": position.side, "reasons": reasons}
+            alerts.append(item)
+            unprotected.append(item)
+    return {
+        "status": "critical" if unprotected else "healthy",
+        "unprotected_positions": unprotected,
+        "alerts": alerts,
+        "automatic_action": "pause_and_kill_switch" if unprotected else "none",
+        "broker_position_modified": False,
+    }
+
+
 @app.post(
     "/api/v1/mt5/execution/state",
     dependencies=[Depends(require_bridge_token)],
 )
 def mt5_execution_state(payload: MT5ExecutionState):
     """Persist a read-only open-position snapshot; this endpoint never places orders."""
-    telemetry_store().save_execution_state(payload)
+    store = telemetry_store()
+    store.save_execution_state(payload)
+    guard = protective_stop_guard(payload, store)
+    if guard["unprotected_positions"] and payload.environment == "demo":
+        ledger = execution_ledger()
+        controls = ledger.controls()
+        if not controls["trading_paused"]:
+            ledger.set_control("trading_paused", True)
+        if not controls["kill_switch_active"]:
+            ledger.set_control("kill_switch_active", True)
     return {
-        "accepted": True,
-        "stored": True,
-        "terminal_id": payload.terminal_id,
-        "environment": payload.environment,
+        "accepted": True, "stored": True,
+        "terminal_id": payload.terminal_id, "environment": payload.environment,
         "positions_received": len(payload.positions),
+        "protective_guard": guard,
+        "new_entries_paused": bool(guard["unprotected_positions"] and payload.environment == "demo"),
         "trading_enabled": False,
     }
 
@@ -939,9 +1047,10 @@ def latest_execution_state():
     expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
     managed = [p for p in snapshot["positions"] if p["magic"] == expected_magic]
     stop_alerts = [
-        {"ticket": p["ticket"], "symbol": p["symbol"],
-         "missing_stop_loss": p["stop_loss"] <= 0,
-         "missing_take_profit": p["take_profit"] <= 0}
+        {"ticket": p["ticket"], "position_id": p.get("position_id"),
+         "symbol": p["symbol"], "missing_stop_loss": p["stop_loss"] <= 0,
+         "missing_take_profit": p["take_profit"] <= 0,
+         "linked_deals": len(p.get("related_deals", []))}
         for p in managed if p["stop_loss"] <= 0 or p["take_profit"] <= 0
     ]
     issues = []
