@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionHistory, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionHistory, MT5ExecutionOrderHistory, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
@@ -872,6 +872,20 @@ def mt5_execution_history(payload: MT5ExecutionHistory):
     count = telemetry_store().save_execution_history(payload)
     return {
         "accepted": True, "stored": True, "deals_received": count,
+        "terminal_id": payload.terminal_id, "environment": payload.environment,
+        "trading_enabled": False,
+    }
+
+
+@app.post(
+    "/api/v1/mt5/execution/orders",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_execution_order_history(payload: MT5ExecutionOrderHistory):
+    """Ingest read-only broker order-state history from the demo terminal."""
+    count = telemetry_store().save_execution_order_history(payload)
+    return {
+        "accepted": True, "stored": True, "orders_received": count,
         "terminal_id": payload.terminal_id, "environment": payload.environment,
         "trading_enabled": False,
     }
