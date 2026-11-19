@@ -2,12 +2,13 @@ name: Backend tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/bulk-candle-ingestion]
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
       - "docker-compose.yml"
       - ".dockerignore"
+      - "documentation/**"
   pull_request:
     branches: [main]
     paths:
