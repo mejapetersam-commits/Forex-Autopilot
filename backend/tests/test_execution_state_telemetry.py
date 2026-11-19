@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import main
-from app.broker.bridge import MT5ExecutionState, MT5OpenPosition
+from app.broker.bridge import MT5ExecutionState, MT5OpenPosition, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
 
 
@@ -116,3 +116,45 @@ def test_execution_state_monitor_flags_daily_loss_limit(monkeypatch, tmp_path):
     result = main.latest_execution_state()
     assert result["status"] == "critical"
     assert "daily_loss_limit_reached" in result["issues"]
+
+
+def test_unprotected_managed_position_automatically_trips_pause_and_kill_switch(monkeypatch, tmp_path):
+    store = TelemetryStore(tmp_path / "shared.sqlite3")
+    ledger = __import__("app.execution.ledger", fromlist=["ExecutionLedger"]).ExecutionLedger(
+        str(tmp_path / "shared.sqlite3")
+    )
+    ledger.set_control("trading_paused", False)
+    ledger.set_control("kill_switch_active", False)
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    payload = sample_state(positions=[{
+        "ticket": "123456", "position_id": "998877", "symbol": "EURUSDm",
+        "side": "buy", "volume_lots": 0.01, "open_price": 1.085,
+        "stop_loss": 0, "take_profit": 1.095, "magic": 61119001,
+        "comment": "FA:abcdef0123456789",
+    }])
+    response = main.mt5_execution_state(payload)
+    assert response["protective_guard"]["status"] == "critical"
+    assert response["new_entries_paused"] is True
+    assert ledger.controls() == {"trading_paused": True, "kill_switch_active": True}
+
+
+def test_protective_guard_detects_wrong_side_stop_from_fresh_broker_quote(monkeypatch, tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    now = datetime.now(timezone.utc)
+    store.save_quote(MT5Quote(symbol="EURUSDm", bid=1.1000, ask=1.1001, timestamp=now))
+    store.save_symbol_specification(MT5SymbolSpecification(
+        symbol="EURUSDm", digits=5, point=0.00001, tick_size=0.00001,
+        tick_value_profit=1, tick_value_loss=1, contract_size=100000,
+        volume_min=0.01, volume_max=100, volume_step=0.01,
+        stops_level_points=10, freeze_level_points=0, trade_allowed=True,
+        base_currency="EUR", profit_currency="USD", margin_currency="EUR",
+        account_currency="USD", observed_at=now,
+    ))
+    payload = sample_state(positions=[{
+        "ticket": "123456", "position_id": "998877", "symbol": "EURUSDm",
+        "side": "buy", "volume_lots": 0.01, "open_price": 1.085,
+        "stop_loss": 1.1000, "take_profit": 1.105, "magic": 61119001,
+    }])
+    result = main.protective_stop_guard(payload, store)
+    assert "buy_stop_wrong_side_or_inside_broker_distance" in result["alerts"][0]["reasons"]
