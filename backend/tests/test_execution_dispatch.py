@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import pytest
 from fastapi import HTTPException
 
@@ -25,7 +26,7 @@ def configure(monkeypatch, tmp_path, approved=True):
     ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
     queue = ExecutionCommandQueue(str(tmp_path / "execution.sqlite3"))
     store = TelemetryStore(str(tmp_path / "execution.sqlite3"))
-    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    now = datetime.now(timezone.utc)
     server = "Exness-MT5Trial"
     store.save_heartbeat(MT5Heartbeat(server=server, terminal_connected=True, observed_at=now))
     store.save_account(MT5AccountSnapshot(
