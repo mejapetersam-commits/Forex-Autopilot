@@ -198,6 +198,43 @@ class TelemetryStore:
             )
         return len(rows)
 
+
+    def save_candle_batches(self, batches: list[MT5CandleBatch]) -> dict[str, int]:
+        """Atomically upsert multiple symbol/timeframe batches in one transaction."""
+        rows = []
+        counts: dict[str, int] = {}
+        for payload in batches:
+            key = f"{payload.symbol}:{payload.timeframe}"
+            counts[key] = len(payload.candles)
+            rows.extend(
+                (
+                    payload.symbol,
+                    payload.timeframe,
+                    candle.opened_at.isoformat(),
+                    candle.open,
+                    candle.high,
+                    candle.low,
+                    candle.close,
+                    candle.tick_volume,
+                )
+                for candle in payload.candles
+            )
+
+        with self._connect() as connection:
+            connection.executemany(
+                """INSERT INTO candles(
+                    symbol, timeframe, opened_at, open, high, low, close, tick_volume
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol, timeframe, opened_at) DO UPDATE SET
+                    open=excluded.open,
+                    high=excluded.high,
+                    low=excluded.low,
+                    close=excluded.close,
+                    tick_volume=excluded.tick_volume""",
+                rows,
+            )
+        return counts
+
     def candle_history(
         self, symbol: str, timeframe: str, limit: int = 500
     ) -> list[dict[str, Any]]:
