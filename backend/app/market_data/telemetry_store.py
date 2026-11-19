@@ -522,8 +522,7 @@ class TelemetryStore:
         ]
         immutable = {
             "terminal_id": 1, "environment": 2, "server": 3, "symbol": 4,
-            "order_type": 5, "initial_volume": 7, "price": 9,
-            "stop_loss": 10, "take_profit": 11, "magic": 12,
+            "order_type": 5, "initial_volume": 7, "magic": 12,
             "comment": 13, "setup_at": 14,
         }
         with self._connect() as connection:
@@ -546,7 +545,9 @@ class TelemetryStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(order_ticket) DO UPDATE SET
                     state=excluded.state, current_volume=excluded.current_volume,
-                    done_at=excluded.done_at, observed_at=excluded.observed_at
+                    price=excluded.price, stop_loss=excluded.stop_loss,
+                    take_profit=excluded.take_profit, done_at=excluded.done_at,
+                    observed_at=excluded.observed_at
                 WHERE excluded.observed_at >= execution_orders.observed_at""",
                 rows,
             )
