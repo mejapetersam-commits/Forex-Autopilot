@@ -294,6 +294,7 @@ void ProcessCommand(string response)
 
    string command_id = JsonString(response, "command_id");
    string intent_id = JsonString(response, "intent_id");
+   string broker_tag = JsonString(response, "broker_tag");
    string symbol = JsonString(response, "symbol");
    string side = JsonString(response, "side");
    bool volume_found = false, sl_found = false, tp_found = false;
@@ -301,7 +302,7 @@ void ProcessCommand(string response)
    double stop_loss = JsonNumber(response, "stop_loss", sl_found);
    double take_profit = JsonNumber(response, "take_profit", tp_found);
 
-   if(command_id == "" || intent_id == "" || symbol == "" || side == ""
+   if(command_id == "" || intent_id == "" || broker_tag == "" || symbol == "" || side == ""
       || !volume_found || !sl_found || !tp_found)
    {
       Print("FOREX AUTOPILOT EXECUTION: malformed command; no order attempted.");
@@ -333,9 +334,9 @@ void ProcessCommand(string response)
 
    bool sent = false;
    if(side == "buy")
-      sent = g_trade.Buy(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + StringSubstr(command_id, 4, 20));
+      sent = g_trade.Buy(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + broker_tag);
    else
-      sent = g_trade.Sell(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + intent_id);
+      sent = g_trade.Sell(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + broker_tag);
 
    uint retcode = g_trade.ResultRetcode();
    ulong order_ticket = g_trade.ResultOrder();
