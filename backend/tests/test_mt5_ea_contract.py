@@ -107,3 +107,10 @@ def test_read_only_mt5_bridge_uploads_broker_order_history():
         assert state in source
     assert "OrderSend(" not in source
     assert "CTrade" not in source
+
+
+def test_position_identity_is_transmitted_for_recovery_linking():
+    source = EA_SOURCE.read_text(encoding="utf-8")
+    assert "POSITION_IDENTIFIER" in source
+    assert "DEAL_POSITION_ID" in source
+    assert '"position_id"' in source
