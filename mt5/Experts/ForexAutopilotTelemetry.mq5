@@ -17,6 +17,7 @@ input int    InpCandleRefreshSeconds = 60;
 string g_symbols[];
 ulong  g_last_quote_time_msc[];
 ulong  g_last_snapshot_ms = 0;
+ulong  g_last_specification_ms = 0;
 
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
@@ -116,6 +117,52 @@ void SendAccountSnapshot()
       leverage, IsoUtcNow()
    );
    PostJson("/api/v1/mt5/account", body);
+}
+
+// Send broker-provided symbol contract values. These are read-only metadata;
+// tick value is reported by MT5 in the account deposit currency.
+void SendSymbolSpecifications()
+{
+   string account_currency = JsonEscape(AccountInfoString(ACCOUNT_CURRENCY));
+   for(int i = 0; i < ArraySize(g_symbols); i++)
+   {
+      string symbol = g_symbols[i];
+      if(symbol == "" || !SymbolSelect(symbol, true))
+         continue;
+
+      long digits = SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      long stops_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+      long freeze_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+      long trade_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE);
+      string base_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE));
+      string profit_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT));
+      string margin_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_MARGIN));
+
+      string body = StringFormat(
+         "{\\"symbol\\":\\"%s\\",\\"digits\\":%I64d,\\"point\\":%.10f,"
+         "\\"tick_size\\":%.10f,\\"tick_value_profit\\":%.10f,"
+         "\\"tick_value_loss\\":%.10f,\\"contract_size\\":%.4f,"
+         "\\"volume_min\\":%.4f,\\"volume_max\\":%.4f,\\"volume_step\\":%.4f,"
+         "\\"stops_level_points\\":%I64d,\\"freeze_level_points\\":%I64d,"
+         "\\"trade_allowed\\":%s,\\"base_currency\\":\\"%s\\","
+         "\\"profit_currency\\":\\"%s\\",\\"margin_currency\\":\\"%s\\","
+         "\\"account_currency\\":\\"%s\\",\\"observed_at\\":\\"%s\\"}",
+         JsonEscape(symbol), digits,
+         SymbolInfoDouble(symbol, SYMBOL_POINT),
+         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE),
+         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_PROFIT),
+         SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_LOSS),
+         SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE),
+         SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN),
+         SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX),
+         SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP),
+         stops_level, freeze_level,
+         trade_mode == SYMBOL_TRADE_MODE_DISABLED ? "false" : "true",
+         base_currency, profit_currency, margin_currency,
+         account_currency, IsoUtcNow()
+      );
+      PostJson("/api/v1/mt5/specifications", body);
+   }
 }
 
 // Sample each configured symbol independently on the one-second timer.
@@ -339,6 +386,7 @@ int OnInit()
 
    SendHeartbeat();
    SendAccountSnapshot();
+   SendSymbolSpecifications();
    SendQuotes();
    g_last_snapshot_ms = GetTickCount64();
    g_candle_next_upload_ms = GetTickCount64();
@@ -369,6 +417,12 @@ void OnTimer()
 
    SendQuotes();
    SendBulkCandleBatches(now_ms);
+
+   if(now_ms - g_last_specification_ms >= 300000)
+   {
+      SendSymbolSpecifications();
+      g_last_specification_ms = now_ms;
+   }
 
    if(now_ms - g_last_snapshot_ms >= snapshot_interval_ms)
    {
