@@ -442,10 +442,14 @@ def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_leng
 def record_execution_command_result(command_id: str, payload: MT5ExecutionResult):
     if payload.outcome not in {"acknowledged", "rejected", "unknown"}:
         raise HTTPException(status_code=422, detail="Unsupported terminal outcome.")
+    reported_intent = payload.result.get("intent_id")
+    if not isinstance(reported_intent, str) or not reported_intent.strip():
+        raise HTTPException(status_code=422, detail="Terminal result must identify its order intent.")
     try:
         result = execution_command_queue().record_result(
             command_id, terminal_id=payload.terminal_id,
             outcome=payload.outcome, result=payload.result,
+            expected_intent_id=reported_intent,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Execution command not found.")
@@ -456,9 +460,6 @@ def record_execution_command_result(command_id: str, payload: MT5ExecutionResult
     intent = ledger.get_intent(result["intent_id"])
     if intent is None:
         raise HTTPException(status_code=409, detail="Command has no matching order intent.")
-    reported_intent = payload.result.get("intent_id")
-    if reported_intent is not None and reported_intent != result["intent_id"]:
-        raise HTTPException(status_code=409, detail="Terminal result intent does not match command.")
     if intent["status"] == "approved":
         if result["status"] == "rejected":
             ledger.transition(result["intent_id"], "rejected",
