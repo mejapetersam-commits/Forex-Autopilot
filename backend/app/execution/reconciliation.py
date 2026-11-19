@@ -10,10 +10,22 @@ def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, 
     reports: list[dict[str, Any]] = []
     for intent in ledger.intents_requiring_reconciliation(limit):
         order_id = str(intent.get("broker_order_id") or "")
-        if not order_id.isdigit() or int(order_id) <= 0:
-            reports.append({"intent_id": intent["idempotency_key"], "status": intent["status"], "result": "awaiting_broker_order_id", "filled_volume_lots": 0.0})
-            continue
-        deals = store.execution_deals_for_order(order_id)
+        broker_tag = __import__("hashlib").sha256(
+            intent["idempotency_key"].encode("utf-8")
+        ).hexdigest()[:12]
+        if order_id.isdigit() and int(order_id) > 0:
+            deals = store.execution_deals_for_order(order_id)
+        else:
+            deals = store.execution_deals_for_tag(broker_tag)
+            order_ids = sorted({str(deal["order_ticket"]) for deal in deals})
+            if len(order_ids) > 1:
+                reports.append({"intent_id": intent["idempotency_key"], "status": intent["status"], "result": "manual_review_required", "reasons": ["multiple_broker_orders_match_intent_tag"], "broker_order_ids": order_ids})
+                continue
+            if len(order_ids) == 1:
+                order_id = order_ids[0]
+            else:
+                reports.append({"intent_id": intent["idempotency_key"], "status": intent["status"], "result": "awaiting_broker_history", "filled_volume_lots": 0.0})
+                continue
         entries = [d for d in deals if d["entry"] == "in"]
         if not entries:
             reports.append({"intent_id": intent["idempotency_key"], "broker_order_id": order_id, "status": intent["status"], "result": "awaiting_entry_deal_history", "filled_volume_lots": 0.0})
