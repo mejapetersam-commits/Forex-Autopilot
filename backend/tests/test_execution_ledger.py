@@ -48,3 +48,15 @@ def test_runtime_control_rejects_unknown_keys(tmp_path):
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     with pytest.raises(ValueError, match="Unsupported"):
         ledger.set_control("live_trading_enabled", True)
+
+
+
+def test_terminal_broker_state_can_be_marked_reconciled(tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "reconcile.sqlite3"))
+    ledger.create_intent("intent-reconcile", {"symbol": "EURUSDm"})
+    ledger.transition("intent-reconcile", "approved", event_type="preflight_passed")
+    ledger.transition("intent-reconcile", "submitted", event_type="submit")
+    ledger.transition("intent-reconcile", "acknowledged", event_type="broker_ack")
+    ledger.transition("intent-reconcile", "filled", event_type="broker_fill")
+    final = ledger.transition("intent-reconcile", "reconciled", event_type="broker_history_confirmed")
+    assert final["status"] == "reconciled"
