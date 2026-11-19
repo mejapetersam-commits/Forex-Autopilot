@@ -19,11 +19,12 @@ TRANSITIONS = {
     "acknowledged": {"partially_filled", "filled", "cancel_requested", "rejected", "unknown"},
     "partially_filled": {"partially_filled", "filled", "cancel_requested", "unknown"},
     "cancel_requested": {"cancelled", "partially_filled", "filled", "unknown"},
-    "unknown": {"acknowledged", "partially_filled", "filled", "cancelled", "rejected"},
+    "unknown": {"acknowledged", "partially_filled", "filled", "cancelled", "rejected", "reconciled"},
     "preflight_rejected": set(),
-    "filled": set(),
-    "cancelled": set(),
-    "rejected": set(),
+    "filled": {"reconciled"},
+    "cancelled": {"reconciled"},
+    "rejected": {"reconciled"},
+    "reconciled": set(),
 }
 
 
@@ -168,6 +169,7 @@ class ExecutionLedger:
         now = self._now()
         new_value = "1" if enabled else "0"
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             previous = connection.execute(
                 "SELECT control_value FROM runtime_controls WHERE control_key = ?",
                 (key,),
