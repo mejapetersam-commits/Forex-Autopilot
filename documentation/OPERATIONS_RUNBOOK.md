@@ -39,8 +39,11 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 
 - `/api/v1/mt5/specifications` (broker tick value, tick size, contract and volume constraints)
 - `/api/v1/mt5/execution/state` (read-only open-position and protective-level snapshot)
-- `POST /api/v1/mt5/execution/history` (authenticated demo broker-deal history ingestion)
+- `POST /api/v1/mt5/execution/history` (authenticated demo broker-deal history ingestion with POSITION_IDENTIFIER links)
+- `POST /api/v1/mt5/execution/orders` (authenticated pending/filled/cancelled/rejected/expired broker order history)
+- Admin-only `POST /api/v1/admin/strategy/dispatch/{symbol}/{timeframe}` (turns a closed-candle strategy candidate into a deterministic risk-preflighted intent; optional queue request is still subject to all demo gates)
 - Admin-only `GET /api/v1/monitoring/reconciliation` (compare unresolved intents with fresh matching terminal history)
+- `/api/v1/monitoring/execution-state` (position-to-deal links and protective-stop alerts)
 - `/api/v1/monitoring/execution-state` (snapshot freshness, daily-loss status and managed-position stop/target alerts)
 - Admin-only `POST /api/v1/admin/execution/intents/preflight` (server-derived preflight; does not submit an order)
 - Admin-only `POST /api/v1/admin/execution/intents/{intent_id}/queue` (revalidates current telemetry before queuing)
@@ -56,12 +59,13 @@ The local dashboard displays connection state, account telemetry, quotes, resear
 
 ## Current safety posture
 
-- `ForexAutopilotTelemetry.mq5` remains read-only and reports open positions every five seconds plus bounded demo deal-history snapshots every 60 seconds. It does not submit, modify or close orders.
+- `ForexAutopilotTelemetry.mq5` remains read-only and reports open positions every five seconds plus bounded demo deal and order-history snapshots every 60 seconds. It sends MT5 POSITION_IDENTIFIER and DEAL_POSITION_ID so the backend can link fills and exits to open positions. It does not submit, modify or close orders.
 - `ForexAutopilotDemoExecution.mq5` is a separate demo-only adapter. The previous version compiled locally with 0 errors and 0 warnings; recompile the latest broker-tag changes before any demo pilot.
 - The demo adapter's `InpEnableDemoExecution` defaults to `false` and refuses non-demo accounts.
 - Backend `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED` defaults to `false`; the execution symbol allowlist defaults to empty.
 - Dispatch requires an admin-authenticated request for an existing preflight-approved ledger intent, explicit demo configuration, an allowlisted symbol, and cleared pause/kill-switch controls.
-- Command delivery uses 60-second at-most-once leases. Expired leases move approved intents to `unknown`; broker-history reconciliation searches by broker order ticket or deterministic `FA:` intent tag. Missing history never becomes an inferred rejection or fill. Never blindly retry an order.
+- Command delivery uses 60-second at-most-once leases and is bound to the latest fresh demo terminal identity. Expired leases move approved intents to `unknown`; broker-history reconciliation searches by broker order ticket or deterministic `FA:` intent tag. The terminal persists the full command ID marker across restarts. Missing history never becomes an inferred rejection or fill. Never blindly retry an order.
+- Managed demo positions missing a valid stop-loss automatically activate both pause and the emergency kill switch. The guard never edits or closes broker positions; an operator must inspect broker state, apply a verified protective level manually, confirm the updated telemetry, and only then follow the controlled resume procedure.
 - Never enable live execution based on a successful build or a profitable-looking in-sample backtest.
 
 
@@ -79,8 +83,8 @@ Do not set `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED=true`, clear the pause/kill s
 
 1. Verify all symbol specifications from the connected broker: digits, point, tick size, tick value, contract size, volume minimum/maximum/step, stop and freeze levels, allowed filling modes, and trading sessions.
 2. Verify account currency and pip/tick-value conversion for each symbol.
-3. Confirm quote and account telemetry freshness and correct server/account environment.
-4. Exercise emergency halt, stale-data denial, spread denial, margin denial, duplicate-intent denial and protective-stop rejection.
+3. Confirm quote, account and position telemetry freshness, correct terminal identity/server, and position-to-deal links.
+4. Exercise emergency halt, stale-data denial, spread denial, margin denial, duplicate-intent denial, terminal restart quarantine and automatic protective-stop kill-switch activation.
 5. Validate the broker adapter on a dedicated demo account, including order acknowledgement, partial fills, re-quotes, rejects, disconnects, restarts and reconciliation.
 6. Run a continuous forward-demo trial across different market conditions and reconcile every intended order against broker-side history.
 7. Keep a human-operated emergency stop available.
