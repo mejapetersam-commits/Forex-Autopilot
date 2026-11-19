@@ -36,6 +36,15 @@ class ExecutionSnapshot:
     max_open_positions: int = 2
     max_daily_loss_pct: float = 1.0
     trading_paused: bool = True
+    require_broker_specification: bool = False
+    broker_trade_allowed: bool | None = None
+    broker_volume_min: float | None = None
+    broker_volume_max: float | None = None
+    broker_volume_step: float | None = None
+    broker_tick_size: float | None = None
+    broker_tick_value_loss: float | None = None
+    max_volume_lots: float = 0.01
+    max_risk_per_trade_pct: float = 0.25
 
 
 def evaluate_execution_preflight(
@@ -73,6 +82,36 @@ def evaluate_execution_preflight(
         reasons.append("Side must be buy or sell.")
     if intent.volume_lots <= 0:
         reasons.append("Volume must be positive.")
+    if intent.volume_lots > snapshot.max_volume_lots:
+        reasons.append("Volume exceeds the configured local per-trade ceiling.")
+    if snapshot.require_broker_specification:
+        spec_values = (
+            snapshot.broker_volume_min, snapshot.broker_volume_max,
+            snapshot.broker_volume_step, snapshot.broker_tick_size,
+            snapshot.broker_tick_value_loss,
+        )
+        if snapshot.broker_trade_allowed is not True or any(
+            value is None or not isfinite(float(value)) or float(value) <= 0
+            for value in spec_values
+        ):
+            reasons.append("Fresh, trade-enabled broker symbol specifications are required.")
+        else:
+            minimum = float(snapshot.broker_volume_min)
+            maximum = float(snapshot.broker_volume_max)
+            step = float(snapshot.broker_volume_step)
+            if intent.volume_lots < minimum or intent.volume_lots > maximum:
+                reasons.append("Volume is outside broker minimum/maximum limits.")
+            elif abs((intent.volume_lots - minimum) / step - round((intent.volume_lots - minimum) / step)) > 1e-6:
+                reasons.append("Volume does not align with the broker volume step.")
+            elif intent.stop_loss is not None and snapshot.account_equity > 0:
+                entry = snapshot.quote_ask if side == "buy" else snapshot.quote_bid
+                risk_cash = (
+                    abs(entry - intent.stop_loss) / float(snapshot.broker_tick_size)
+                    * float(snapshot.broker_tick_value_loss) * intent.volume_lots
+                )
+                risk_pct = risk_cash / snapshot.account_equity * 100.0
+                if risk_pct > snapshot.max_risk_per_trade_pct:
+                    reasons.append("Estimated stop-loss risk exceeds the per-trade risk ceiling.")
     if intent.stop_loss is None or not isfinite(float(intent.stop_loss)) or intent.stop_loss <= 0:
         reasons.append("A valid protective stop-loss is mandatory.")
     if intent.take_profit is None or not isfinite(float(intent.take_profit)) or intent.take_profit <= 0:
