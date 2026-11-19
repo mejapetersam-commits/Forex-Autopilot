@@ -70,10 +70,15 @@ def evaluate_execution_preflight(
         reasons.append("Side must be buy or sell.")
     if intent.volume_lots <= 0:
         reasons.append("Volume must be positive.")
-    if intent.stop_loss is None or intent.stop_loss <= 0:
+    if intent.stop_loss is None or not isfinite(float(intent.stop_loss)) or intent.stop_loss <= 0:
         reasons.append("A valid protective stop-loss is mandatory.")
-    if intent.take_profit is None or intent.take_profit <= 0:
+    if intent.take_profit is None or not isfinite(float(intent.take_profit)) or intent.take_profit <= 0:
         reasons.append("A valid take-profit is mandatory.")
+    if intent.stop_loss is not None and intent.take_profit is not None:
+        if side == "buy" and not (intent.stop_loss < snapshot.quote_bid and intent.take_profit > snapshot.quote_ask):
+            reasons.append("Buy stop-loss must be below bid and take-profit above ask.")
+        if side == "sell" and not (intent.stop_loss > snapshot.quote_ask and intent.take_profit < snapshot.quote_bid):
+            reasons.append("Sell stop-loss must be above ask and take-profit below bid.")
     if snapshot.account_equity <= 0 or snapshot.free_margin <= 0:
         reasons.append("Account equity and free margin must be positive.")
     if snapshot.quote_bid <= 0 or snapshot.quote_ask <= snapshot.quote_bid:
