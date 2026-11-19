@@ -127,3 +127,12 @@ def test_command_polling_is_disabled_by_default(monkeypatch, tmp_path):
     response = main.lease_next_execution_command("demo-terminal")
     assert response["command"] is None
     assert response["reason"] == "demo_execution_disabled"
+
+
+def test_dispatch_refuses_non_demo_environment(monkeypatch, tmp_path):
+    ledger, queue, key = configure(monkeypatch, tmp_path)
+    monkeypatch.setenv("FOREX_AUTOPILOT_ENVIRONMENT", "live")
+    with pytest.raises(HTTPException) as exc:
+        main.queue_approved_demo_intent(key)
+    assert exc.value.status_code == 403
+    assert queue.lease_next(terminal_id="demo-terminal") is None
