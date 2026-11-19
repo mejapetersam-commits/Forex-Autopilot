@@ -223,11 +223,13 @@ def reconcile_broker_history(
         full_fill = isclose(filled, requested, rel_tol=0.0, abs_tol=1e-8)
         partial_fill = 0 < filled < requested
         deal_tickets = sorted(deal["deal_ticket"] for deal in entries)
+        position_ids = sorted({str(deal["position_id"]) for deal in entries if deal.get("position_id")})
         details = {
             "broker_order_id": order_id,
             "filled_volume_lots": round(filled, 8),
             "requested_volume_lots": requested,
             "deal_tickets": deal_tickets,
+            "position_ids": position_ids,
             "evidence": "authenticated_mt5_demo_deal_history",
         }
 
@@ -273,6 +275,7 @@ def reconcile_broker_history(
             "requested_volume_lots": requested,
             "deal_count": len(entries),
             "deal_tickets": deal_tickets,
+            "position_ids": position_ids,
         })
 
     needs_review = any(
