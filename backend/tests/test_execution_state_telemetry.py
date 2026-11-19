@@ -70,7 +70,7 @@ def test_execution_state_monitor_flags_missing_protective_stop(monkeypatch, tmp_
     monkeypatch.setenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001")
     result = main.latest_execution_state()
     assert result["status"] == "critical"
-    assert result["issues"] == ["managed_position_missing_protective_level"]
+    assert result["issues"] == ["managed_position_missing_or_invalid_stop_loss"]
     assert result["protective_stop_alerts"][0]["missing_stop_loss"] is True
 
 
