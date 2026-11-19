@@ -384,35 +384,29 @@ void SendExecutionHistory()
 // Read-only broker order-history snapshot; this function never sends or edits orders.
 string BrokerOrderType(long value)
 {
-   switch(value)
-   {
-      case ORDER_TYPE_BUY: return "buy";
-      case ORDER_TYPE_SELL: return "sell";
-      case ORDER_TYPE_BUY_LIMIT: return "buy_limit";
-      case ORDER_TYPE_SELL_LIMIT: return "sell_limit";
-      case ORDER_TYPE_BUY_STOP: return "buy_stop";
-      case ORDER_TYPE_SELL_STOP: return "sell_stop";
-      case ORDER_TYPE_BUY_STOP_LIMIT: return "buy_stop_limit";
-      case ORDER_TYPE_SELL_STOP_LIMIT: return "sell_stop_limit";
-   }
+   if(value == ORDER_TYPE_BUY) return "buy";
+   if(value == ORDER_TYPE_SELL) return "sell";
+   if(value == ORDER_TYPE_BUY_LIMIT) return "buy_limit";
+   if(value == ORDER_TYPE_SELL_LIMIT) return "sell_limit";
+   if(value == ORDER_TYPE_BUY_STOP) return "buy_stop";
+   if(value == ORDER_TYPE_SELL_STOP) return "sell_stop";
+   if(value == ORDER_TYPE_BUY_STOP_LIMIT) return "buy_stop_limit";
+   if(value == ORDER_TYPE_SELL_STOP_LIMIT) return "sell_stop_limit";
    return "";
 }
 
 string BrokerOrderState(long value)
 {
-   switch(value)
-   {
-      case ORDER_STATE_STARTED: return "started";
-      case ORDER_STATE_PLACED: return "placed";
-      case ORDER_STATE_CANCELED: return "canceled";
-      case ORDER_STATE_PARTIAL: return "partial";
-      case ORDER_STATE_FILLED: return "filled";
-      case ORDER_STATE_REJECTED: return "rejected";
-      case ORDER_STATE_EXPIRED: return "expired";
-      case ORDER_STATE_REQUEST_ADD: return "request_add";
-      case ORDER_STATE_REQUEST_MODIFY: return "request_modify";
-      case ORDER_STATE_REQUEST_CANCEL: return "request_cancel";
-   }
+   if(value == ORDER_STATE_STARTED) return "started";
+   if(value == ORDER_STATE_PLACED) return "placed";
+   if(value == ORDER_STATE_CANCELED) return "canceled";
+   if(value == ORDER_STATE_PARTIAL) return "partial";
+   if(value == ORDER_STATE_FILLED) return "filled";
+   if(value == ORDER_STATE_REJECTED) return "rejected";
+   if(value == ORDER_STATE_EXPIRED) return "expired";
+   if(value == ORDER_STATE_REQUEST_ADD) return "request_add";
+   if(value == ORDER_STATE_REQUEST_MODIFY) return "request_modify";
+   if(value == ORDER_STATE_REQUEST_CANCEL) return "request_cancel";
    return "";
 }
 
