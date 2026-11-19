@@ -208,10 +208,10 @@ double CalculateDailyLossPct()
       if(deal_ticket == 0)
          continue;
       long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+      // Use deal types supported across MT5 terminal builds.
       if(deal_type == DEAL_TYPE_BALANCE || deal_type == DEAL_TYPE_CREDIT
          || deal_type == DEAL_TYPE_BONUS || deal_type == DEAL_TYPE_CORRECTION
-         || deal_type == DEAL_TYPE_INTEREST || deal_type == DEAL_TYPE_DIVIDEND
-         || deal_type == DEAL_TYPE_DIVIDEND_FRANKED || deal_type == DEAL_TYPE_TAX)
+         || deal_type == DEAL_TYPE_INTEREST)
       {
          Print("FOREX AUTOPILOT: non-trading balance operation detected today; daily-loss gate will fail closed.");
          return 1000.0;
@@ -311,7 +311,8 @@ void SendQuotes()
       if(!SymbolInfoTick(symbol, tick) || tick.bid <= 0 || tick.ask < tick.bid)
          continue;
 
-      if(tick.time_msc == 0 || tick.time_msc <= g_last_quote_time_msc[i])
+      ulong tick_time_msc = (ulong)tick.time_msc;
+      if(tick_time_msc == (ulong)0 || tick_time_msc <= g_last_quote_time_msc[i])
          continue;
 
       string body = StringFormat(
@@ -322,7 +323,7 @@ void SendQuotes()
       // Advance the per-symbol tick marker only after a successful delivery.
       // Failed requests are retried on the next timer cycle.
       if(PostJson("/api/v1/mt5/quote", body))
-         g_last_quote_time_msc[i] = tick.time_msc;
+         g_last_quote_time_msc[i] = tick_time_msc;
    }
 }
 
