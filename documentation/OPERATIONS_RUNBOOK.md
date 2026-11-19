@@ -38,6 +38,8 @@ The API and gateway are bound to loopback addresses. Do not expose the API direc
 Use the `X-Bridge-Token` header for authenticated endpoints:
 
 - `/api/v1/mt5/specifications` (broker tick value, tick size, contract and volume constraints)
+- `/api/v1/mt5/execution/state` (read-only open-position and protective-level snapshot)
+- `/api/v1/monitoring/execution-state` (snapshot freshness and managed-position stop/target alerts)
 - `/api/v1/mt5/history/candles/{symbol}/{timeframe}`
 - `/api/v1/market-analysis/{symbol}/{timeframe}`
 - `/api/v1/strategy/signal/{symbol}/{timeframe}`
@@ -49,7 +51,7 @@ The local dashboard displays connection state, account telemetry, quotes, resear
 
 ## Current safety posture
 
-- `ForexAutopilotTelemetry.mq5` remains read-only.
+- `ForexAutopilotTelemetry.mq5` remains read-only and now reports open positions, ticket, side, volume, entry, SL/TP and magic number every five seconds.
 - `ForexAutopilotDemoExecution.mq5` is a separate demo-only adapter source; it has not yet been compiled in MetaEditor or validated against a broker.
 - The demo adapter's `InpEnableDemoExecution` defaults to `false` and refuses non-demo accounts.
 - Backend `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED` defaults to `false`; the execution symbol allowlist defaults to empty.
