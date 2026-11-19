@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, StrictBool
 from pathlib import Path
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
@@ -228,6 +228,32 @@ def system_status():
 
 
 @app.post(
+    "/api/v1/mt5/specifications",
+    dependencies=[Depends(require_bridge_token)],
+)
+def mt5_symbol_specification(payload: MT5SymbolSpecification):
+    telemetry_store().save_symbol_specification(payload)
+    return {
+        "accepted": True,
+        "stored": True,
+        "symbol": payload.symbol,
+        "digits": payload.digits,
+        "tick_size": payload.tick_size,
+        "tick_value_loss": payload.tick_value_loss,
+        "account_currency": payload.account_currency,
+        "trading_enabled": False,
+    }
+
+
+@app.get(
+    "/api/v1/mt5/specifications",
+    dependencies=[Depends(require_bridge_token)],
+)
+def latest_mt5_symbol_specifications():
+    return {"data": telemetry_store().latest_symbol_specifications()}
+
+
+@app.post(
     "/api/v1/mt5/heartbeat",
     dependencies=[Depends(require_bridge_token)],
 )
@@ -377,6 +403,40 @@ def strategy_signal(
     }
 
 
+def resolve_backtest_pip_values(
+    store: TelemetryStore,
+    symbol: str,
+    pip_size: float | None,
+    pip_value_per_lot: float | None,
+) -> tuple[float, float, str]:
+    """Use caller overrides or derive pip units from broker account-currency tick metadata."""
+    if pip_size is not None and pip_value_per_lot is not None:
+        return pip_size, pip_value_per_lot, "explicit_request_values"
+    specification = store.latest_symbol_specification(symbol)
+    if specification is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No broker symbol specification is stored; send MT5 specification telemetry or provide both pip inputs.",
+        )
+    derived_pip_size = pip_size
+    if derived_pip_size is None:
+        derived_pip_size = specification["point"] * (
+            10 if specification["digits"] in (3, 5) else 1
+        )
+    derived_pip_value = pip_value_per_lot
+    if derived_pip_value is None:
+        derived_pip_value = (
+            specification["tick_value_loss"] * derived_pip_size
+            / specification["tick_size"]
+        )
+    if derived_pip_value <= 0 or derived_pip_size <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Broker specification does not provide usable pip valuation.",
+        )
+    return derived_pip_size, derived_pip_value, "broker_symbol_specification"
+
+
 @app.get(
     "/api/v1/backtests/run/{symbol}/{timeframe}",
     dependencies=[Depends(require_bridge_token)],
@@ -384,11 +444,11 @@ def strategy_signal(
 def run_historical_backtest(
     symbol: str,
     timeframe: str,
-    pip_value_per_lot: float = Query(..., gt=0),
+    pip_value_per_lot: float | None = Query(default=None, gt=0),
     limit: int = Query(default=5000, ge=61, le=5000),
     initial_equity: float = Query(default=10000, gt=0),
     risk_per_trade_pct: float = Query(default=0.25, gt=0, le=1.0),
-    pip_size: float = Query(default=0.0001, gt=0),
+    pip_size: float | None = Query(default=None, gt=0),
     spread_pips: float = Query(default=1.0, ge=0, le=100),
     slippage_pips_per_side: float = Query(default=0.2, ge=0, le=100),
     commission_per_lot_per_side: float = Query(default=3.5, ge=0, le=1000),
@@ -396,12 +456,16 @@ def run_historical_backtest(
     """Run an authenticated historical simulation on stored MT5 OHLC candles."""
     normalized_symbol = symbol.strip().upper()
     normalized_timeframe = timeframe.strip().upper()
-    candles = telemetry_store().candle_history(normalized_symbol, normalized_timeframe, limit)
+    store = telemetry_store()
+    candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
+    resolved_pip_size, resolved_pip_value, pip_value_source = resolve_backtest_pip_values(
+        store, normalized_symbol, pip_size, pip_value_per_lot
+    )
     config = BacktestConfig(
         initial_equity=initial_equity,
         risk_per_trade_pct=risk_per_trade_pct,
-        pip_size=pip_size,
-        pip_value_per_lot=pip_value_per_lot,
+        pip_size=resolved_pip_size,
+        pip_value_per_lot=resolved_pip_value,
         spread_pips=spread_pips,
         slippage_pips_per_side=slippage_pips_per_side,
         commission_per_lot_per_side=commission_per_lot_per_side,
@@ -410,7 +474,10 @@ def run_historical_backtest(
     return {
         "symbol": normalized_symbol,
         "timeframe": normalized_timeframe,
-        "account_currency_note": "pip_value_per_lot must be supplied in the account currency for one standard lot.",
+        "account_currency_note": "Pip value is in account currency for one standard lot.",
+        "pip_size_used": resolved_pip_size,
+        "pip_value_per_lot_used": resolved_pip_value,
+        "pip_value_source": pip_value_source,
         **result,
         "trading_enabled": False,
         "execution_mode": "disabled",
