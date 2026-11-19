@@ -11,7 +11,7 @@ def valid_inputs():
     )
     snapshot = ExecutionSnapshot(
         environment="demo", trading_enabled=True, kill_switch_active=False,
-        broker_connected=True, account_equity=1000, free_margin=900,
+        trading_paused=False, broker_connected=True, account_equity=1000, free_margin=900,
         quote_bid=1.1000, quote_ask=1.1001, quote_age_seconds=0.5,
         account_age_seconds=1, open_positions=0, daily_loss_pct=0.1,
         symbol_allowlist=("EURUSDm",), max_spread_pips=2, pip_size=0.0001,
