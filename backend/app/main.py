@@ -462,6 +462,15 @@ def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_leng
         return {"command": None, "reason": "demo_environment_required"}
     if os.getenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false").strip().lower() != "true":
         return {"command": None, "reason": "demo_execution_disabled"}
+    terminal = telemetry_store().latest_execution_state()
+    if terminal is None:
+        return {"command": None, "reason": "terminal_snapshot_missing"}
+    observed = datetime.fromisoformat(terminal["observed_at"].replace("Z", "+00:00"))
+    terminal_age = (datetime.now(timezone.utc) - observed).total_seconds()
+    if terminal["environment"] != "demo" or terminal["terminal_id"] != terminal_id:
+        return {"command": None, "reason": "terminal_identity_mismatch"}
+    if terminal_age < -5 or terminal_age > 30:
+        return {"command": None, "reason": "terminal_snapshot_stale"}
     controls = execution_ledger().controls()
     if controls["trading_paused"] or controls["kill_switch_active"]:
         return {"command": None, "reason": "execution_safeguards_active"}
