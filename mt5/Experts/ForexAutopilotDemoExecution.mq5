@@ -3,7 +3,7 @@
 // This EA refuses to run unless explicitly enabled AND the logged-in account is DEMO.
 
 #property strict
-#property version   "1.100"
+#property version   "1.101"
 #property description "FOREX AUTOPILOT demo-only execution adapter"
 
 #include <Trade/Trade.mqh>
@@ -146,17 +146,6 @@ bool HttpPostJson(string route, string body)
       return false;
    }
    return true;
-}
-
-uint CommandHash(string value)
-{
-   uint hash = 2166136261;
-   for(int i = 0; i < StringLen(value); i++)
-   {
-      hash ^= (uint)StringGetCharacter(value, i);
-      hash *= 16777619;
-   }
-   return hash;
 }
 
 bool WasAttempted(string command_id)
