@@ -37,7 +37,7 @@ def test_full_fill_reconciliation_is_idempotent(tmp_path):
     store.save_execution_history(history(deal(3,12345,0.01)))
     reconcile_broker_history(ledger,store,expected_magic=61119001)
     reconcile_broker_history(ledger,store,expected_magic=61119001)
-    assert ledger.get_intent(key)["status"]=="filled" and len(ledger.audit_events(key))==5
+    assert ledger.get_intent(key)["status"]=="reconciled" and len(ledger.audit_events(key))==6
 
 
 @pytest.mark.parametrize("kwargs,reason",[({"magic":99},"broker_magic_mismatch"),({"symbol":"GBPUSDm"},"broker_symbol_mismatch"),({"side":"sell"},"broker_side_mismatch")])
@@ -78,3 +78,41 @@ def test_unknown_intent_can_recover_by_broker_comment_tag(tmp_path):
     result=reconcile_broker_history(ledger,store,expected_magic=61119001,expected_terminal_id="demo-terminal",expected_server="Exness-MT5Trial")
     assert result["results"][0]["status"]=="filled"
     assert ledger.get_intent(key)["status"]=="filled"
+
+
+
+def test_partial_fill_can_later_reconcile_to_full_fill(tmp_path):
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger)
+    first=deal(10,12345,0.004)
+    store.save_execution_history(history(first))
+    partial=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert partial["results"][0]["result"]=="reconciled_partial_fill"
+    assert ledger.get_intent(key)["status"]=="partially_filled"
+
+    store.save_execution_history(history(first,deal(11,12345,0.006)))
+    complete=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert complete["results"][0]["result"]=="reconciled_full_fill"
+    assert ledger.get_intent(key)["status"]=="reconciled"
+
+
+def test_conflicting_reuse_of_broker_deal_ticket_is_rejected(tmp_path):
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    original=deal(12,12345,0.01)
+    store.save_execution_history(history(original))
+    conflicting=original.model_copy(update={"volume_lots":0.02})
+    with pytest.raises(ValueError,match="Conflicting broker evidence"):
+        store.save_execution_history(history(conflicting))
+
+
+def test_reversal_deal_requires_manual_review(tmp_path):
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger)
+    reversal=deal(13,12345,0.01).model_copy(update={"entry":"inout"})
+    store.save_execution_history(history(reversal))
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert result["results"][0]["result"]=="manual_review_required"
+    assert "broker_reversal_deal_requires_position_review" in result["results"][0]["reasons"]
+    assert ledger.get_intent(key)["status"]=="acknowledged"
