@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5ExecutionState, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5ExecutionHistory, MT5ExecutionState, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
 
 
 class TelemetryStore:
@@ -103,6 +103,25 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_state_observed
                     ON execution_state_snapshots(observed_at DESC);
+
+                CREATE TABLE IF NOT EXISTS execution_deals (
+                    deal_ticket TEXT PRIMARY KEY,
+                    order_ticket TEXT NOT NULL,
+                    terminal_id TEXT NOT NULL,
+                    environment TEXT NOT NULL CHECK(environment = 'demo'),
+                    server TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    entry TEXT NOT NULL,
+                    volume_lots REAL NOT NULL,
+                    price REAL NOT NULL,
+                    magic INTEGER NOT NULL,
+                    comment TEXT NOT NULL,
+                    occurred_at TEXT NOT NULL,
+                    observed_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_execution_deals_order
+                    ON execution_deals(order_ticket, entry, occurred_at);
 
                 CREATE TABLE IF NOT EXISTS candles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,3 +405,54 @@ class TelemetryStore:
             item["trade_allowed"] = bool(item["trade_allowed"])
             result.append(item)
         return result
+
+
+    def save_execution_history(self, payload: MT5ExecutionHistory) -> int:
+        """Idempotently upsert broker deals; duplicate tickets update the same row."""
+        rows = [
+            (
+                deal.deal_ticket, deal.order_ticket, payload.terminal_id,
+                payload.environment, payload.server, deal.symbol, deal.side,
+                deal.entry, deal.volume_lots, deal.price, deal.magic,
+                deal.comment, deal.occurred_at.isoformat(),
+                payload.observed_at.isoformat(),
+            )
+            for deal in payload.deals
+        ]
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.executemany(
+                """INSERT INTO execution_deals(
+                    deal_ticket, order_ticket, terminal_id, environment, server,
+                    symbol, side, entry, volume_lots, price, magic, comment,
+                    occurred_at, observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(deal_ticket) DO UPDATE SET
+                    order_ticket=excluded.order_ticket,
+                    terminal_id=excluded.terminal_id,
+                    environment=excluded.environment,
+                    server=excluded.server,
+                    symbol=excluded.symbol,
+                    side=excluded.side,
+                    entry=excluded.entry,
+                    volume_lots=excluded.volume_lots,
+                    price=excluded.price,
+                    magic=excluded.magic,
+                    comment=excluded.comment,
+                    occurred_at=excluded.occurred_at,
+                    observed_at=excluded.observed_at""",
+                rows,
+            )
+        return len(rows)
+
+    def execution_deals_for_order(self, order_ticket: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT deal_ticket, order_ticket, terminal_id, environment,
+                          server, symbol, side, entry, volume_lots, price,
+                          magic, comment, occurred_at, observed_at
+                   FROM execution_deals WHERE order_ticket=?
+                   ORDER BY occurred_at, deal_ticket""",
+                (str(order_ticket),),
+            ).fetchall()
+        return [dict(row) for row in rows]
