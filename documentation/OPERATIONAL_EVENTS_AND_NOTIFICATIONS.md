@@ -1,0 +1,46 @@
+# Operational events and notification outbox
+
+## What is implemented
+
+`app.operations.event_outbox.EventOutbox` provides a durable event journal and
+notification outbox in the configured telemetry SQLite database. Events are
+idempotent by caller-supplied event key. Severity is restricted to info, warning
+and critical. Event payloads are JSON-encoded with non-finite numbers rejected.
+
+Outbox workers can lease due messages, record delivery success, or schedule a
+retry with a bounded attempt count. Lease tokens prevent a stale worker from
+acknowledging a message after another worker has reclaimed its expired lease.
+Terminal failures become `dead` for operator review. Event records themselves
+are never updated by this module.
+
+## Current limitation
+
+This is the persistence and worker-coordination layer, not a live notification
+service. No email, SMS, Telegram, Slack or webhook request is sent. A provider
+adapter must be added separately with explicit credentials, destination
+allowlists, TLS, strict timeouts, payload redaction, rate limits and delivery
+tests. Do not store credentials in event payloads.
+
+## Example use
+
+```python
+from app.operations.event_outbox import EventOutbox
+
+events = EventOutbox()
+event = events.record(
+    event_key="monitoring:heartbeat-missing:2026-11-19T12",
+    event_type="HEARTBEAT_MISSING",
+    severity="critical",
+    message="MT5 heartbeat is missing.",
+    payload={"component": "mt5"},
+)
+```
+
+A worker leases messages with `lease_due()`, sends them through an approved
+provider adapter, then calls `complete()`. Failed attempts are rescheduled;
+after the configured maximum, the message is marked dead. The worker must not
+automatically convert notification failure into a trading-state change.
+
+The event journal is operational observability only. It does not authorise,
+queue or execute trades. Trading remains disabled by the system's existing
+configuration and controls.
