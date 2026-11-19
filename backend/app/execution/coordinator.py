@@ -5,7 +5,6 @@ be added and separately validated before any order can be sent.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 
 from app.execution.ledger import ExecutionLedger
