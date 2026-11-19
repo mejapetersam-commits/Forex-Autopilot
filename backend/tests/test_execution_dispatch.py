@@ -304,3 +304,34 @@ def test_expired_command_lease_marks_approved_intent_unknown(monkeypatch, tmp_pa
     assert response["command"] is None
     assert ledger.get_intent(key)["status"] == "unknown"
     assert queue.expired_commands()[0]["intent_id"] == key
+
+
+def test_command_lease_requires_matching_fresh_demo_terminal(monkeypatch, tmp_path):
+    ledger, queue, key = configure(monkeypatch, tmp_path)
+    main.queue_approved_demo_intent(key)
+    wrong = main.lease_next_execution_command("another-terminal")
+    assert wrong["command"] is None
+    assert wrong["reason"] == "terminal_identity_mismatch"
+    correct = main.lease_next_execution_command("demo-terminal")
+    assert correct["command"]["intent_id"] == key
+
+
+def test_strategy_candidate_becomes_preflighted_intent_without_auto_queue(monkeypatch, tmp_path):
+    ledger, queue, _ = configure(monkeypatch, tmp_path)
+    store = main.telemetry_store()
+    monkeypatch.setattr(
+        store, "candle_history",
+        lambda symbol, timeframe, limit: [{"opened_at": "2026-11-19T12:00:00+00:00"}],
+    )
+    monkeypatch.setattr(main, "evaluate_signal", lambda candles, config: {
+        "signal": "buy", "research_status": "unvalidated_hypothesis",
+        "strategy": {"version": "0.1.0"},
+        "candidate_levels": {"stop_loss": 1.0991, "take_profit": 1.102},
+    })
+    request = main.StrategyDispatchRequest(volume_lots=0.01, queue_if_approved=False)
+    result = main.dispatch_strategy_candidate("EURUSDm", "M15", request)
+    assert result["status"] == "approved"
+    assert result["execution_queued"] is False
+    assert result["trading_enabled"] is False
+    assert ledger.get_intent(result["intent_id"])["status"] == "approved"
+    assert queue.lease_next(terminal_id="demo-terminal") is None
