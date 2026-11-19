@@ -179,3 +179,62 @@ class MT5CandleBulk(BaseModel):
         if total > 4000:
             raise ValueError("Bulk candle upload cannot exceed 4000 candles.")
         return self
+
+
+
+class MT5SymbolSpecification(BaseModel):
+    """Broker-provided contract and volume metadata in the account currency."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=32)
+    digits: int = Field(ge=0, le=10)
+    point: float = Field(gt=0)
+    tick_size: float = Field(gt=0)
+    tick_value_profit: float = Field(ge=0)
+    tick_value_loss: float = Field(gt=0)
+    contract_size: float = Field(gt=0)
+    volume_min: float = Field(gt=0)
+    volume_max: float = Field(gt=0)
+    volume_step: float = Field(gt=0)
+    stops_level_points: int = Field(ge=0)
+    freeze_level_points: int = Field(ge=0)
+    trade_allowed: bool
+    base_currency: str = Field(min_length=3, max_length=8)
+    profit_currency: str = Field(min_length=3, max_length=8)
+    margin_currency: str = Field(min_length=3, max_length=8)
+    account_currency: str = Field(min_length=3, max_length=8)
+    observed_at: datetime
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("base_currency", "profit_currency", "margin_currency", "account_currency")
+    @classmethod
+    def normalize_currencies(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator(
+        "point", "tick_size", "tick_value_profit", "tick_value_loss",
+        "contract_size", "volume_min", "volume_max", "volume_step",
+    )
+    @classmethod
+    def require_finite_spec_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Broker specification values must be finite.")
+        return value
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Specification timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_volume_constraints(self):
+        if self.volume_max < self.volume_min or self.volume_step > self.volume_max:
+            raise ValueError("Invalid broker volume constraints.")
+        return self
