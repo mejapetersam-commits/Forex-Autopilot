@@ -107,6 +107,7 @@ class TelemetryStore:
                 CREATE TABLE IF NOT EXISTS execution_deals (
                     deal_ticket TEXT PRIMARY KEY,
                     order_ticket TEXT NOT NULL,
+                    position_id TEXT NOT NULL DEFAULT '',
                     terminal_id TEXT NOT NULL,
                     environment TEXT NOT NULL CHECK(environment = 'demo'),
                     server TEXT NOT NULL,
@@ -166,6 +167,20 @@ class TelemetryStore:
                     "PRAGMA table_info(execution_state_snapshots)"
                 ).fetchall()
             }
+            deal_columns = {
+                row["name"] for row in connection.execute(
+                    "PRAGMA table_info(execution_deals)"
+                ).fetchall()
+            }
+            if "position_id" not in deal_columns:
+                connection.execute(
+                    "ALTER TABLE execution_deals ADD COLUMN position_id TEXT NOT NULL DEFAULT ''"
+                )
+            position_columns = {
+                row["name"] for row in connection.execute(
+                    "PRAGMA table_info(execution_state_snapshots)"
+                ).fetchall()
+            }
             if "daily_loss_pct" not in execution_columns:
                 connection.execute(
                     "ALTER TABLE execution_state_snapshots "
@@ -199,6 +214,10 @@ class TelemetryStore:
             return None
         result = dict(row)
         result["positions"] = json.loads(result.pop("payload_json"))
+        for position in result["positions"]:
+            position["related_deals"] = self.execution_deals_for_position(
+                position.get("position_id", "")
+            ) if position.get("position_id") else []
         result["positions_count"] = len(result["positions"])
         return result
 
@@ -433,7 +452,7 @@ class TelemetryStore:
         """Insert broker deals idempotently and reject conflicting reuse of a deal ticket."""
         rows = [
             (
-                deal.deal_ticket, deal.order_ticket, payload.terminal_id,
+                deal.deal_ticket, deal.order_ticket, deal.position_id, payload.terminal_id,
                 payload.environment, payload.server, deal.symbol, deal.side,
                 deal.entry, deal.volume_lots, deal.price, deal.magic,
                 deal.comment, deal.occurred_at.isoformat(),
@@ -442,7 +461,7 @@ class TelemetryStore:
             for deal in payload.deals
         ]
         immutable_columns = (
-            "order_ticket", "terminal_id", "environment", "server", "symbol",
+            "order_ticket", "position_id", "terminal_id", "environment", "server", "symbol",
             "side", "entry", "volume_lots", "price", "magic", "comment",
             "occurred_at",
         )
@@ -460,14 +479,27 @@ class TelemetryStore:
                             )
             connection.executemany(
                 """INSERT OR IGNORE INTO execution_deals(
-                    deal_ticket, order_ticket, terminal_id, environment, server,
+                    deal_ticket, order_ticket, position_id, terminal_id, environment, server,
                     symbol, side, entry, volume_lots, price, magic, comment,
                     occurred_at, observed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 rows,
             )
         return len(rows)
 
+
+
+    def execution_deals_for_position(self, position_id: str) -> list[dict[str, Any]]:
+        """Return broker deals linked by MT5's stable POSITION_IDENTIFIER."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT deal_ticket, order_ticket, position_id, symbol, side, entry,
+                          volume_lots, price, magic, comment, occurred_at
+                   FROM execution_deals WHERE position_id=?
+                   ORDER BY occurred_at, deal_ticket""",
+                (str(position_id),),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def save_execution_order_history(self, payload: MT5ExecutionOrderHistory) -> int:
         """Upsert broker order snapshots while rejecting immutable ticket conflicts."""
