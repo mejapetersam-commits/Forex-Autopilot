@@ -408,7 +408,7 @@ class TelemetryStore:
 
 
     def save_execution_history(self, payload: MT5ExecutionHistory) -> int:
-        """Idempotently upsert broker deals; duplicate tickets update the same row."""
+        """Insert broker deals idempotently and reject conflicting reuse of a deal ticket."""
         rows = [
             (
                 deal.deal_ticket, deal.order_ticket, payload.terminal_id,
@@ -419,28 +419,29 @@ class TelemetryStore:
             )
             for deal in payload.deals
         ]
+        immutable_columns = (
+            "order_ticket", "terminal_id", "environment", "server", "symbol",
+            "side", "entry", "volume_lots", "price", "magic", "comment",
+            "occurred_at",
+        )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            for row in rows:
+                existing = connection.execute(
+                    "SELECT * FROM execution_deals WHERE deal_ticket = ?", (row[0],)
+                ).fetchone()
+                if existing is not None:
+                    for index, column in enumerate(immutable_columns, start=1):
+                        if existing[column] != row[index]:
+                            raise ValueError(
+                                f"Conflicting broker evidence for existing deal ticket {row[0]} ({column})."
+                            )
             connection.executemany(
-                """INSERT INTO execution_deals(
+                """INSERT OR IGNORE INTO execution_deals(
                     deal_ticket, order_ticket, terminal_id, environment, server,
                     symbol, side, entry, volume_lots, price, magic, comment,
                     occurred_at, observed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(deal_ticket) DO UPDATE SET
-                    order_ticket=excluded.order_ticket,
-                    terminal_id=excluded.terminal_id,
-                    environment=excluded.environment,
-                    server=excluded.server,
-                    symbol=excluded.symbol,
-                    side=excluded.side,
-                    entry=excluded.entry,
-                    volume_lots=excluded.volume_lots,
-                    price=excluded.price,
-                    magic=excluded.magic,
-                    comment=excluded.comment,
-                    occurred_at=excluded.occurred_at,
-                    observed_at=excluded.observed_at""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 rows,
             )
         return len(rows)
