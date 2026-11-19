@@ -36,14 +36,16 @@ def reconcile_broker_history(
             if order_id.isdigit() and int(order_id) > 0 else []
         )
         tagged_deals = store.execution_deals_for_tag(broker_tag)
+        tagged_orders = store.execution_orders_for_tag(broker_tag)
         tagged_order_ids = sorted({str(deal["order_ticket"]) for deal in tagged_deals})
+        tagged_order_ids_from_orders = sorted({str(order["order_ticket"]) for order in tagged_orders})
 
-        if len(tagged_order_ids) > 1:
+        if len(set(tagged_order_ids + tagged_order_ids_from_orders)) > 1:
             reports.append({
                 "intent_id": intent_id, "status": current,
                 "result": "manual_review_required",
                 "reasons": ["multiple_broker_orders_match_intent_tag"],
-                "broker_order_ids": tagged_order_ids,
+                "broker_order_ids": sorted(set(tagged_order_ids + tagged_order_ids_from_orders)),
             })
             continue
         if not order_deals and tagged_deals:
@@ -58,6 +60,79 @@ def reconcile_broker_history(
             continue
 
         if not order_deals:
+            order_evidence = (
+                store.execution_orders_for_ticket(order_id)
+                if order_id.isdigit() and int(order_id) > 0 else None
+            )
+            if order_evidence is None and tagged_orders and len(tagged_orders) == 1:
+                order_evidence = tagged_orders[0]
+                order_id = str(order_evidence["order_ticket"])
+            if order_evidence is not None:
+                identity_reasons = []
+                if order_evidence["environment"] != "demo":
+                    identity_reasons.append("broker_order_not_demo")
+                if expected_terminal_id and order_evidence["terminal_id"] != expected_terminal_id:
+                    identity_reasons.append("broker_terminal_mismatch")
+                if expected_server and order_evidence["server"] != expected_server:
+                    identity_reasons.append("broker_server_mismatch")
+                if order_evidence["magic"] != expected_magic:
+                    identity_reasons.append("broker_magic_mismatch")
+                if order_evidence["symbol"] != intent["payload"]["symbol"].upper():
+                    identity_reasons.append("broker_symbol_mismatch")
+                if order_evidence["order_type"] != intent["payload"]["side"]:
+                    identity_reasons.append("broker_order_side_mismatch")
+                if not identity_reasons:
+                    broker_state = order_evidence["state"]
+                    if broker_state in {"canceled", "expired", "rejected"}:
+                        target = "rejected" if broker_state == "rejected" else "cancelled"
+                        if current in {"approved", "submitted", "acknowledged", "unknown", "cancel_requested"}:
+                            try:
+                                updated = ledger.transition(
+                                    intent_id, target,
+                                    event_type="broker_order_terminal_state_confirmed",
+                                    broker_order_id=order_id,
+                                    details={"broker_state": broker_state,
+                                             "evidence": "authenticated_mt5_demo_order_history"},
+                                )
+                                current = updated["status"]
+                                updated = ledger.transition(
+                                    intent_id, "reconciled",
+                                    event_type="broker_order_history_reconciled",
+                                    broker_order_id=order_id,
+                                    details={"broker_state": broker_state},
+                                )
+                                current = updated["status"]
+                                reports.append({
+                                    "intent_id": intent_id, "broker_order_id": order_id,
+                                    "status": current, "result": "reconciled_" + broker_state,
+                                    "filled_volume_lots": 0.0,
+                                })
+                                continue
+                            except (KeyError, ValueError):
+                                identity_reasons.append("illegal_terminal_order_state_transition")
+                        else:
+                            identity_reasons.append("terminal_order_state_after_partial_fill_requires_review")
+                    elif broker_state in {"placed", "started", "request_add", "request_modify", "request_cancel"}:
+                        reports.append({
+                            "intent_id": intent_id, "broker_order_id": order_id,
+                            "status": current, "result": "broker_order_pending",
+                            "broker_state": broker_state,
+                            "remaining_volume_lots": order_evidence["current_volume"],
+                        })
+                        continue
+                    elif broker_state == "filled":
+                        reports.append({
+                            "intent_id": intent_id, "broker_order_id": order_id,
+                            "status": current, "result": "awaiting_fill_deal_history",
+                            "broker_state": broker_state,
+                        })
+                        continue
+                reports.append({
+                    "intent_id": intent_id, "broker_order_id": order_id,
+                    "status": current, "result": "manual_review_required",
+                    "reasons": sorted(set(identity_reasons)),
+                })
+                continue
             reports.append({
                 "intent_id": intent_id, "status": current,
                 "result": "awaiting_broker_history", "filled_volume_lots": 0.0,
