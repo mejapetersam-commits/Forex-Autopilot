@@ -14,6 +14,7 @@ def sample_state(**overrides):
         "environment": "demo",
         "server": "Exness-MT5Trial",
         "observed_at": datetime.now(timezone.utc),
+        "daily_loss_pct": 0.0,
         "positions": [{
             "ticket": "123456", "symbol": "EURUSDm", "side": "buy",
             "volume_lots": 0.01, "open_price": 1.085,
