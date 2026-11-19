@@ -200,3 +200,18 @@ def test_admin_preflight_fails_closed_when_position_state_is_missing(monkeypatch
     assert result["status"] == "preflight_rejected"
     assert result["preflight"]["approved"] is False
     assert any("connected" in reason.lower() for reason in result["preflight"]["reasons"])
+
+
+def test_dispatch_rechecks_daily_loss_immediately_before_queueing(monkeypatch, tmp_path):
+    ledger, queue, key = configure(monkeypatch, tmp_path)
+    store = main.telemetry_store()
+    now = datetime.now(timezone.utc)
+    store.save_execution_state(MT5ExecutionState(
+        terminal_id="demo-terminal", environment="demo", server="Exness-MT5Trial",
+        observed_at=now, daily_loss_pct=1.2, positions=[],
+    ))
+    with pytest.raises(HTTPException) as exc:
+        main.queue_approved_demo_intent(key)
+    assert exc.value.status_code == 423
+    assert ledger.get_intent(key)["status"] == "rejected"
+    assert queue.lease_next(terminal_id="demo-terminal") is None
