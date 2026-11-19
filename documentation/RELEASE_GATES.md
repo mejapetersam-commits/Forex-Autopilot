@@ -2,7 +2,7 @@
 
 ## Implemented in the current development branch
 
-- Authenticated read-only MT5 telemetry bridge and bulk candle ingestion.
+- Authenticated read-only MT5 telemetry bridge, bulk candle ingestion and broker symbol-specification telemetry.
 - Persistent SQLite candle, quote, account and heartbeat storage.
 - Closed-candle EMA20/EMA50 + RSI14 + MACD signal research.
 - ATR-based candidate stop and target levels.
@@ -10,7 +10,7 @@
 - Daily-loss and maximum-drawdown entry halts in historical simulations.
 - Bounded parameter grid search with chronological walk-forward validation.
 - Candle integrity, timestamp ordering and gap assessment.
-- Local dashboard research feed.
+- Local dashboard research feed and severity-ranked operational health alerts.
 - Fail-closed execution preflight checks and tests.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
@@ -18,7 +18,7 @@
 
 - A broker-specific MT5 execution adapter; current EA is deliberately read-only.
 - Live adapter verification against the now-ingested broker symbol specifications and account-currency tick values.
-- Durable idempotent order-intent ledger and append-only order/control audit trail are implemented; broker-side reconciliation loop remains required.
+- Durable idempotent order-intent ledger, state-transition rules and append-only order/control audit trail are implemented; broker-side reconciliation loop remains required.
 - Position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
 - Broker-side protective stop verification and repair/flatten escalation.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
