@@ -1,8 +1,8 @@
 """Durable, lease-based command transport for the MT5 demo bridge.
 
 Commands are only created from an already-approved execution intent. This module
-never talks to a broker; it provides at-least-once delivery with stable command
-IDs so the terminal can deduplicate retries.
+never talks to a broker. It uses at-most-once leasing: expired commands are
+quarantined for reconciliation and are never automatically redelivered.
 """
 from __future__ import annotations
 
