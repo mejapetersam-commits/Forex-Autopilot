@@ -64,3 +64,17 @@ def test_overfill_requires_manual_review(tmp_path):
 
 def test_history_rejects_duplicate_deal_tickets():
     with pytest.raises(ValueError,match="unique"): history(deal(7,12345,0.01),deal(7,12345,0.01))
+
+
+def test_unknown_intent_can_recover_by_broker_comment_tag(tmp_path):
+    import hashlib
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3")); store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger)
+    ledger.transition(key,"unknown",event_type="terminal_lost_after_dispatch")
+    tag=hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    snap=history(deal(9,12345,0.01))
+    tagged=snap.model_copy(update={"deals":[snap.deals[0].model_copy(update={"comment":"FA:"+tag})]})
+    store.save_execution_history(tagged)
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001,expected_terminal_id="demo-terminal",expected_server="Exness-MT5Trial")
+    assert result["results"][0]["status"]=="filled"
+    assert ledger.get_intent(key)["status"]=="filled"
