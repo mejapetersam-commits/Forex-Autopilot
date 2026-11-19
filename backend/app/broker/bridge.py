@@ -279,7 +279,15 @@ class MT5ExecutionState(BaseModel):
     environment: Literal["demo", "real", "contest"]
     server: str = Field(min_length=1, max_length=128)
     observed_at: datetime
+    daily_loss_pct: float = Field(ge=0)
     positions: list[MT5OpenPosition] = Field(max_length=100)
+
+    @field_validator("daily_loss_pct")
+    @classmethod
+    def require_finite_daily_loss(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Daily loss percentage must be finite.")
+        return value
 
     @field_validator("observed_at")
     @classmethod
