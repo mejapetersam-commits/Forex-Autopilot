@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { getOverview, getResearch, type DashboardOverview, type ResearchItem } from "./api";
 
@@ -11,7 +11,7 @@ function stamp(value?: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
-function Status({ good, children }: { good: boolean; children: React.ReactNode }) {
+function Status({ good, children }: { good: boolean; children: ReactNode }) {
   return <span className={`status ${good ? "good" : "bad"}`}><i />{children}</span>;
 }
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
