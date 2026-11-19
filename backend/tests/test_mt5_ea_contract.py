@@ -93,3 +93,17 @@ def test_read_only_telemetry_ea_sends_open_position_state():
         assert field in source
     assert "OrderSend(" not in source
     assert "CTrade" not in source
+
+
+def test_read_only_mt5_bridge_uploads_broker_order_history():
+    source = EA_SOURCE.read_text(encoding="utf-8")
+    assert "void SendExecutionOrderHistory()" in source
+    assert "HistoryOrdersTotal()" in source
+    assert "HistoryOrderGetTicket(i)" in source
+    assert 'PostJson("/api/v1/mt5/execution/orders", body)' in source
+    for state in ("ORDER_STATE_CANCELED", "ORDER_STATE_REJECTED",
+                  "ORDER_STATE_EXPIRED", "ORDER_STATE_PLACED",
+                  "ORDER_STATE_PARTIAL", "ORDER_STATE_FILLED"):
+        assert state in source
+    assert "OrderSend(" not in source
+    assert "CTrade" not in source
