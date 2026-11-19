@@ -15,7 +15,7 @@ from typing import Any
 
 TRANSITIONS = {
     "created": {"preflight_rejected", "approved", "cancelled"},
-    "approved": {"submitted", "cancelled", "rejected"},
+    "approved": {"submitted", "cancelled", "rejected", "unknown"},
     "submitted": {"acknowledged", "partially_filled", "filled", "rejected", "unknown"},
     "acknowledged": {"partially_filled", "filled", "cancel_requested", "rejected", "unknown"},
     "partially_filled": {"partially_filled", "filled", "cancel_requested", "unknown"},
