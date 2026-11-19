@@ -106,7 +106,7 @@ def test_cancelled_order_with_partial_deal_fill_requires_manual_review(tmp_path)
     key = make_intent(ledger)
     now = datetime.now(timezone.utc)
     deal = MT5ExecutionDeal(
-        deal_ticket="987", order_ticket="12345", symbol="EURUSDm",
+        deal_ticket="987", order_ticket="12345", position_id="998877", symbol="EURUSDm",
         side="buy", entry="in", volume_lots=0.004, price=1.1,
         magic=61119001, comment="", occurred_at=now - timedelta(minutes=1),
     )
