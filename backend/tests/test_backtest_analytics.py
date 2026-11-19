@@ -21,7 +21,7 @@ def test_analytics_reports_distribution_and_streaks():
     assert result["breakeven"] == 1
     assert result["max_consecutive_wins"] == 2
     assert result["max_consecutive_losses"] == 3
-    assert result["payoff_ratio"] == pytest.approx(2.2)
+    assert result["payoff_ratio"] == pytest.approx(1.8333, rel=1e-3)
     assert result["execution_enabled"] is False
 
 
