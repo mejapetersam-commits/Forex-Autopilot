@@ -114,3 +114,10 @@ def test_position_identity_is_transmitted_for_recovery_linking():
     assert "POSITION_IDENTIFIER" in source
     assert "DEAL_POSITION_ID" in source
     assert '"position_id"' in source
+
+
+def test_execution_ea_uses_full_persistent_command_id_for_restart_safety():
+    source = (EA_SOURCE.parent / "ForexAutopilotDemoExecution.mq5").read_text(encoding="utf-8")
+    assert 'GlobalVariableCheck("FA.Attempt." + command_id)' in source
+    assert 'GlobalVariableSet("FA.Attempt." + command_id' in source
+    assert "GlobalVariableCheck(\"FA.Attempt.\" + IntegerToString((int)CommandHash" not in source
