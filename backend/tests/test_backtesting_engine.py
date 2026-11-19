@@ -53,3 +53,57 @@ def test_backtest_rejects_risk_over_one_percent():
         assert "1%" in str(exc)
     else:
         raise AssertionError("Expected risk cap validation")
+
+
+
+def test_backtest_halts_after_daily_loss_and_max_drawdown(monkeypatch):
+    import app.backtesting.engine as engine
+
+    def forced_buy_signal(*args, **kwargs):
+        return {
+            "signal": "buy",
+            "candidate_levels": {
+                "reference_close": 1.1000,
+                "stop_loss": 1.0998,
+                "take_profit": 1.1040,
+            },
+        }
+
+    monkeypatch.setattr(engine, "evaluate_signal", forced_buy_signal)
+    rows = []
+    price = 1.1000
+    for index in range(70):
+        op = price
+        low = price - 0.00005
+        high = price + 0.0001
+        if index == 61:
+            op = 1.0950  # Adverse weekend/news-style gap through the stop.
+            low = 1.0940
+        rows.append({
+            "opened_at": f"2026-01-{index // 24 + 1:02d}T{index % 24:02d}:00:00+00:00",
+            "open": op, "high": max(op, high), "low": min(op, low), "close": op,
+        })
+        price = op
+
+    result = run_backtest(
+        rows,
+        BacktestConfig(
+            initial_equity=10_000,
+            risk_per_trade_pct=0.25,
+            max_daily_loss_pct=1.0,
+            max_drawdown_pct=5.0,
+        ),
+    )
+    assert result["total_trades"] == 1
+    assert result["risk_limits"]["daily_loss_halt_triggered_at_least_once"] is True
+    assert result["halt_events"][0]["type"] == "daily_loss_limit"
+    assert result["execution_enabled"] is False
+
+
+def test_backtest_rejects_loss_limits_above_hard_caps():
+    try:
+        BacktestConfig(max_daily_loss_pct=4.0)
+    except ValueError as exc:
+        assert "hard safety caps" in str(exc)
+    else:
+        raise AssertionError("Expected daily loss hard cap rejection")
