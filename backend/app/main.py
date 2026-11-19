@@ -859,9 +859,29 @@ def mt5_execution_history(payload: MT5ExecutionHistory):
 )
 def execution_reconciliation():
     """Compare known execution intents with persisted broker deal evidence."""
+    store = telemetry_store()
+    terminal = store.latest_execution_state()
+    if terminal is None:
+        return {
+            "status": "waiting_for_terminal_snapshot",
+            "intents_checked": 0,
+            "results": [],
+            "trading_enabled": False,
+        }
+    observed = datetime.fromisoformat(terminal["observed_at"].replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - observed).total_seconds()
+    if terminal["environment"] != "demo" or age < -5 or age > 30:
+        return {
+            "status": "terminal_snapshot_stale_or_not_demo",
+            "intents_checked": 0,
+            "results": [],
+            "trading_enabled": False,
+        }
     return reconcile_broker_history(
-        execution_ledger(), telemetry_store(),
+        execution_ledger(), store,
         expected_magic=int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001")),
+        expected_terminal_id=terminal["terminal_id"],
+        expected_server=terminal["server"],
     )
 
 
