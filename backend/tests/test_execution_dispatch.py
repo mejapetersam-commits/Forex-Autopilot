@@ -275,3 +275,32 @@ def test_terminal_result_requires_intent_id_before_queue_mutation(monkeypatch, t
     assert row["status"] == "leased"
     assert row["result_json"] is None
     assert ledger.get_intent(key)["status"] == "approved"
+
+
+def test_expired_command_lease_marks_approved_intent_unknown(monkeypatch, tmp_path):
+    from datetime import timedelta
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-expired")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-expired", intent_id=key,
+        payload={**ledger.get_intent(key)["payload"], "broker_tag": "abcdef123456"},
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-expired", lease_seconds=5)
+    with queue._connect() as db:
+        db.execute(
+            "UPDATE execution_commands SET lease_until=? WHERE command_id=?",
+            ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(), "cmd-expired"),
+        )
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+    monkeypatch.setenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo")
+    monkeypatch.setenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "true")
+    ledger.set_control("trading_paused", False)
+    ledger.set_control("kill_switch_active", False)
+    response = main.lease_next_execution_command("terminal-expired")
+    assert response["command"] is None
+    assert ledger.get_intent(key)["status"] == "unknown"
+    assert queue.expired_commands()[0]["intent_id"] == key
