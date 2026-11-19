@@ -313,12 +313,6 @@ void SendExecutionHistory()
    }
 
    int total = HistoryDealsTotal();
-   if(total > 1000)
-   {
-      Print("FOREX AUTOPILOT: execution history exceeds 1000-deal safety batch; not uploading an incomplete snapshot.");
-      return;
-   }
-
    int server_offset = (int)(TimeTradeServer() - TimeGMT());
    string body = StringFormat(
       "{\"terminal_id\":\"%s\",\"environment\":\"demo\","
@@ -357,6 +351,11 @@ void SendExecutionHistory()
       string side = (deal_type == DEAL_TYPE_BUY) ? "buy" : "sell";
       if(order_ticket == 0 || volume <= 0 || price <= 0 || deal_time <= 0 || symbol == "")
          continue;
+      if(included >= 1000)
+      {
+         Print("FOREX AUTOPILOT: managed execution history exceeds the 1000-deal safety batch; upload skipped.");
+         return;
+      }
 
       if(included > 0)
          body += ",";
