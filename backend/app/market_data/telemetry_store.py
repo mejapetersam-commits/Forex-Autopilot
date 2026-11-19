@@ -483,7 +483,7 @@ class TelemetryStore:
                             f"Conflicting broker evidence for existing deal ticket {row[0]} (position_id)."
                         )
             connection.executemany(
-                """INSERT OR IGNORE INTO execution_deals(
+                """INSERT INTO execution_deals(
                     deal_ticket, order_ticket, position_id, terminal_id, environment, server,
                     symbol, side, entry, volume_lots, price, magic, comment,
                     occurred_at, observed_at
