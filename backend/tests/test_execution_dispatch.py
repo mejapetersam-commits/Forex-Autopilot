@@ -330,7 +330,9 @@ def test_strategy_candidate_becomes_preflighted_intent_without_auto_queue(monkey
     })
     request = main.StrategyDispatchRequest(volume_lots=0.01, queue_if_approved=False)
     result = main.dispatch_strategy_candidate("EURUSDm", "M15", request)
-    assert result["status"] == "approved"
+    repeated = main.dispatch_strategy_candidate("EURUSDm", "M15", request)
+    assert result["intent_id"] == repeated["intent_id"]
+    assert result["status"] == repeated["status"] == "approved"
     assert result["execution_queued"] is False
     assert result["trading_enabled"] is False
     assert ledger.get_intent(result["intent_id"])["status"] == "approved"
