@@ -333,7 +333,7 @@ void ProcessCommand(string response)
 
    bool sent = false;
    if(side == "buy")
-      sent = g_trade.Buy(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + intent_id);
+      sent = g_trade.Buy(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + StringSubstr(command_id, 4, 20));
    else
       sent = g_trade.Sell(volume, symbol, 0.0, stop_loss, take_profit, "FA:" + intent_id);
 
