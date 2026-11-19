@@ -1,4 +1,6 @@
-import pytest\n\nfrom app.strategy.engine import StrategyConfig, evaluate_signal
+import pytest
+
+from app.strategy.engine import StrategyConfig, evaluate_signal
 
 
 def make_trend_candles(direction: int, count: int = 100):
