@@ -60,3 +60,14 @@ def test_terminal_broker_state_can_be_marked_reconciled(tmp_path):
     ledger.transition("intent-reconcile", "filled", event_type="broker_fill")
     final = ledger.transition("intent-reconcile", "reconciled", event_type="broker_history_confirmed")
     assert final["status"] == "reconciled"
+
+
+
+def test_get_intent_returns_decoded_payload_and_status(tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    payload = {"symbol": "EURUSDm", "volume_lots": 0.01}
+    ledger.create_intent("intent-read", payload)
+    result = ledger.get_intent("intent-read")
+    assert result["status"] == "created"
+    assert result["payload"] == payload
+    assert ledger.get_intent("missing") is None
