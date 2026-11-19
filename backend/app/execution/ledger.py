@@ -70,6 +70,13 @@ class ExecutionLedger:
                     control_value TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS control_audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    control_key TEXT NOT NULL,
+                    previous_value TEXT NOT NULL,
+                    new_value TEXT NOT NULL,
+                    changed_at TEXT NOT NULL
+                );
                 INSERT OR IGNORE INTO runtime_controls(control_key, control_value, updated_at)
                     VALUES ('trading_paused', '1', 'bootstrap');
                 INSERT OR IGNORE INTO runtime_controls(control_key, control_value, updated_at)
@@ -158,13 +165,25 @@ class ExecutionLedger:
     def set_control(self, key: str, enabled: bool) -> None:
         if key not in {"trading_paused", "kill_switch_active"}:
             raise ValueError("Unsupported runtime control.")
+        now = self._now()
+        new_value = "1" if enabled else "0"
         with self._connect() as connection:
+            previous = connection.execute(
+                "SELECT control_value FROM runtime_controls WHERE control_key = ?",
+                (key,),
+            ).fetchone()
+            previous_value = previous["control_value"] if previous else "1"
             connection.execute(
                 """INSERT INTO runtime_controls(control_key, control_value, updated_at)
                    VALUES (?, ?, ?)
                    ON CONFLICT(control_key) DO UPDATE SET
                      control_value=excluded.control_value, updated_at=excluded.updated_at""",
-                (key, "1" if enabled else "0", self._now()),
+                (key, new_value, now),
+            )
+            connection.execute(
+                """INSERT INTO control_audit(control_key, previous_value, new_value, changed_at)
+                   VALUES (?, ?, ?, ?)""",
+                (key, previous_value, new_value, now),
             )
 
     def controls(self) -> dict[str, bool]:
@@ -194,3 +213,13 @@ class ExecutionLedger:
             item["details"] = json.loads(item.pop("details_json"))
             result.append(item)
         return result
+
+    def control_events(self, limit: int = 100) -> list[dict[str, Any]]:
+        safe_limit = min(max(int(limit), 1), 500)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT control_key, previous_value, new_value, changed_at
+                   FROM control_audit ORDER BY id DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
