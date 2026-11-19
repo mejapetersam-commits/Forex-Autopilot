@@ -15,6 +15,7 @@ from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
+from app.monitoring.health import assess_system_health
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
 
@@ -136,6 +137,7 @@ def dashboard_overview():
             "fresh": account_age is not None and account_age <= stale_after,
         } if account else None,
         "quotes": quote_rows,
+        "system_health": assess_system_health(heartbeat, account, quotes, stale_after_seconds=stale_after, now=now),
         "stale_after_seconds": stale_after,
         "updated_at": now.isoformat(),
     }
@@ -168,6 +170,21 @@ def dashboard_research():
         "trading_enabled": False,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get(
+    "/api/v1/monitoring/health",
+    dependencies=[Depends(require_bridge_token)],
+)
+def monitoring_health():
+    store = telemetry_store()
+    stale_after = max(5, int(os.getenv("FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS", "60")))
+    return assess_system_health(
+        store.latest_heartbeat(),
+        store.latest_account(),
+        store.latest_quotes(),
+        stale_after_seconds=stale_after,
+    )
 
 
 @app.get("/api/v1/dashboard/controls", include_in_schema=False)
