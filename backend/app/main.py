@@ -1068,7 +1068,9 @@ def latest_execution_state():
     stop_alerts = [
         {**alert,
          "missing_stop_loss": "missing_stop_loss" in alert["reasons"],
-         "missing_take_profit": False,
+         "missing_take_profit": next(
+             (p["take_profit"] <= 0 for p in managed if p["ticket"] == alert["ticket"]), False
+         ),
          "linked_deals": len(next(
              (p.get("related_deals", []) for p in managed if p["ticket"] == alert["ticket"]), []
          ))}
