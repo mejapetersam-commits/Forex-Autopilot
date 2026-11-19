@@ -699,7 +699,9 @@ def dispatch_strategy_candidate(
         volume_lots=payload.volume_lots,
         stop_loss=float(levels["stop_loss"]),
         take_profit=float(levels["take_profit"]),
-        requested_at=datetime.now(timezone.utc),
+        requested_at=datetime.fromisoformat(
+            str(latest_bar["opened_at"]).replace("Z", "+00:00")
+        ),
     )
     result = ExecutionCoordinator(execution_ledger()).preflight_and_record(
         intent_id, intent, execution_snapshot_for_symbol(normalized_symbol)
