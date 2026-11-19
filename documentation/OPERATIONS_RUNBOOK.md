@@ -39,7 +39,10 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 
 - `/api/v1/mt5/specifications` (broker tick value, tick size, contract and volume constraints)
 - `/api/v1/mt5/execution/state` (read-only open-position and protective-level snapshot)
-- `/api/v1/monitoring/execution-state` (snapshot freshness and managed-position stop/target alerts)
+- `/api/v1/monitoring/execution-state` (snapshot freshness, daily-loss status and managed-position stop/target alerts)
+- Admin-only `POST /api/v1/admin/execution/intents/preflight` (server-derived preflight; does not submit an order)
+- Admin-only `POST /api/v1/admin/execution/intents/{intent_id}/queue` (revalidates current telemetry before queuing)
+- Authenticated MT5 polling/result routes under `/api/v1/mt5/execution/commands/`
 - `/api/v1/mt5/history/candles/{symbol}/{timeframe}`
 - `/api/v1/market-analysis/{symbol}/{timeframe}`
 - `/api/v1/strategy/signal/{symbol}/{timeframe}`
@@ -66,7 +69,7 @@ The separate source file is `mt5/Experts/ForexAutopilotDemoExecution.mq5`. Compi
 
 In MetaTrader, add the API host to **Tools → Options → Expert Advisors → Allow WebRequest for listed URL**. Do not paste tokens into source control or chat.
 
-The EA enforces demo account mode, terminal trading permissions, the local symbol allowlist, a 0.01-lot hard ceiling, one open position maximum, broker volume step, stop distance, a free-margin buffer and a persistent command-attempt marker. The adapter source has static CI checks, but these do not replace an actual MetaEditor compile or broker demo test.
+The EA enforces demo account mode, terminal trading permissions, the local symbol allowlist, a 0.01-lot hard ceiling, one open position maximum, broker volume step, stop distance, a free-margin buffer and a persistent command-attempt marker. The telemetry EA estimates daily loss from today's broker trade deals plus current floating PnL; if history cannot be read or ambiguous balance operations occur, it reports a fail-closed loss value. This is an operational guard, not an audited broker statement. Preflight also enforces a 0.25% estimated stop-risk ceiling, a 0.01-lot local cap, broker volume-step constraints, a 2-pip spread cap, one open position and a 1% daily-loss threshold by default. The adapter source has static CI checks, but these do not replace an actual MetaEditor compile or broker demo test.
 
 Do not set `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED=true`, clear the pause/kill switch, or set `InpEnableDemoExecution=true` until the EA compiles cleanly and the dedicated demo validation plan has been completed. No live-account use is supported.
 
