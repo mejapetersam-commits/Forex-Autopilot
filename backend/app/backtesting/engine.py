@@ -29,6 +29,8 @@ class BacktestConfig:
     minimum_candles: int = 60
     atr_stop_multiple: float = 1.5
     reward_risk_ratio: float = 2.0
+    long_rsi_min: float = 55.0
+    short_rsi_max: float = 45.0
 
     def __post_init__(self) -> None:
         positive = ("initial_equity", "risk_per_trade_pct", "pip_size",
@@ -46,6 +48,8 @@ class BacktestConfig:
                 raise ValueError(f"{name} cannot be negative.")
         if self.risk_per_trade_pct > 1.0:
             raise ValueError("Backtest risk per trade cannot exceed 1%.")
+        if not 50 < self.long_rsi_min <= 100 or not 0 <= self.short_rsi_max < 50:
+            raise ValueError("Invalid RSI confirmation thresholds.")
         if self.lot_max < self.lot_min or self.minimum_candles < 60:
             raise ValueError("Invalid lot limits or insufficient minimum history.")
 
@@ -108,6 +112,8 @@ def run_backtest(
                     minimum_candles=settings.minimum_candles,
                     atr_stop_multiple=settings.atr_stop_multiple,
                     reward_risk_ratio=settings.reward_risk_ratio,
+                    long_rsi_min=settings.long_rsi_min,
+                    short_rsi_max=settings.short_rsi_max,
                 ),
             )
             side = candidate["signal"]
