@@ -1055,13 +1055,33 @@ def latest_execution_state():
     stale_after = max(5, int(os.getenv("FOREX_AUTOPILOT_EXECUTION_STATE_STALE_SECONDS", "20")))
     expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
     managed = [p for p in snapshot["positions"] if p["magic"] == expected_magic]
+    guard_payload = MT5ExecutionState(
+        terminal_id=snapshot["terminal_id"], environment=snapshot["environment"],
+        server=snapshot["server"], observed_at=observed,
+        daily_loss_pct=snapshot["daily_loss_pct"],
+        positions=[{key: value for key, value in position.items() if key != "related_deals"}
+                   for position in managed],
+    )
+    guard = protective_stop_guard(guard_payload, telemetry_store())
     stop_alerts = [
-        {"ticket": p["ticket"], "position_id": p.get("position_id"),
-         "symbol": p["symbol"], "missing_stop_loss": p["stop_loss"] <= 0,
-         "missing_take_profit": p["take_profit"] <= 0,
-         "linked_deals": len(p.get("related_deals", []))}
-        for p in managed if p["stop_loss"] <= 0 or p["take_profit"] <= 0
+        {**alert,
+         "missing_stop_loss": "missing_stop_loss" in alert["reasons"],
+         "missing_take_profit": False,
+         "linked_deals": len(next(
+             (p.get("related_deals", []) for p in managed if p["ticket"] == alert["ticket"]), []
+         ))}
+        for alert in guard["alerts"]
     ]
+    for position in managed:
+        if position["take_profit"] <= 0 and not any(
+            item["ticket"] == position["ticket"] for item in stop_alerts
+        ):
+            stop_alerts.append({
+                "ticket": position["ticket"], "position_id": position.get("position_id"),
+                "symbol": position["symbol"], "missing_stop_loss": False,
+                "missing_take_profit": True, "linked_deals": len(position.get("related_deals", [])),
+                "reasons": ["missing_take_profit"],
+            })
     issues = []
     if snapshot["environment"] != "demo":
         issues.append("terminal_not_on_demo_account")
@@ -1070,8 +1090,10 @@ def latest_execution_state():
     max_daily_loss = float(os.getenv("FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT", "1.0"))
     if snapshot["daily_loss_pct"] >= max_daily_loss:
         issues.append("daily_loss_limit_reached")
-    if stop_alerts:
-        issues.append("managed_position_missing_protective_level")
+    if guard["unprotected_positions"]:
+        issues.append("managed_position_missing_or_invalid_stop_loss")
+    if any(item["missing_take_profit"] for item in stop_alerts):
+        issues.append("managed_position_missing_take_profit")
     return {
         "status": "critical" if issues else "healthy",
         "issues": issues,
@@ -1083,6 +1105,7 @@ def latest_execution_state():
         "daily_loss_pct": snapshot["daily_loss_pct"],
         "managed_positions_count": len(managed),
         "protective_stop_alerts": stop_alerts,
+        "protective_guard": guard,
         "positions": snapshot["positions"],
         "trading_enabled": False,
     }
