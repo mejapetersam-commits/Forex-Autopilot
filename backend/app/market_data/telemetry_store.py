@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
 
 
 class TelemetryStore:
@@ -67,6 +67,29 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_quotes_symbol_observed
                     ON quotes(symbol, observed_at DESC);
+
+                CREATE TABLE IF NOT EXISTS symbol_specifications (
+                    symbol TEXT PRIMARY KEY,
+                    digits INTEGER NOT NULL,
+                    point REAL NOT NULL,
+                    tick_size REAL NOT NULL,
+                    tick_value_profit REAL NOT NULL,
+                    tick_value_loss REAL NOT NULL,
+                    contract_size REAL NOT NULL,
+                    volume_min REAL NOT NULL,
+                    volume_max REAL NOT NULL,
+                    volume_step REAL NOT NULL,
+                    stops_level_points INTEGER NOT NULL,
+                    freeze_level_points INTEGER NOT NULL,
+                    trade_allowed INTEGER NOT NULL,
+                    base_currency TEXT NOT NULL,
+                    profit_currency TEXT NOT NULL,
+                    margin_currency TEXT NOT NULL,
+                    account_currency TEXT NOT NULL,
+                    observed_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_symbol_specs_observed
+                    ON symbol_specifications(observed_at DESC);
 
                 CREATE TABLE IF NOT EXISTS candles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,3 +271,65 @@ class TelemetryStore:
                 (symbol.strip().upper(), timeframe.strip().upper(), safe_limit),
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
+
+
+    def save_symbol_specification(self, payload: MT5SymbolSpecification) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO symbol_specifications(
+                    symbol, digits, point, tick_size, tick_value_profit,
+                    tick_value_loss, contract_size, volume_min, volume_max,
+                    volume_step, stops_level_points, freeze_level_points,
+                    trade_allowed, base_currency, profit_currency, margin_currency,
+                    account_currency, observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol) DO UPDATE SET
+                    digits=excluded.digits, point=excluded.point,
+                    tick_size=excluded.tick_size,
+                    tick_value_profit=excluded.tick_value_profit,
+                    tick_value_loss=excluded.tick_value_loss,
+                    contract_size=excluded.contract_size,
+                    volume_min=excluded.volume_min, volume_max=excluded.volume_max,
+                    volume_step=excluded.volume_step,
+                    stops_level_points=excluded.stops_level_points,
+                    freeze_level_points=excluded.freeze_level_points,
+                    trade_allowed=excluded.trade_allowed,
+                    base_currency=excluded.base_currency,
+                    profit_currency=excluded.profit_currency,
+                    margin_currency=excluded.margin_currency,
+                    account_currency=excluded.account_currency,
+                    observed_at=excluded.observed_at""",
+                (
+                    payload.symbol, payload.digits, payload.point, payload.tick_size,
+                    payload.tick_value_profit, payload.tick_value_loss,
+                    payload.contract_size, payload.volume_min, payload.volume_max,
+                    payload.volume_step, payload.stops_level_points,
+                    payload.freeze_level_points, int(payload.trade_allowed),
+                    payload.base_currency, payload.profit_currency,
+                    payload.margin_currency, payload.account_currency,
+                    payload.observed_at.isoformat(),
+                ),
+            )
+
+    def latest_symbol_specification(self, symbol: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM symbol_specifications WHERE symbol = ?",
+                (symbol.strip().upper(),),
+            ).fetchone()
+        result = self._as_dict(row)
+        if result is not None:
+            result["trade_allowed"] = bool(result["trade_allowed"])
+        return result
+
+    def latest_symbol_specifications(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM symbol_specifications ORDER BY symbol"
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["trade_allowed"] = bool(item["trade_allowed"])
+            result.append(item)
+        return result
