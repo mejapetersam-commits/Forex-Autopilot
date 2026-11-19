@@ -22,7 +22,7 @@
 - Validate EA account-mode detection, symbol specifications, lot step, filling policy, stop/target placement and margin checks on an Exness demo account.
 - Build broker-history reconciliation for orders, deals and positions, including restart recovery and partial fills. Expired or uncertain commands must be reconciled manually/automatically before any further action; never blindly retry them.
 - Complete position/order state machine covering pending, acknowledged, partially filled, filled, rejected, cancelled and unknown states.
-- Broker-side protective stop verification and repair/flatten escalation.
+- Broker-side protective-stop monitoring now flags managed positions missing SL/TP; automated repair/flatten escalation remains required.
 - Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
 - Restart recovery, duplicate event handling and disconnect recovery.
 - Authenticated local dashboard pause/resume and emergency-stop controls with a separate admin token and audit history are implemented; multi-user role separation remains required.
