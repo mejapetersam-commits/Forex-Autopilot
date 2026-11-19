@@ -302,3 +302,73 @@ class MT5ExecutionState(BaseModel):
         if len(tickets) != len(set(tickets)):
             raise ValueError("Position tickets must be unique in a snapshot.")
         return self
+
+
+class MT5ExecutionDeal(BaseModel):
+    """A broker-reported deal row. Tickets are strings to preserve 64-bit IDs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    deal_ticket: str = Field(min_length=1, max_length=32)
+    order_ticket: str = Field(min_length=1, max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    side: Literal["buy", "sell"]
+    entry: Literal["in", "out", "inout", "out_by"]
+    volume_lots: float = Field(gt=0)
+    price: float = Field(gt=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+    occurred_at: datetime
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_deal_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("volume_lots", "price")
+    @classmethod
+    def require_finite_deal_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Deal values must be finite.")
+        return value
+
+    @field_validator("occurred_at")
+    @classmethod
+    def normalize_deal_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Deal timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+
+class MT5ExecutionHistory(BaseModel):
+    """Bounded history snapshot from one explicitly identified demo terminal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo"]
+    server: str = Field(min_length=1, max_length=128)
+    history_from: datetime
+    history_to: datetime
+    observed_at: datetime
+    deals: list[MT5ExecutionDeal] = Field(max_length=1000)
+
+    @field_validator("history_from", "history_to", "observed_at")
+    @classmethod
+    def normalize_history_timestamps(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("History timestamps must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_history_window(self):
+        if self.history_to <= self.history_from:
+            raise ValueError("History window must have a positive duration.")
+        if self.history_to > self.observed_at:
+            raise ValueError("History window cannot extend beyond observation time.")
+        tickets = [deal.deal_ticket for deal in self.deals]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Deal tickets must be unique in a history snapshot.")
+        if any(not self.history_from <= deal.occurred_at <= self.history_to for deal in self.deals):
+            raise ValueError("Deal timestamp falls outside the declared history window.")
+        return self
