@@ -98,6 +98,7 @@ class TelemetryStore:
                     environment TEXT NOT NULL,
                     server TEXT NOT NULL,
                     observed_at TEXT NOT NULL,
+                    daily_loss_pct REAL NOT NULL,
                     payload_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_state_observed
@@ -130,8 +131,8 @@ class TelemetryStore:
         with self._connect() as connection:
             connection.execute(
                 """INSERT INTO execution_state_snapshots(
-                    terminal_id, environment, server, observed_at, payload_json
-                ) VALUES (?, ?, ?, ?, ?)""",
+                    terminal_id, environment, server, observed_at, daily_loss_pct, payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?)""",
                 (payload.terminal_id, payload.environment, payload.server,
                  payload.observed_at.isoformat(), encoded),
             )
@@ -140,7 +141,7 @@ class TelemetryStore:
         import json
         with self._connect() as connection:
             row = connection.execute(
-                """SELECT terminal_id, environment, server, observed_at, payload_json
+                """SELECT terminal_id, environment, server, observed_at, daily_loss_pct, payload_json
                    FROM execution_state_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"""
             ).fetchone()
         if row is None:
