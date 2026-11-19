@@ -31,11 +31,13 @@ class BacktestConfig:
     reward_risk_ratio: float = 2.0
     long_rsi_min: float = 55.0
     short_rsi_max: float = 45.0
+    max_daily_loss_pct: float = 1.0
+    max_drawdown_pct: float = 5.0
 
     def __post_init__(self) -> None:
         positive = ("initial_equity", "risk_per_trade_pct", "pip_size",
                     "pip_value_per_lot", "lot_min", "lot_max", "lot_step",
-                    "atr_stop_multiple", "reward_risk_ratio")
+                    "atr_stop_multiple", "reward_risk_ratio", "max_daily_loss_pct", "max_drawdown_pct")
         for name in positive:
             value = float(getattr(self, name))
             if not isfinite(value) or value <= 0:
@@ -48,6 +50,8 @@ class BacktestConfig:
                 raise ValueError(f"{name} cannot be negative.")
         if self.risk_per_trade_pct > 1.0:
             raise ValueError("Backtest risk per trade cannot exceed 1%.")
+        if self.max_daily_loss_pct > 3.0 or self.max_drawdown_pct > 10.0:
+            raise ValueError("Backtest loss limits exceed hard safety caps.")
         if not 50 < self.long_rsi_min <= 100 or not 0 <= self.short_rsi_max < 50:
             raise ValueError("Invalid RSI confirmation thresholds.")
         if self.lot_max < self.lot_min or self.minimum_candles < 60:
@@ -100,12 +104,25 @@ def run_backtest(
     slippage = settings.slippage_pips_per_side * settings.pip_size
     costs_pips = settings.spread_pips + 2 * settings.slippage_pips_per_side
     position = None
+    current_day = None
+    daily_start_equity = equity
+    daily_loss_halted = False
+    drawdown_halted = False
+    halt_events: list[dict[str, Any]] = []
 
     for index in range(warmup, len(rows)):
         bar = rows[index]
+        timestamp = bar.get("opened_at")
+        bar_day = str(timestamp)[:10] if timestamp is not None else None
+        if bar_day is not None and bar_day != current_day:
+            current_day = bar_day
+            daily_start_equity = equity
+            daily_loss_halted = False
         op, high, low, close = (float(bar[k]) for k in ("open", "high", "low", "close"))
 
         if position is None:
+            if drawdown_halted or daily_loss_halted:
+                continue
             candidate = evaluate_signal(
                 rows[:index],
                 StrategyConfig(
@@ -178,6 +195,13 @@ def run_backtest(
         peak_equity = max(peak_equity, equity)
         drawdown = ((peak_equity - equity) / peak_equity * 100) if peak_equity else 0
         max_drawdown_pct = max(max_drawdown_pct, drawdown)
+        daily_loss = ((daily_start_equity - equity) / daily_start_equity * 100) if daily_start_equity > 0 else 0
+        if daily_loss >= settings.max_daily_loss_pct and not daily_loss_halted:
+            daily_loss_halted = True
+            halt_events.append({"type": "daily_loss_limit", "time": bar.get("opened_at"), "loss_pct": round(daily_loss, 4)})
+        if max_drawdown_pct >= settings.max_drawdown_pct and not drawdown_halted:
+            drawdown_halted = True
+            halt_events.append({"type": "maximum_drawdown", "time": bar.get("opened_at"), "drawdown_pct": round(max_drawdown_pct, 4)})
         trades.append({
             "side": side,
             "entry_time": position["entry_time"],
@@ -231,6 +255,14 @@ def run_backtest(
         "average_win": round(mean(wins), 2) if wins else 0.0,
         "average_loss": round(mean(losses), 2) if losses else 0.0,
         "max_drawdown_pct": round(max_drawdown_pct, 4),
+        "halt_events": halt_events,
+        "risk_limits": {
+            "risk_per_trade_pct": settings.risk_per_trade_pct,
+            "max_daily_loss_pct": settings.max_daily_loss_pct,
+            "max_drawdown_pct": settings.max_drawdown_pct,
+            "drawdown_halt_triggered": drawdown_halted,
+            "daily_loss_halt_triggered_at_least_once": any(event["type"] == "daily_loss_limit" for event in halt_events),
+        },
         "trade_return_volatility": round(return_volatility, 6),
         "trade_return_sharpe_like": round((avg_return / return_volatility) * sqrt(len(returns)), 4) if return_volatility else None,
         "assumptions": {
