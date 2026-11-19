@@ -107,3 +107,12 @@ def test_execution_state_monitor_flags_stale_snapshot(monkeypatch, tmp_path):
     result = main.latest_execution_state()
     assert result["status"] == "critical"
     assert "execution_state_stale" in result["issues"]
+
+def test_execution_state_monitor_flags_daily_loss_limit(monkeypatch, tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    store.save_execution_state(sample_state(daily_loss_pct=1.2))
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    monkeypatch.setenv("FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT", "1.0")
+    result = main.latest_execution_state()
+    assert result["status"] == "critical"
+    assert "daily_loss_limit_reached" in result["issues"]
