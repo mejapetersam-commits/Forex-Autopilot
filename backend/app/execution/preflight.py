@@ -1,7 +1,7 @@
 """Execution preflight gate. Deliberately contains no broker order submission."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from math import isfinite
 
@@ -112,3 +112,15 @@ def evaluate_execution_preflight(
         "execution_submitted": False,
         "note": "Preflight only. This module does not submit, modify or close broker orders.",
     }
+
+
+
+def evaluate_with_runtime_controls(intent, snapshot, ledger, **kwargs):
+    """Apply persisted pause/kill-switch state before evaluating every intent."""
+    controls = ledger.controls()
+    effective = replace(
+        snapshot,
+        trading_paused=controls["trading_paused"],
+        kill_switch_active=controls["kill_switch_active"],
+    )
+    return evaluate_execution_preflight(intent, effective, **kwargs)
