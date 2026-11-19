@@ -15,6 +15,7 @@ from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
+from app.execution.command_queue import ExecutionCommandQueue
 from app.monitoring.health import assess_system_health
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
@@ -23,6 +24,17 @@ app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
 class RuntimeControlUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: StrictBool
+
+
+class MT5ExecutionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    terminal_id: str
+    outcome: str
+    result: dict
+
+
+def execution_command_queue() -> ExecutionCommandQueue:
+    return ExecutionCommandQueue()
 
 
 def execution_ledger() -> ExecutionLedger:
@@ -225,6 +237,33 @@ def update_runtime_control(control_key: str, payload: RuntimeControlUpdate):
         "trading_enabled": False,
         "execution_mode": "disabled",
     }
+
+
+
+@app.get("/api/v1/mt5/execution/commands/next", dependencies=[Depends(require_bridge_token)])
+def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_length=128)):
+    controls = execution_ledger().controls()
+    if controls["trading_paused"] or controls["kill_switch_active"]:
+        return {"command": None, "reason": "execution_safeguards_active"}
+    command = execution_command_queue().lease_next(terminal_id=terminal_id)
+    return {"command": command, "environment": "demo"} if command else {"command": None}
+
+
+@app.post("/api/v1/mt5/execution/commands/{command_id}/result", dependencies=[Depends(require_bridge_token)])
+def record_execution_command_result(command_id: str, payload: MT5ExecutionResult):
+    if payload.outcome not in {"acknowledged", "rejected"}:
+        raise HTTPException(status_code=422, detail="Unsupported terminal outcome.")
+    try:
+        result = execution_command_queue().record_result(
+            command_id, terminal_id=payload.terminal_id,
+            outcome=payload.outcome, result=payload.result,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Execution command not found.")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"command_id": result["command_id"], "status": result["status"],
+            "execution_mode": "demo_transport_only", "trading_enabled": False}
 
 
 @app.get("/health")
