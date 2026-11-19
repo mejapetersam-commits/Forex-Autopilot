@@ -1,6 +1,7 @@
 import os
 import hashlib
 from datetime import datetime, timezone
+from typing import Literal
 from hmac import compare_digest
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -16,6 +17,8 @@ from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
+from app.execution.coordinator import ExecutionCoordinator
+from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_with_runtime_controls
 from app.execution.command_queue import ExecutionCommandQueue
 from app.monitoring.health import assess_system_health
 
@@ -36,6 +39,19 @@ class MT5ExecutionResult(BaseModel):
 
 def execution_command_queue() -> ExecutionCommandQueue:
     return ExecutionCommandQueue()
+
+
+class ExecutionIntentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    symbol: str = Field(min_length=1, max_length=32)
+    side: Literal["buy", "sell"]
+    volume_lots: float = Field(gt=0)
+    stop_loss: float = Field(gt=0)
+    take_profit: float = Field(gt=0)
+    requested_at: datetime
+
+
 
 
 def execution_ledger() -> ExecutionLedger:
@@ -240,6 +256,114 @@ def update_runtime_control(control_key: str, payload: RuntimeControlUpdate):
     }
 
 
+
+
+
+def execution_snapshot_for_symbol(symbol: str) -> ExecutionSnapshot:
+    """Build a fail-closed preflight snapshot exclusively from recent broker telemetry."""
+    store = telemetry_store()
+    now = datetime.now(timezone.utc)
+
+    def age(value):
+        if not value:
+            return 1e9
+        try:
+            observed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                return 1e9
+            return max(-1e9, (now - observed.astimezone(timezone.utc)).total_seconds())
+        except (TypeError, ValueError):
+            return 1e9
+
+    heartbeat = store.latest_heartbeat()
+    account = store.latest_account()
+    quote = next((item for item in store.latest_quotes()
+                  if item["symbol"].upper() == symbol.strip().upper()), None)
+    state = store.latest_execution_state()
+    specification = store.latest_symbol_specification(symbol)
+    controls = execution_ledger().controls()
+
+    max_positions = int(os.getenv("FOREX_AUTOPILOT_MAX_OPEN_POSITIONS", "1"))
+    max_daily_loss = float(os.getenv("FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT", "1.0"))
+    heartbeat_age = age(heartbeat["observed_at"] if heartbeat else None)
+    account_age = age(account["observed_at"] if account else None)
+    quote_age = age(quote["observed_at"] if quote else None)
+    state_age = age(state["observed_at"] if state else None)
+    spec_age = age(specification["observed_at"] if specification else None)
+
+    heartbeat_ok = bool(heartbeat and heartbeat["terminal_connected"] and 0 <= heartbeat_age <= 60)
+    account_ok = bool(account and 0 <= account_age <= 30)
+    state_ok = bool(state and state["environment"] == "demo" and 0 <= state_age <= 20)
+    spec_ok = bool(specification and specification["trade_allowed"] and 0 <= spec_age <= 300)
+    same_server = bool(
+        heartbeat and account and state
+        and heartbeat["server"] == account["server"] == state["server"]
+    )
+    broker_connected = heartbeat_ok and account_ok and state_ok and spec_ok and same_server
+
+    allowlist = tuple(
+        value.strip().upper()
+        for value in os.getenv("FOREX_AUTOPILOT_EXECUTION_SYMBOLS", "").split(",")
+        if value.strip()
+    )
+    digits = specification["digits"] if specification else 0
+    point = specification["point"] if specification else 0.0
+    pip_size = point * (10 if digits in (3, 5) else 1)
+    return ExecutionSnapshot(
+        environment=os.getenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo"),
+        trading_enabled=os.getenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false").lower() == "true",
+        kill_switch_active=controls["kill_switch_active"],
+        trading_paused=controls["trading_paused"],
+        broker_connected=broker_connected,
+        account_equity=float(account["equity"]) if account else 0.0,
+        free_margin=float(account["free_margin"]) if account else 0.0,
+        quote_bid=float(quote["bid"]) if quote else 0.0,
+        quote_ask=float(quote["ask"]) if quote else 0.0,
+        quote_age_seconds=quote_age,
+        account_age_seconds=account_age,
+        open_positions=state["positions_count"] if state else max_positions,
+        daily_loss_pct=state["daily_loss_pct"] if state else max_daily_loss,
+        symbol_allowlist=allowlist,
+        max_spread_pips=float(os.getenv("FOREX_AUTOPILOT_MAX_SPREAD_PIPS", "2.0")),
+        pip_size=pip_size,
+        max_open_positions=max_positions,
+        max_daily_loss_pct=max_daily_loss,
+        require_broker_specification=True,
+        broker_trade_allowed=specification["trade_allowed"] if specification else None,
+        broker_volume_min=specification["volume_min"] if specification else None,
+        broker_volume_max=specification["volume_max"] if specification else None,
+        broker_volume_step=specification["volume_step"] if specification else None,
+        broker_tick_size=specification["tick_size"] if specification else None,
+        broker_tick_value_loss=specification["tick_value_loss"] if specification else None,
+        max_volume_lots=float(os.getenv("FOREX_AUTOPILOT_MAX_VOLUME_LOTS", "0.01")),
+        max_risk_per_trade_pct=float(os.getenv("FOREX_AUTOPILOT_MAX_RISK_PER_TRADE_PCT", "0.25")),
+    )
+
+
+@app.post(
+    "/api/v1/admin/execution/intents/preflight",
+    dependencies=[Depends(require_admin_token)],
+)
+def preflight_execution_intent(payload: ExecutionIntentRequest):
+    intent = TradeIntent(
+        symbol=payload.symbol.strip().upper(),
+        side=payload.side,
+        volume_lots=payload.volume_lots,
+        stop_loss=payload.stop_loss,
+        take_profit=payload.take_profit,
+        requested_at=payload.requested_at,
+    )
+    snapshot = execution_snapshot_for_symbol(intent.symbol)
+    result = ExecutionCoordinator(execution_ledger()).preflight_and_record(
+        payload.idempotency_key, intent, snapshot
+    )
+    return {
+        "intent_id": payload.idempotency_key,
+        "status": result["status"],
+        "preflight": result["preflight"],
+        "broker_submission_attempted": False,
+        "trading_enabled": False,
+    }
 
 
 @app.post(
