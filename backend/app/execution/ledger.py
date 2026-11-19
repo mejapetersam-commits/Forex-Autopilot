@@ -248,7 +248,7 @@ class ExecutionLedger:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT * FROM order_intents
-                   WHERE status IN ('submitted','acknowledged','partially_filled','unknown')
+                   WHERE status IN ('submitted','acknowledged','partially_filled','filled','unknown')
                    ORDER BY updated_at, id LIMIT ?""",
                 (safe_limit,),
             ).fetchall()
