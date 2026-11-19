@@ -163,6 +163,20 @@ class ExecutionLedger:
             ).fetchone()
         return dict(updated)
 
+
+    def get_intent(self, idempotency_key: str) -> dict[str, Any] | None:
+        """Return one durable intent with its decoded payload for guarded dispatch."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM order_intents WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["payload"] = json.loads(item.pop("payload_json"))
+        return item
+
     def set_control(self, key: str, enabled: bool) -> None:
         if key not in {"trading_paused", "kill_switch_active"}:
             raise ValueError("Unsupported runtime control.")
