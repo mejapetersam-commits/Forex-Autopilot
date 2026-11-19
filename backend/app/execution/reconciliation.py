@@ -1,5 +1,6 @@
 """Conservative reconciliation of known order IDs against broker deal history."""
 from __future__ import annotations
+import hashlib
 from math import isclose
 from typing import Any
 from app.execution.ledger import ExecutionLedger
@@ -10,7 +11,7 @@ def reconcile_broker_history(ledger: ExecutionLedger, store: TelemetryStore, *, 
     reports: list[dict[str, Any]] = []
     for intent in ledger.intents_requiring_reconciliation(limit):
         order_id = str(intent.get("broker_order_id") or "")
-        broker_tag = __import__("hashlib").sha256(
+        broker_tag = hashlib.sha256(
             intent["idempotency_key"].encode("utf-8")
         ).hexdigest()[:12]
         if order_id.isdigit() and int(order_id) > 0:
