@@ -375,6 +375,109 @@ void SendExecutionHistory()
       Print("FOREX AUTOPILOT: demo broker history accepted; matching deals=", included);
 }
 
+// Read-only broker order-history snapshot; this function never sends or edits orders.
+string BrokerOrderType(long value)
+{
+   switch(value)
+   {
+      case ORDER_TYPE_BUY: return "buy";
+      case ORDER_TYPE_SELL: return "sell";
+      case ORDER_TYPE_BUY_LIMIT: return "buy_limit";
+      case ORDER_TYPE_SELL_LIMIT: return "sell_limit";
+      case ORDER_TYPE_BUY_STOP: return "buy_stop";
+      case ORDER_TYPE_SELL_STOP: return "sell_stop";
+      case ORDER_TYPE_BUY_STOP_LIMIT: return "buy_stop_limit";
+      case ORDER_TYPE_SELL_STOP_LIMIT: return "sell_stop_limit";
+   }
+   return "";
+}
+
+string BrokerOrderState(long value)
+{
+   switch(value)
+   {
+      case ORDER_STATE_STARTED: return "started";
+      case ORDER_STATE_PLACED: return "placed";
+      case ORDER_STATE_CANCELED: return "canceled";
+      case ORDER_STATE_PARTIAL: return "partial";
+      case ORDER_STATE_FILLED: return "filled";
+      case ORDER_STATE_REJECTED: return "rejected";
+      case ORDER_STATE_EXPIRED: return "expired";
+      case ORDER_STATE_REQUEST_ADD: return "request_add";
+      case ORDER_STATE_REQUEST_MODIFY: return "request_modify";
+      case ORDER_STATE_REQUEST_CANCEL: return "request_cancel";
+   }
+   return "";
+}
+
+void SendExecutionOrderHistory()
+{
+   if(AccountEnvironment() != "demo")
+      return;
+   datetime server_now = TimeTradeServer();
+   datetime history_start = server_now - (datetime)(InpHistoryLookbackDays * 86400);
+   if(!HistorySelect(history_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: broker order history unavailable; order reconciliation remains pending.");
+      return;
+   }
+
+   int total = HistoryOrdersTotal();
+   int server_offset = (int)(TimeTradeServer() - TimeGMT());
+   string body = StringFormat(
+      "{\"terminal_id\":\"%s\",\"environment\":\"demo\","
+      "\"server\":\"%s\",\"history_from\":\"%s\","
+      "\"history_to\":\"%s\",\"observed_at\":\"%s\",\"orders\":[",
+      JsonEscape(InpTerminalId), JsonEscape(AccountInfoString(ACCOUNT_SERVER)),
+      BrokerTimeIso(history_start, server_offset),
+      BrokerTimeIso(server_now, server_offset), IsoUtcNow()
+   );
+   int included = 0;
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryOrderGetTicket(i);
+      if(ticket == 0 || (ulong)HistoryOrderGetInteger(ticket, ORDER_MAGIC) != InpExecutionMagicNumber)
+         continue;
+      string order_type = BrokerOrderType(HistoryOrderGetInteger(ticket, ORDER_TYPE));
+      string state = BrokerOrderState(HistoryOrderGetInteger(ticket, ORDER_STATE));
+      string symbol = JsonEscape(HistoryOrderGetString(ticket, ORDER_SYMBOL));
+      string comment = JsonEscape(HistoryOrderGetString(ticket, ORDER_COMMENT));
+      double initial_volume = HistoryOrderGetDouble(ticket, ORDER_VOLUME_INITIAL);
+      double current_volume = HistoryOrderGetDouble(ticket, ORDER_VOLUME_CURRENT);
+      double price = HistoryOrderGetDouble(ticket, ORDER_PRICE_OPEN);
+      double stop_loss = HistoryOrderGetDouble(ticket, ORDER_SL);
+      double take_profit = HistoryOrderGetDouble(ticket, ORDER_TP);
+      datetime setup_at = (datetime)HistoryOrderGetInteger(ticket, ORDER_TIME_SETUP);
+      datetime done_at = (datetime)HistoryOrderGetInteger(ticket, ORDER_TIME_DONE);
+      if(order_type == "" || state == "" || symbol == "" || initial_volume <= 0 || setup_at <= 0)
+         continue;
+      if(included >= 1000)
+      {
+         Print("FOREX AUTOPILOT: managed order history exceeds the 1000-order safety batch; upload skipped.");
+         return;
+      }
+      if(included > 0)
+         body += ",";
+      string done_stamp = (done_at > 0) ? BrokerTimeIso(done_at, server_offset) : "";
+      body += StringFormat(
+         "{\"order_ticket\":\"%I64u\",\"symbol\":\"%s\","
+         "\"order_type\":\"%s\",\"state\":\"%s\","
+         "\"initial_volume\":%.4f,\"current_volume\":%.4f,"
+         "\"price\":%.10f,\"stop_loss\":%.10f,\"take_profit\":%.10f,"
+         "\"magic\":%I64u,\"comment\":\"%s\","
+         "\"setup_at\":\"%s\",\"done_at\":%s}",
+         ticket, symbol, order_type, state, initial_volume, current_volume,
+         price, stop_loss, take_profit, InpExecutionMagicNumber, comment,
+         BrokerTimeIso(setup_at, server_offset),
+         (done_at > 0) ? StringFormat("\"%s\"", done_stamp) : "null"
+      );
+      included++;
+   }
+   body += "]}";
+   if(PostJson("/api/v1/mt5/execution/orders", body))
+      Print("FOREX AUTOPILOT: demo broker order history accepted; matching orders=", included);
+}
+
 // Sample each configured symbol independently on the one-second timer.
 // A quote is posted only when MT5 reports a genuinely newer market tick.
 void SendQuotes()
@@ -600,6 +703,7 @@ int OnInit()
    SendSymbolSpecifications();
    SendExecutionState();
    SendExecutionHistory();
+   SendExecutionOrderHistory();
    SendQuotes();
    g_last_history_ms = GetTickCount64();
    g_last_snapshot_ms = GetTickCount64();
@@ -636,6 +740,7 @@ void OnTimer()
    if(now_ms - g_last_history_ms >= (ulong)InpHistoryRefreshSeconds * 1000)
    {
       SendExecutionHistory();
+      SendExecutionOrderHistory();
       g_last_history_ms = now_ms;
    }
 
