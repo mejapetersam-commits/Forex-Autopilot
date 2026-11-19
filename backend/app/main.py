@@ -59,6 +59,28 @@ def execution_ledger() -> ExecutionLedger:
     return ExecutionLedger()
 
 
+def quarantine_expired_execution_commands() -> int:
+    """Mark timed-out terminal leases unknown; never redeliver them automatically."""
+    expired = execution_command_queue().expire_leases()
+    ledger = execution_ledger()
+    changed = 0
+    for command in expired:
+        intent = ledger.get_intent(command["intent_id"])
+        if intent and intent["status"] == "approved":
+            ledger.transition(
+                command["intent_id"], "unknown",
+                event_type="command_lease_expired",
+                details={
+                    "command_id": command["command_id"],
+                    "terminal_id": command["terminal_id"],
+                    "attempts": command["attempts"],
+                    "recovery": "broker_history_required",
+                },
+            )
+            changed += 1
+    return changed
+
+
 def require_admin_token(
     x_admin_token: str | None = Header(default=None),
 ) -> None:
@@ -429,6 +451,7 @@ def queue_approved_demo_intent(intent_id: str):
 
 @app.get("/api/v1/mt5/execution/commands/next", dependencies=[Depends(require_bridge_token)])
 def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_length=128)):
+    quarantine_expired_execution_commands()
     if os.getenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo").strip().lower() != "demo":
         return {"command": None, "reason": "demo_environment_required"}
     if os.getenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false").strip().lower() != "true":
@@ -436,19 +459,7 @@ def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_leng
     controls = execution_ledger().controls()
     if controls["trading_paused"] or controls["kill_switch_active"]:
         return {"command": None, "reason": "execution_safeguards_active"}
-    queue = execution_command_queue()
-    command = queue.lease_next(terminal_id=terminal_id)
-    # Expired leases are quarantined, never re-delivered. Mark the corresponding
-    # approved intent unknown so history reconciliation can recover it by broker tag.
-    for expired in queue.expired_commands():
-        intent = execution_ledger().get_intent(expired["intent_id"])
-        if intent and intent["status"] == "approved":
-            execution_ledger().transition(
-                expired["intent_id"], "unknown",
-                event_type="command_lease_expired",
-                details={"command_id": expired["command_id"], "terminal_id": expired["terminal_id"],
-                         "attempts": expired["attempts"], "recovery": "broker_history_required"},
-            )
+    command = execution_command_queue().lease_next(terminal_id=terminal_id)
     return {"command": command, "environment": "demo"} if command else {"command": None}
 
 
@@ -872,6 +883,7 @@ def mt5_execution_history(payload: MT5ExecutionHistory):
 )
 def execution_reconciliation():
     """Compare known execution intents with persisted broker deal evidence."""
+    quarantine_expired_execution_commands()
     store = telemetry_store()
     terminal = store.latest_execution_state()
     if terminal is None:
