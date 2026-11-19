@@ -45,15 +45,28 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 - `/api/v1/backtests/walk-forward/{symbol}/{timeframe}`
 - `/api/v1/market-data/quality/{symbol}/{timeframe}`
 
-The local dashboard displays connection state, account telemetry, quotes, research signals and candle-quality summaries. Its pause/resume and emergency-stop controls require the separate admin token and write an audit trail. Clearing the pause or kill switch does not enable trading; trading remains hard-disabled in this build.
+The local dashboard displays connection state, account telemetry, quotes, research signals and candle-quality summaries. Its pause/resume and emergency-stop controls require the separate admin token and write an audit trail. Clearing the pause or kill switch alone does not enable command delivery.
 
 ## Current safety posture
 
-- MT5 Expert Advisor is a read-only telemetry bridge.
-- Backend trading configuration defaults to disabled.
-- Execution preflight is a fail-closed validation component only.
-- There is no active broker order-submission adapter in this release.
+- `ForexAutopilotTelemetry.mq5` remains read-only.
+- `ForexAutopilotDemoExecution.mq5` is a separate demo-only adapter source; it has not yet been compiled in MetaEditor or validated against a broker.
+- The demo adapter's `InpEnableDemoExecution` defaults to `false` and refuses non-demo accounts.
+- Backend `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED` defaults to `false`; the execution symbol allowlist defaults to empty.
+- Dispatch requires an admin-authenticated request for an existing preflight-approved ledger intent, explicit demo configuration, an allowlisted symbol, and cleared pause/kill-switch controls.
+- Command delivery uses 60-second at-most-once leases. Expired or uncertain commands are quarantined and must be reconciled; never blindly retry an order.
 - Never enable live execution based on a successful build or a profitable-looking in-sample backtest.
+
+
+## Demo adapter preparation (not yet authorised for order flow)
+
+The separate source file is `mt5/Experts/ForexAutopilotDemoExecution.mq5`. Compile it in MetaEditor before attaching it to a chart. Configure the HTTPS API base URL, the existing bridge token locally in MT5, a unique terminal ID containing only letters/numbers/hyphens/underscores, and the exact broker symbols. Keep `InpEnableDemoExecution=false`.
+
+In MetaTrader, add the API host to **Tools → Options → Expert Advisors → Allow WebRequest for listed URL**. Do not paste tokens into source control or chat.
+
+The EA enforces demo account mode, terminal trading permissions, the local symbol allowlist, a 0.01-lot hard ceiling, one open position maximum, broker volume step, stop distance, a free-margin buffer and a persistent command-attempt marker. The adapter source has static CI checks, but these do not replace an actual MetaEditor compile or broker demo test.
+
+Do not set `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED=true`, clear the pause/kill switch, or set `InpEnableDemoExecution=true` until the EA compiles cleanly and the dedicated demo validation plan has been completed. No live-account use is supported.
 
 ## Before a demo execution pilot
 
