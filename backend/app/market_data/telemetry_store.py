@@ -120,6 +120,16 @@ class TelemetryStore:
                     ON candles(symbol, timeframe, opened_at DESC);
                 """
             )
+            execution_columns = {
+                row["name"] for row in connection.execute(
+                    "PRAGMA table_info(execution_state_snapshots)"
+                ).fetchall()
+            }
+            if "daily_loss_pct" not in execution_columns:
+                connection.execute(
+                    "ALTER TABLE execution_state_snapshots "
+                    "ADD COLUMN daily_loss_pct REAL NOT NULL DEFAULT 1000"
+                )
 
 
     def save_execution_state(self, payload: MT5ExecutionState) -> None:
