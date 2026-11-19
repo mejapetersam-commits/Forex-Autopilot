@@ -11,7 +11,7 @@
 - Bounded parameter grid search with chronological walk-forward validation.
 - Candle integrity, timestamp ordering and gap assessment.
 - Local dashboard research feed and severity-ranked operational health alerts.
-- Fail-closed execution preflight checks and tests.
+- Fail-closed execution preflight, persistent operator-control enforcement and execution coordinator that records decisions idempotently without submitting orders.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
 ## Still required before any demo order execution
