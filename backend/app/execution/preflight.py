@@ -63,6 +63,8 @@ def evaluate_execution_preflight(
         snapshot.quote_bid, snapshot.quote_ask, snapshot.quote_age_seconds,
         snapshot.account_age_seconds, snapshot.daily_loss_pct,
         snapshot.max_spread_pips, snapshot.pip_size,
+        snapshot.max_volume_lots, snapshot.max_risk_per_trade_pct,
+        snapshot.max_daily_loss_pct,
     )
     if not all(isfinite(float(value)) for value in numeric):
         reasons.append("Non-finite numeric input.")
@@ -82,6 +84,8 @@ def evaluate_execution_preflight(
         reasons.append("Side must be buy or sell.")
     if intent.volume_lots <= 0:
         reasons.append("Volume must be positive.")
+    if snapshot.max_volume_lots <= 0 or snapshot.max_risk_per_trade_pct <= 0:
+        reasons.append("Local volume and per-trade risk limits must be positive.")
     if intent.volume_lots > snapshot.max_volume_lots:
         reasons.append("Volume exceeds the configured local per-trade ceiling.")
     if snapshot.require_broker_specification:
