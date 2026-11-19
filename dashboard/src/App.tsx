@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { getOverview, getResearch, type DashboardOverview, type ResearchItem } from "./api";
+import { getOverview, getResearch, getOperationalEvents, type DashboardOverview, type ResearchItem, type OperationalEvent } from "./api";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -20,7 +20,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 
 export default function App() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [research, setResearch] = useState<ResearchItem[]>([]);
+  const [research, setResearch] = useState<ResearchItem[]>([]);\n  const [events, setEvents] = useState<OperationalEvent[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -88,6 +88,14 @@ export default function App() {
     </section>
 
     {alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
+
+    <section className="panel">
+      <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
+      <div className="table-wrap"><table><thead><tr><th>TIME</th><th>SEVERITY</th><th>EVENT</th><th>DETAIL</th><th>DELIVERY</th><th>ATTEMPTS</th></tr></thead><tbody>
+        {events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
+        {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
+      </tbody></table></div>
+    </section>
 
     <footer><span><ShieldCheck size={14}/> READ-ONLY DASHBOARD · EXECUTION DISABLED</span><span>Last refreshed: {stamp(lastUpdated)}</span></footer>
   </main>;
