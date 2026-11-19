@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5ExecutionHistory, MT5ExecutionState, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
+from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5ExecutionHistory, MT5ExecutionOrderHistory, MT5ExecutionState, MT5Heartbeat, MT5Quote, MT5SymbolSpecification
 
 
 class TelemetryStore:
@@ -122,6 +122,28 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_deals_order
                     ON execution_deals(order_ticket, entry, occurred_at);
+
+                CREATE TABLE IF NOT EXISTS execution_orders (
+                    order_ticket TEXT PRIMARY KEY,
+                    terminal_id TEXT NOT NULL,
+                    environment TEXT NOT NULL CHECK(environment = 'demo'),
+                    server TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    order_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    initial_volume REAL NOT NULL,
+                    current_volume REAL NOT NULL,
+                    price REAL NOT NULL,
+                    stop_loss REAL NOT NULL,
+                    take_profit REAL NOT NULL,
+                    magic INTEGER NOT NULL,
+                    comment TEXT NOT NULL,
+                    setup_at TEXT NOT NULL,
+                    done_at TEXT,
+                    observed_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_execution_orders_state
+                    ON execution_orders(state, observed_at DESC);
 
                 CREATE TABLE IF NOT EXISTS candles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,6 +467,64 @@ class TelemetryStore:
                 rows,
             )
         return len(rows)
+
+
+    def save_execution_order_history(self, payload: MT5ExecutionOrderHistory) -> int:
+        """Upsert broker order snapshots while rejecting immutable ticket conflicts."""
+        rows = [
+            (order.order_ticket, payload.terminal_id, payload.environment, payload.server,
+             order.symbol, order.order_type, order.state, order.initial_volume,
+             order.current_volume, order.price, order.stop_loss, order.take_profit,
+             order.magic, order.comment, order.setup_at.isoformat(),
+             order.done_at.isoformat() if order.done_at else None,
+             payload.observed_at.isoformat())
+            for order in payload.orders
+        ]
+        immutable = ("terminal_id", "environment", "server", "symbol", "order_type",
+                     "initial_volume", "price", "stop_loss", "take_profit", "magic",
+                     "comment", "setup_at")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for row in rows:
+                existing = connection.execute(
+                    "SELECT * FROM execution_orders WHERE order_ticket=?", (row[0],)
+                ).fetchone()
+                if existing is not None:
+                    for index, column in enumerate(immutable, start=1):
+                        if existing[column] != row[index]:
+                            raise ValueError(
+                                f"Conflicting broker evidence for existing order ticket {row[0]} ({column})."
+                            )
+            connection.executemany(
+                """INSERT INTO execution_orders(
+                    order_ticket, terminal_id, environment, server, symbol, order_type,
+                    state, initial_volume, current_volume, price, stop_loss, take_profit,
+                    magic, comment, setup_at, done_at, observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(order_ticket) DO UPDATE SET
+                    state=excluded.state, current_volume=excluded.current_volume,
+                    done_at=excluded.done_at, observed_at=excluded.observed_at
+                WHERE excluded.observed_at >= execution_orders.observed_at""",
+                rows,
+            )
+        return len(rows)
+
+    def execution_orders_for_ticket(self, order_ticket: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM execution_orders WHERE order_ticket=?",
+                (str(order_ticket),),
+            ).fetchone()
+        return self._as_dict(row)
+
+    def execution_orders_for_tag(self, broker_tag: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM execution_orders WHERE comment LIKE ?
+                   ORDER BY setup_at, order_ticket""",
+                ("FA:" + broker_tag + "%",),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def execution_deals_for_order(self, order_ticket: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
