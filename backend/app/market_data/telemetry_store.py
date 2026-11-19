@@ -473,7 +473,7 @@ class TelemetryStore:
                 ).fetchone()
                 if existing is not None:
                     for index, column in enumerate(immutable_columns, start=1):
-                        row_index = index + 1
+                        row_index = index
                         if existing[column] != row[row_index]:
                             raise ValueError(
                                 f"Conflicting broker evidence for existing deal ticket {row[0]} ({column})."
