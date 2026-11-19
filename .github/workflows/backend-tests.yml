@@ -5,6 +5,7 @@ on:
     branches: [main, feature/bulk-candle-ingestion]
     paths:
       - "backend/**"
+      - "mt5/**"
       - ".github/workflows/backend-tests.yml"
       - "docker-compose.yml"
       - ".dockerignore"
