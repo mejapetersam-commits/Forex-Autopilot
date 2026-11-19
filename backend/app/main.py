@@ -240,8 +240,45 @@ def update_runtime_control(control_key: str, payload: RuntimeControlUpdate):
 
 
 
+
+@app.post(
+    "/api/v1/admin/execution/intents/{intent_id}/queue",
+    dependencies=[Depends(require_admin_token)],
+)
+def queue_approved_demo_intent(intent_id: str):
+    """Dispatch only preflight-approved intents under explicit demo safeguards."""
+    if os.getenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo").strip().lower() != "demo":
+        raise HTTPException(status_code=403, detail="Execution transport is demo-only.")
+    if os.getenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false").strip().lower() != "true":
+        raise HTTPException(status_code=403, detail="Demo execution transport is disabled by configuration.")
+    controls = execution_ledger().controls()
+    if controls["trading_paused"] or controls["kill_switch_active"]:
+        raise HTTPException(status_code=423, detail="Pause or emergency stop is active.")
+    intent = execution_ledger().get_intent(intent_id)
+    if intent is None:
+        raise HTTPException(status_code=404, detail="Order intent not found.")
+    if intent["status"] != "approved":
+        raise HTTPException(status_code=409, detail="Only a preflight-approved intent can be queued.")
+    allowed = {v.strip().upper() for v in os.getenv("FOREX_AUTOPILOT_EXECUTION_SYMBOLS", "").split(",") if v.strip()}
+    if not allowed or intent["payload"].get("symbol", "").upper() not in allowed:
+        raise HTTPException(status_code=403, detail="Symbol is not in the explicit execution allowlist.")
+    try:
+        queued = execution_command_queue().enqueue_approved_intent(
+            command_id="cmd-" + intent_id, intent_id=intent_id,
+            payload=intent["payload"], environment="demo", trading_enabled=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"command_id": queued["command_id"], "status": queued["status"],
+            "environment": "demo", "trading_enabled": False}
+
+
 @app.get("/api/v1/mt5/execution/commands/next", dependencies=[Depends(require_bridge_token)])
 def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_length=128)):
+    if os.getenv("FOREX_AUTOPILOT_ENVIRONMENT", "demo").strip().lower() != "demo":
+        return {"command": None, "reason": "demo_environment_required"}
+    if os.getenv("FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED", "false").strip().lower() != "true":
+        return {"command": None, "reason": "demo_execution_disabled"}
     controls = execution_ledger().controls()
     if controls["trading_paused"] or controls["kill_switch_active"]:
         return {"command": None, "reason": "execution_safeguards_active"}
@@ -251,7 +288,7 @@ def lease_next_execution_command(terminal_id: str = Query(min_length=1, max_leng
 
 @app.post("/api/v1/mt5/execution/commands/{command_id}/result", dependencies=[Depends(require_bridge_token)])
 def record_execution_command_result(command_id: str, payload: MT5ExecutionResult):
-    if payload.outcome not in {"acknowledged", "rejected"}:
+    if payload.outcome not in {"acknowledged", "rejected", "unknown"}:
         raise HTTPException(status_code=422, detail="Unsupported terminal outcome.")
     try:
         result = execution_command_queue().record_result(
@@ -263,7 +300,8 @@ def record_execution_command_result(command_id: str, payload: MT5ExecutionResult
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"command_id": result["command_id"], "status": result["status"],
-            "execution_mode": "demo_transport_only", "trading_enabled": False}
+            "execution_mode": "demo_transport", "trading_enabled": False}
+
 
 
 @app.get("/health")
