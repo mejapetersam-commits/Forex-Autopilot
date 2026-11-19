@@ -365,3 +365,76 @@ def test_bridge_is_unavailable_with_weak_server_secret(monkeypatch):
         headers={"X-Bridge-Token": "too-short"},
     )
     assert response.status_code == 503
+
+
+
+def test_bulk_candle_upload_stores_eight_groups_atomically():
+    headers = {"X-Bridge-Token": TOKEN}
+    batches = []
+    for symbol in ("EURUSDm", "GBPUSDm"):
+        for timeframe in ("M5", "M15", "H1", "H4"):
+            batches.append({
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "candles": [
+                    {
+                        "opened_at": f"2026-11-18T12:{minute:02d}:00Z",
+                        "open": 1.0800,
+                        "high": 1.0810,
+                        "low": 1.0790,
+                        "close": 1.0805,
+                        "tick_volume": 100 + minute,
+                    }
+                    for minute in (0, 5)
+                ],
+            })
+
+    response = client.post(
+        "/api/v1/mt5/candles/bulk",
+        headers=headers,
+        json={"batches": batches},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["accepted"] is True
+    assert result["stored"] is True
+    assert result["batches_received"] == 8
+    assert result["candles_received"] == 16
+    assert result["trading_enabled"] is False
+
+    history = client.get(
+        "/api/v1/mt5/history/candles/EURUSDm/M5?limit=500",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    assert history.json()["count"] == 2
+
+
+def test_bulk_candle_upload_rejects_duplicate_symbol_timeframe_groups():
+    headers = {"X-Bridge-Token": TOKEN}
+    batch = {
+        "symbol": "EURUSDm",
+        "timeframe": "M5",
+        "candles": [{
+            "opened_at": "2026-11-18T12:00:00Z",
+            "open": 1.08,
+            "high": 1.081,
+            "low": 1.079,
+            "close": 1.0805,
+            "tick_volume": 100,
+        }],
+    }
+    response = client.post(
+        "/api/v1/mt5/candles/bulk",
+        headers=headers,
+        json={"batches": [batch, batch]},
+    )
+    assert response.status_code == 422
+
+
+def test_bulk_candle_upload_rejects_missing_authentication():
+    response = client.post(
+        "/api/v1/mt5/candles/bulk",
+        json={"batches": []},
+    )
+    assert response.status_code == 401
