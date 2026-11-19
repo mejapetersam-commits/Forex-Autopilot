@@ -4,6 +4,7 @@ from hmac import compare_digest
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict, StrictBool
 from pathlib import Path
 
 from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5Quote
@@ -13,8 +14,35 @@ from app.strategy.engine import StrategyConfig, evaluate_signal
 from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.market_data.quality import assess_candle_quality
+from app.execution.ledger import ExecutionLedger
 
-app = FastAPI(title="FOREX AUTOPILOT API", version="0.3.0")
+app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
+
+
+class RuntimeControlUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: StrictBool
+
+
+def execution_ledger() -> ExecutionLedger:
+    return ExecutionLedger()
+
+
+def require_admin_token(
+    x_admin_token: str | None = Header(default=None),
+) -> None:
+    expected = os.getenv("FOREX_AUTOPILOT_ADMIN_TOKEN")
+    if not expected or len(expected) < 32:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin controls are unavailable until a strong admin token is configured.",
+        )
+    if not x_admin_token or not compare_digest(x_admin_token, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin authentication.",
+        )
+
 
 
 def require_bridge_token(
@@ -139,6 +167,46 @@ def dashboard_research():
         "execution_mode": "disabled",
         "trading_enabled": False,
         "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/v1/dashboard/controls", include_in_schema=False)
+def dashboard_runtime_controls():
+    """Expose only non-secret local pause and emergency-stop state."""
+    return {
+        **execution_ledger().controls(),
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+    }
+
+
+@app.get(
+    "/api/v1/admin/controls",
+    dependencies=[Depends(require_admin_token)],
+)
+def admin_runtime_controls():
+    return {
+        **execution_ledger().controls(),
+        "audit": execution_ledger().control_events(100),
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+    }
+
+
+@app.post(
+    "/api/v1/admin/controls/{control_key}",
+    dependencies=[Depends(require_admin_token)],
+)
+def update_runtime_control(control_key: str, payload: RuntimeControlUpdate):
+    if control_key not in {"trading_paused", "kill_switch_active"}:
+        raise HTTPException(status_code=404, detail="Unsupported runtime control.")
+    ledger = execution_ledger()
+    ledger.set_control(control_key, payload.enabled)
+    return {
+        **ledger.controls(),
+        "audit": ledger.control_events(20),
+        "trading_enabled": False,
+        "execution_mode": "disabled",
     }
 
 
