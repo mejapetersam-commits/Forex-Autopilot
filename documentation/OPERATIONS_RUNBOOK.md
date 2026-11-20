@@ -54,8 +54,9 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 - `/api/v1/backtests/run/{symbol}/{timeframe}`
 - `/api/v1/backtests/walk-forward/{symbol}/{timeframe}`
 - `/api/v1/market-data/quality/{symbol}/{timeframe}`
+- Read-only `GET /api/v1/dashboard/portfolio` (fresh demo positions, gross/net currency exposure and estimated stop risk)
 
-The local dashboard displays connection state, account telemetry, quotes, research signals and candle-quality summaries. Its pause/resume and emergency-stop controls require the separate admin token and write an audit trail. Clearing the pause or kill switch alone does not enable command delivery.
+The local dashboard displays connection state, account telemetry, quotes, research signals, operational events, and read-only portfolio concentration/stop-risk estimates. Portfolio estimates require fresh account, position, quote and broker-specification telemetry; unsupported currency conversions or missing stops are flagged rather than guessed. Its pause/resume and emergency-stop controls require the separate admin token and write an audit trail. Clearing the pause or kill switch alone does not enable command delivery.
 
 ## Current safety posture
 
