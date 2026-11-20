@@ -143,3 +143,70 @@ html{scroll-behavior:smooth;scroll-padding-top:84px}
 .dashboard-accordion[open]>summary{border-bottom:1px solid #304149}
 .dashboard-accordion>.panel{margin:14px}
 @media(max-width:600px){.dashboard-accordion>summary{align-items:flex-start;flex-wrap:wrap}.dashboard-accordion>summary span{width:100%;margin-left:0;text-align:left}}
+
+
+/* Multi-page fintech workspace */
+.dashboard-nav{display:flex;gap:7px;overflow-x:auto;padding:10px;margin:8px 0 20px;background:#fff;border:1px solid #e8e9e3;border-radius:16px;box-shadow:0 5px 20px #253b3010}
+.dashboard-nav button{border:0;background:transparent;color:#52636a;padding:11px 16px;border-radius:11px;white-space:nowrap;font-size:12px;font-weight:600;cursor:pointer;transition:background .18s,transform .18s}
+.dashboard-nav button:hover{background:#eef6f0;transform:translateY(-1px)}
+.dashboard-nav button.active{background:#dff4e7;color:#1e5940}
+.page-intro{padding:10px 2px 22px}
+.page-intro h2{font:750 clamp(23px,3vw,32px) Manrope;color:#263a43;margin:7px 0}
+.page-intro p{color:#78878a;font-size:13px;margin:0}
+.shell{background:#f7f7f0;color:#263a43;min-height:100vh}
+body{background:#f7f7f0}
+.shell .hero h1{color:#263a43}
+.shell .hero h1 em{color:#3b9b72}
+.shell .safety{background:#e8f5ec;border-color:#c8e6d2;color:#28734f}
+.shell .safety span{color:#607b6a}
+.shell .metric,.shell .panel{background:#fff;border:1px solid #e9ece6;border-radius:16px;box-shadow:0 7px 24px #263a4309}
+.shell .metric strong{color:#263a43}
+.shell .metric>span{color:#788b85}
+.shell .metric small,.shell .subhead{color:#78878a}
+.shell .dashboard-accordion{background:#fff;border-color:#e5eae3;border-radius:14px}
+.shell .dashboard-accordion>summary{color:#28734f}
+.shell .dashboard-accordion>summary span{color:#82918c}
+.shell .dashboard-nav{position:sticky;top:0;z-index:20}
+.shell .connection-row{background:#f2f7f2}
+.shell .connection-icon{background:#dff4e7;color:#28734f}
+.shell .table-wrap th{color:#7a8984;border-color:#e8ece6}
+.shell td{color:#52636a;border-color:#edf0eb}
+.shell .symbol{color:#263a43}
+.shell .research-tag{color:#398b6b}
+.shell .risk-banner.risk-block{background:#fff0eb;border-color:#f0c9bd;color:#a84f3e}
+.shell .risk-banner.risk-pass{background:#e9f6ec;border-color:#c8e6d2;color:#28734f}
+.shell .alert-row{color:#a75b43;border-color:#f0e3dc}
+.shell .refresh{background:#fff;border-color:#e2e8e1;color:#40565a;border-radius:10px}
+.shell .status{color:#667b75}
+.shell .status.good i{background:#45a978;box-shadow:none}
+.shell .status.bad i{background:#e17b6c}
+.shell .brand-mark{background:#bdebd5;color:#245c48;border-radius:13px}
+.shell .brand b{color:#263a43}
+.shell .brand span{color:#84928d}
+.shell .group-heading h2{color:#263a43}
+.shell .group-heading p{color:#78878a}
+.shell .error{background:#fff0eb;border-color:#efc8bd;color:#a84f3e}
+.shell footer{color:#85928d}
+.shell.page-overview #connectivity,.shell.page-overview #research,.shell.page-overview #portfolio,.shell.page-overview #data,.shell.page-overview #strategy,.shell.page-overview #operations{display:none}
+.shell.page-market #overview,.shell.page-market #portfolio,.shell.page-market #strategy,.shell.page-market #operations{display:none}
+.shell.page-portfolio .hero,.shell.page-portfolio #overview,.shell.page-portfolio #connectivity,.shell.page-portfolio #research,.shell.page-portfolio #data,.shell.page-portfolio #strategy,.shell.page-portfolio #operations{display:none}
+.shell.page-strategies .hero,.shell.page-strategies #overview,.shell.page-strategies #connectivity,.shell.page-strategies #research,.shell.page-strategies #portfolio,.shell.page-strategies #data,.shell.page-strategies #operations{display:none}
+.shell.page-risk .hero,.shell.page-risk #overview,.shell.page-risk #connectivity,.shell.page-risk #research,.shell.page-risk #portfolio,.shell.page-risk #data,.shell.page-risk #strategy{display:none}
+.shell.page-system .hero,.shell.page-system #overview,.shell.page-system #research,.shell.page-system #portfolio,.shell.page-system #strategy{display:none}
+.shell.page-system #operations .group-heading{display:none}
+.shell.page-system #operations #execution,.shell.page-system #operations #recovery,.shell.page-system #operations #events{display:none}
+.shell.page-system #operations details{display:block}
+.shell.page-system #operations details>section{display:none}
+.shell.page-system #operations details>#events{display:block}
+.shell.theme-dark{background:#14232a;color:#e8edf0}
+.shell.theme-dark .page-intro h2,.shell.theme-dark .hero h1,.shell.theme-dark .brand b{color:#edf3ef}
+.shell.theme-dark .dashboard-nav,.shell.theme-dark .metric,.shell.theme-dark .panel,.shell.theme-dark .dashboard-accordion{background:#1c3038;border-color:#31464d}
+.shell.theme-dark .dashboard-nav button{color:#d0ded8}
+.shell.theme-dark .dashboard-nav button.active{background:#345849;color:#dff4e7}
+.shell.theme-dark .metric strong,.shell.theme-dark .symbol{color:#edf3ef}
+.shell.theme-dark td{color:#c0cfca;border-color:#31464d}
+.shell.theme-dark .dashboard-accordion>summary{color:#bdebd5}
+.shell.theme-dark .connection-row{background:#263c43}
+.shell.theme-dark .refresh{background:#263c43;color:#edf3ef;border-color:#40565c}
+.shell.theme-dark .page-intro p,.shell.theme-dark .metric small{color:#a0b2ac}
+@media(max-width:760px){.dashboard-nav{top:0}.dashboard-nav button{padding:10px 12px}.shell .hero{padding-top:28px}.page-intro{padding-bottom:16px}}
