@@ -36,6 +36,12 @@ def test_backtest_runs_and_reports_costs_and_risk():
         for index in range(len(curve) - 1)
     )
     assert curve[-1]["equity"] == result["final_equity"]
+    mark_curve = result["mark_to_market_equity_curve"]
+    assert len(mark_curve) == 180 - BacktestConfig().minimum_candles + 1
+    assert mark_curve[0]["equity"] == result["initial_equity"]
+    assert mark_curve[-1]["equity"] == result["final_equity"]
+    assert all(point["drawdown_pct"] >= 0 for point in mark_curve)
+    assert result["mark_to_market_max_drawdown_pct"] >= 0
 
 
 def test_backtest_insufficient_history_returns_no_trades():
