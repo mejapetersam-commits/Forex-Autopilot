@@ -43,8 +43,7 @@ Use the `X-Bridge-Token` header for authenticated endpoints:
 - `POST /api/v1/mt5/execution/orders` (authenticated pending/filled/cancelled/rejected/expired broker order history)
 - Admin-only `POST /api/v1/admin/strategy/dispatch/{symbol}/{timeframe}` (turns a closed-candle strategy candidate into a deterministic risk-preflighted intent; optional queue request is still subject to all demo gates)
 - Admin-only `GET /api/v1/monitoring/reconciliation` (compare unresolved intents with fresh matching terminal history)
-- `/api/v1/monitoring/execution-state` (position-to-deal links and protective-stop alerts)
-- `/api/v1/monitoring/execution-state` (snapshot freshness, daily-loss status and managed-position stop/target alerts)
+- `/api/v1/monitoring/execution-state` (snapshot freshness, position-to-deal links, daily-loss status and managed-position stop/target alerts)
 - Admin-only `POST /api/v1/admin/execution/intents/preflight` (server-derived preflight; does not submit an order)
 - Admin-only `POST /api/v1/admin/execution/intents/{intent_id}/queue` (revalidates current telemetry before queuing)
 - Authenticated MT5 polling/result routes under `/api/v1/mt5/execution/commands/`
@@ -165,6 +164,16 @@ closed demo position cycles reconstructed from broker deal history. The MT5
 telemetry EA sends each deal's `DEAL_PROFIT`, `DEAL_COMMISSION`,
 `DEAL_SWAP` and `DEAL_FEE`; these values are retained in account-currency
 units without conversion.
+
+The bridge currently uploads only buy/sell deals whose broker-reported magic
+number matches `InpExecutionMagicNumber` (default `61119001`) and whose deal,
+order and position identifiers are valid. The default history window is two
+days. Manual trades or trades using another magic number are therefore not
+included in this managed-execution attribution feed. A successful HTTP response
+can contain zero matching deals; compare the EA's `matching deals` count with
+the broker statement before interpreting an empty dashboard as no trading
+activity. This filter is intentional and does not imply that the broker history
+itself is empty.
 
 A cycle is keyed by terminal identity plus MT5 `POSITION_IDENTIFIER`.
 Partial entry fills accumulate into the same cycle. Partial exits reduce the
