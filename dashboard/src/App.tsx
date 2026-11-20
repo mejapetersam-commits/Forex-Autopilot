@@ -190,10 +190,10 @@ export default function App() {
     </section>
 
     <section className="panel">
-      <div className="section-head"><div><div className="eyebrow">RECOVERY & CONTINUITY</div><h2>Backup health & command quarantine</h2><p className="subhead">Verified recovery points and commands held for broker reconciliation. This panel is read-only.</p></div><Status good={Boolean(recovery?.backups.fresh_verified_backup && recovery?.backups.invalid_count === 0)}>{recovery?.backups.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status></div>
+      <div className="section-head"><div><div className="eyebrow">RECOVERY & CONTINUITY</div><h2>Backup health & command quarantine</h2><p className="subhead">Verified recovery points and commands held for broker reconciliation. This panel is read-only.</p></div><Status good={Boolean(recovery?.backup_worker.fresh && recovery?.backups.fresh_verified_backup && recovery?.backups.invalid_count === 0)}>{recovery?.backups.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status></div>
       <div className="metrics">
         <Metric label="FRESH VERIFIED BACKUP" value={recovery?.backups.fresh_verified_backup ? "YES" : "NO"} detail={recovery?.backups.latest_backup_age_hours == null ? "No verified recovery point" : "Latest is " + recovery.backups.latest_backup_age_hours + " hours old"}/>
-        <Metric label="VERIFIED SNAPSHOTS" value={String(recovery?.backups.verified_count ?? "—")} detail={String(recovery?.backups.invalid_count ?? 0) + " invalid snapshots detected"}/>
+        <Metric label="BACKUP WORKER" value={recovery?.backup_worker.fresh ? "HEALTHY" : (recovery?.backup_worker.status?.toUpperCase() ?? "—")} detail={recovery?.backup_worker.age_seconds == null ? "No successful worker heartbeat" : "Last success " + Math.round(recovery.backup_worker.age_seconds / 60) + " min ago"}/>
         <Metric label="QUARANTINED COMMANDS" value={String(recovery?.execution_commands.quarantined_total ?? "—")} detail="Expired or uncertain; never auto-resent"/>
         <Metric label="QUEUED / LEASED" value={String((recovery?.execution_commands.counts.queued ?? 0) + " / " + (recovery?.execution_commands.counts.leased ?? 0))} detail="Transport queue state"/>
       </div>
