@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { getOverview, getResearch, getOperationalEvents, getPortfolio, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse } from "./api";
+import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations } from "./api";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -23,6 +23,7 @@ export default function App() {
   const [research, setResearch] = useState<ResearchItem[]>([]);
   const [events, setEvents] = useState<OperationalEvent[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [operations, setOperations] = useState<DashboardOperations | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -30,11 +31,12 @@ export default function App() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, r, e, p] = await Promise.all([getOverview(), getResearch(), getOperationalEvents(), getPortfolio()]);
+      const [o, r, e, p, ops] = await Promise.all([getOverview(), getResearch(), getOperationalEvents(), getPortfolio(), getDashboardOperations()]);
       setOverview(o);
       setResearch(r.items ?? []);
       setEvents(e.items ?? []);
       setPortfolio(p);
+      setOperations(ops);
       setLastUpdated(new Date().toISOString());
       setError("");
     } catch (e) {
@@ -111,6 +113,29 @@ export default function App() {
         {!portfolio?.positions.length && <tr><td colSpan={6} className="empty">No open positions reported.</td></tr>}
       </tbody></table></div>
       <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
+    </section>
+
+    <section className="panel">
+      <div className="section-head"><div><div className="eyebrow">EXECUTION CONTROL ROOM</div><h2>Position oversight & risk gate</h2><p className="subhead">Live demo-position reconciliation, lifecycle evidence and aggregate risk status. This view is read-only.</p></div><Status good={operations?.read_only === true && operations?.trading_enabled === false}>READ ONLY</Status></div>
+      <div className="metrics ops-metrics">
+        <Metric label="RECONCILIATION" value={operations?.reconciliation.status.replaceAll("_", " ").toUpperCase() ?? "LOADING"} detail="Managed positions checked against intent ledger"/>
+        <Metric label="ORPHANED POSITIONS" value={String(operations?.reconciliation.orphaned_positions.length ?? "—")} detail="Require operator investigation; never auto-closed"/>
+        <Metric label="LIFECYCLE EVENTS" value={String(operations?.lifecycle.events.length ?? "—")} detail={operations?.lifecycle.previous_snapshot_available ? "Compared with prior terminal snapshot" : "Waiting for comparable snapshot baseline"}/>
+        <Metric label="PORTFOLIO STOP RISK" value={operations?.portfolio_risk_gate.aggregate_stop_risk_pct == null ? "UNKNOWN" : operations.portfolio_risk_gate.aggregate_stop_risk_pct.toFixed(3) + "%"} detail={operations?.portfolio_risk_gate.max_stop_risk_pct != null ? "Ceiling " + operations.portfolio_risk_gate.max_stop_risk_pct.toFixed(2) + "% of equity" : "Aggregate risk ceiling"}/>
+      </div>
+      <div className={`risk-banner ${operations?.portfolio_risk_gate.approved ? "risk-pass" : "risk-block"}`}>
+        <ShieldCheck size={18}/>
+        <div><b>{operations?.portfolio_risk_gate.approved ? "AGGREGATE RISK WITHIN LIMIT" : "DISPATCH RISK GATE BLOCKED / UNVERIFIED"}</b>
+        <span>{operations?.portfolio_risk_gate.reasons?.length ? operations.portfolio_risk_gate.reasons.join(" · ") : "Fresh, complete portfolio risk is within the configured ceiling."}</span></div>
+      </div>
+      {Boolean(operations?.reconciliation.orphaned_positions.length) && <div className="table-wrap"><table><thead><tr><th>UNMATCHED TICKET</th><th>SYMBOL</th><th>SIDE</th><th>VOLUME</th><th>REVIEW REASON</th></tr></thead><tbody>
+        {operations?.reconciliation.orphaned_positions.map(position => <tr key={position.ticket}><td className="symbol">{position.ticket}</td><td>{position.symbol}</td><td>{position.side}</td><td>{position.volume_lots.toFixed(2)}</td><td>{position.reason.replaceAll("_", " ")}</td></tr>)}
+      </tbody></table></div>}
+      <div className="table-wrap"><table><thead><tr><th>LIFECYCLE EVENT</th><th>POSITION</th><th>DETAIL</th></tr></thead><tbody>
+        {operations?.lifecycle.events.map((event, index) => <tr key={String(event.event_type) + index}><td className="symbol">{String(event.event_type).replaceAll("_", " ")}</td><td>{String(event.position_id ?? event.ticket ?? "—")}</td><td>{event.reason ? String(event.reason).replaceAll("_", " ") : event.field ? String(event.field) + ": " + String(event.previous_value ?? "—") + " → " + String(event.current_value ?? "—") : event.reduced_volume_lots != null ? "Reduced by " + String(event.reduced_volume_lots) + " lots" : "Observed in latest broker snapshots"}</td></tr>)}
+        {!operations?.lifecycle.events.length && <tr><td colSpan={3} className="empty">No new lifecycle transitions in the latest snapshot comparison.</td></tr>}
+      </tbody></table></div>
+      <p className="subhead">Unmatched managed positions are flagged for review, never automatically closed. A missing position is not called closed unless broker deal history confirms the full close.</p>
     </section>
 
     <section className="panel">
