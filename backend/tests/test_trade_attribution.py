@@ -82,3 +82,72 @@ def test_deal_model_rejects_non_finite_broker_cash_amount():
             side="buy", entry="in", volume_lots=0.01, price=1.1, magic=1,
             occurred_at="2026-11-19T10:00:00+00:00", profit=float("nan"),
         )
+
+
+def test_store_persists_cash_components_idempotently_and_exposes_currency(tmp_path):
+    from datetime import datetime, timezone
+    import pytest
+    from app.broker.bridge import MT5ExecutionDeal, MT5ExecutionHistory
+    from app.market_data.telemetry_store import TelemetryStore
+
+    store = TelemetryStore(tmp_path / "cash.sqlite3")
+    stamp = datetime(2026, 11, 19, 10, 0, tzinfo=timezone.utc)
+    entry = MT5ExecutionDeal(
+        deal_ticket="100", order_ticket="200", position_id="9001", symbol="EURUSDM",
+        side="buy", entry="in", volume_lots=0.01, price=1.1, magic=61119001,
+        occurred_at=stamp, profit=0, commission=-0.1, swap=0, fee=0,
+    )
+    exit_deal = MT5ExecutionDeal(
+        deal_ticket="101", order_ticket="201", position_id="9001", symbol="EURUSDM",
+        side="sell", entry="out", volume_lots=0.01, price=1.101, magic=61119001,
+        occurred_at=stamp.replace(minute=1), profit=1.0, commission=-0.1, swap=0, fee=-0.02,
+    )
+    payload = MT5ExecutionHistory(
+        terminal_id="terminal-demo", environment="demo", server="Exness-MT5Trial",
+        history_from=stamp, history_to=stamp.replace(minute=2),
+        observed_at=stamp.replace(minute=2), deals=[entry, exit_deal],
+    )
+    store.save_execution_history(payload)
+    store.save_execution_history(payload)
+    with store._connect() as connection:
+        connection.execute(
+            "INSERT INTO account_snapshots(server, account_currency, balance, equity, margin, free_margin, leverage, observed_at) VALUES ('Exness-MT5Trial','USD',1000,1000,0,1000,100,'2026-11-19T10:02:00+00:00')"
+        )
+    result = store.demo_trade_attribution()
+    assert result["deal_count"] == 2
+    assert result["closed_trade_count"] == 1
+    assert result["pnl_complete_trade_count"] == 1
+    assert result["net_realized_pnl"] == 0.78
+    assert result["account_currency"] == "USD"
+    assert result["groups"][0]["symbol"] == "EURUSDM"
+
+    conflicting = exit_deal.model_copy(update={"profit": 2.0})
+    bad_payload = payload.model_copy(update={"deals": [conflicting]})
+    with pytest.raises(ValueError, match="Conflicting broker evidence"):
+        store.save_execution_history(bad_payload)
+
+
+def test_store_migrates_existing_execution_deals_table(tmp_path):
+    import sqlite3
+    from app.market_data.telemetry_store import TelemetryStore
+
+    path = tmp_path / "legacy.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        """CREATE TABLE execution_deals (
+            deal_ticket TEXT PRIMARY KEY, order_ticket TEXT NOT NULL,
+            position_id TEXT NOT NULL DEFAULT '', terminal_id TEXT NOT NULL,
+            environment TEXT NOT NULL CHECK(environment='demo'), server TEXT NOT NULL,
+            symbol TEXT NOT NULL, side TEXT NOT NULL, entry TEXT NOT NULL,
+            volume_lots REAL NOT NULL, price REAL NOT NULL, magic INTEGER NOT NULL,
+            comment TEXT NOT NULL, occurred_at TEXT NOT NULL, observed_at TEXT NOT NULL
+        )"""
+    )
+    connection.commit()
+    connection.close()
+
+    TelemetryStore(path)
+    connection = sqlite3.connect(path)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(execution_deals)")}
+    connection.close()
+    assert {"profit", "commission", "swap", "fee"}.issubset(columns)
