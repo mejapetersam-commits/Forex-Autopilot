@@ -106,6 +106,29 @@ docker compose exec telemetry-backup python -m app.operations.backup verify --ba
 docker compose exec telemetry-backup python -m app.operations.backup inventory --directory /var/backups/forex-autopilot --max-age-hours 48
 ```
 
+The backup worker atomically writes `backup-worker-heartbeat.json` only
+after a complete verified backup cycle. Docker healthchecks this timestamp
+against the configured backup interval; the service also uses
+`restart: unless-stopped` so a process exit is restarted by Docker. An
+unhealthy status is an operator alert signal; Docker Compose does not itself
+restart a still-running container solely because its healthcheck is unhealthy.
+
+The local dashboard endpoint `GET /api/v1/dashboard/recovery-status` combines
+backup inventory and sanitized expired/unknown execution-command counts. The
+dashboard's Recovery & Continuity panel shows the same read-only information.
+No command payloads or credentials are exposed.
+
+For an isolated restore drill, choose a verified snapshot and restore it to a
+new temporary path. Never point the drill at the live telemetry database:
+
+```bash
+docker compose exec telemetry-backup python -m app.operations.backup restore \
+  --backup /var/backups/forex-autopilot/telemetry-YYYYMMDDTHHMMSSZ.sqlite3 \
+  --destination /tmp/forex-autopilot-restore-drill.sqlite3
+docker compose exec telemetry-backup python -m app.operations.backup verify \
+  --backup /tmp/forex-autopilot-restore-drill.sqlite3
+```
+
 A successful inventory reports the newest verified snapshot, its age, the
 number of verified and invalid snapshots, and whether a verified recovery point
 falls within the requested age window. A missing or stale recovery point requires
