@@ -28,6 +28,7 @@ from app.execution.portfolio_risk import evaluate_portfolio_risk
 from app.execution.command_queue import ExecutionCommandQueue
 from app.monitoring.health import assess_system_health
 from app.operations.event_outbox import EventOutbox
+from app.operations.backup import inspect_backup_inventory
 from app.portfolio.telemetry import build_portfolio_exposure
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
@@ -587,6 +588,41 @@ def dashboard_operational_events(
         "items": events,
         "execution_mode": "disabled",
         "trading_enabled": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/v1/dashboard/recovery-status", include_in_schema=False)
+def dashboard_recovery_status():
+    """Read-only backup freshness and execution-command quarantine overview."""
+    backup_dir = os.getenv(
+        "FOREX_AUTOPILOT_BACKUP_DIR", "data/backups"
+    )
+    max_age_hours = max(1, min(
+        87600, int(os.getenv("FOREX_AUTOPILOT_BACKUP_MAX_AGE_HOURS", "48"))
+    ))
+    try:
+        backups = inspect_backup_inventory(
+            backup_dir, max_age_hours=max_age_hours
+        )
+    except (OSError, ValueError) as exc:
+        backups = {
+            "status": "inspection_failed",
+            "directory_exists": False,
+            "snapshot_count": 0,
+            "verified_count": 0,
+            "invalid_count": 0,
+            "fresh_verified_backup": False,
+            "error": str(exc)[:300],
+            "snapshots": [],
+        }
+    commands = execution_command_queue().operational_summary(limit=20)
+    return {
+        "backups": backups,
+        "execution_commands": commands,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
