@@ -128,3 +128,27 @@ def test_expired_command_quarantine_survives_queue_restart(tmp_path):
         ).fetchone()
     assert status == "expired"
     assert attempts == 1
+
+
+
+def test_operational_summary_counts_and_redacts_command_payload(tmp_path):
+    queue = ExecutionCommandQueue(str(tmp_path / "summary.sqlite3"))
+    queue.enqueue_approved_intent(
+        command_id="summary-command", intent_id="summary-intent",
+        payload={"symbol": "EURUSDm", "side": "buy", "volume_lots": 0.01,
+                 "stop_loss": 1.09, "take_profit": 1.12, "private_note": "must-not-leak"},
+        environment="demo", trading_enabled=True,
+    )
+    with sqlite3.connect(queue.database_path) as db:
+        db.execute(
+            "UPDATE execution_commands SET status='expired', attempts=2, terminal_id='terminal-1' "
+            "WHERE command_id='summary-command'"
+        )
+
+    result = queue.operational_summary()
+    assert result["counts"]["expired"] == 1
+    assert result["quarantined_total"] == 1
+    item = result["quarantined"][0]
+    assert item["command_id"] == "summary-command"
+    assert "payload_json" not in item
+    assert "private_note" not in str(item)
