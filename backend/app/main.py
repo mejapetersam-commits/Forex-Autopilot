@@ -518,7 +518,10 @@ def dashboard_execution_reconciliation(
         "broker_order_history_reconciled",
     }
     rows = []
+    visible_statuses = {"submitted", "acknowledged", "partially_filled", "filled", "unknown", "reconciled", "cancelled", "rejected"}
     for intent in intents:
+        if intent["status"] not in visible_statuses:
+            continue
         audit = ledger.audit_events(intent["idempotency_key"], limit=100)
         broker_events = [event for event in audit if event["event_type"] in evidence_events]
         latest = broker_events[-1] if broker_events else None
