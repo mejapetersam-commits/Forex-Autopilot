@@ -605,3 +605,32 @@ export interface ExecutionReconciliationResponse {
 }
 export const getExecutionReconciliation = () =>
   getJson<ExecutionReconciliationResponse>("/api/v1/dashboard/execution-reconciliation");
+
+
+export interface CostSensitivityScenario {
+  label: string;
+  cost_multiplier: number;
+  assumptions: { spread_pips: number; slippage_pips_per_side: number; commission_per_lot_per_side: number };
+  status: string;
+  total_trades: number;
+  return_pct: number | null;
+  net_profit: number | null;
+  profit_factor: number | null;
+  max_drawdown_pct: number | null;
+  expectancy_per_trade: number | null;
+}
+export interface CostSensitivityResponse {
+  symbol: string;
+  timeframe: string;
+  candles_available: number;
+  pip_value_source: string;
+  scenarios: CostSensitivityScenario[];
+  methodology: string;
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getCostSensitivity = (symbol: string, timeframe: string) =>
+  getJson<CostSensitivityResponse>(`/api/v1/dashboard/cost-sensitivity?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+
