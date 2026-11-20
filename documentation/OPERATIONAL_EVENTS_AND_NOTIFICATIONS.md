@@ -59,3 +59,24 @@ The outbox currently persists and leases notification work only. No email,
 SMS, Telegram or other external delivery is configured or claimed. Add a
 provider adapter only after an operator selects a destination and secret
 management policy.
+
+
+## Broker execution reconciliation events
+
+The admin-only `GET /api/v1/monitoring/reconciliation` endpoint compares
+persisted execution intents with authenticated MT5 demo order/deal history.
+It does not infer rejection from missing history, and partial fills remain
+distinct from full fills. Identity mismatches, multiple matching broker orders,
+overfills and other ambiguous evidence are returned for manual review.
+
+Reconciliation results are also published to the operational event journal:
+manual-review outcomes create critical events, while partial fills create
+warning events. Stable hashed event keys make repeated reconciliation checks
+idempotent. Event payloads contain intent/order references and mismatch reasons,
+not credentials. These events are operator alerts only; they do not retry or
+resubmit a broker command.
+
+The reconciliation endpoint is admin-authenticated and requires a fresh demo
+terminal snapshot. It is not evidence that a live broker execution has been
+validated; the demo execution adapter remains disabled unless separately
+configured and explicitly enabled.
