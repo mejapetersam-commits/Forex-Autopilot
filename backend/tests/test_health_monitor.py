@@ -11,11 +11,13 @@ def test_health_monitor_persists_idempotent_operator_events(monkeypatch, tmp_pat
     second = run_health_monitor_cycle(now=now)
     events = EventOutbox(database).list_events(limit=20)
     assert first["health_status"] == "critical"
-    assert first["alerts_detected"] == 3
-    assert second["alerts_detected"] == 3
+    assert first["alerts_detected"] == 4
+    assert second["alerts_detected"] == 4
+    assert first["backup_worker"]["fresh"] is False
     assert len(events) == 3
     assert {event["event_type"] for event in events} == {
-        "HEARTBEAT_MISSING", "ACCOUNT_SNAPSHOT_MISSING", "QUOTES_MISSING"
+        "HEARTBEAT_MISSING", "ACCOUNT_SNAPSHOT_MISSING", "QUOTES_MISSING",
+        "BACKUP_WORKER_HEARTBEAT_MISSING",
     }
     assert all(event["delivery_status"] == "pending" for event in events)
 
@@ -34,6 +36,12 @@ def test_health_monitor_records_recovery_and_reactivation(monkeypatch, tmp_path)
 
     database = tmp_path / "health-recovery.sqlite3"
     monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(database))
+    from app.operations.backup_scheduler import write_worker_heartbeat
+    write_worker_heartbeat(
+        tmp_path, now=datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc),
+        backup_name="telemetry-20261119T120000Z.sqlite3",
+        telemetry_db=str(database),
+    )
     alert = {
         "code": "QUOTE_STALE",
         "severity": "warning",
@@ -59,3 +67,34 @@ def test_health_monitor_records_recovery_and_reactivation(monkeypatch, tmp_path)
     assert again["alerts_still_active"] == 1
     assert [event["event_type"] for event in events].count("HEALTH_RECOVERED") == 1
     assert len(events) == 3
+
+
+def test_backup_worker_assessment_detects_stale_and_healthy_heartbeats(monkeypatch, tmp_path):
+    import json
+    from app.operations.health_monitor import assess_backup_worker
+
+    database = tmp_path / "health.sqlite3"
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(database))
+    now = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+    missing, missing_alerts = assess_backup_worker(now)
+    assert missing["fresh"] is False
+    assert missing_alerts[0]["code"] == "BACKUP_WORKER_HEARTBEAT_MISSING"
+
+    heartbeat = tmp_path / "backup-worker-heartbeat.json"
+    heartbeat.write_text(json.dumps({
+        "status": "ok", "observed_at": "2026-11-10T12:00:00+00:00",
+        "backup": "old.sqlite3",
+    }))
+    stale, stale_alerts = assess_backup_worker(now)
+    assert stale["fresh"] is False
+    assert stale_alerts[0]["code"] == "BACKUP_WORKER_HEARTBEAT_STALE"
+
+    heartbeat.write_text(json.dumps({
+        "status": "ok", "observed_at": now.isoformat(),
+        "backup": "recent.sqlite3",
+    }))
+    healthy, healthy_alerts = assess_backup_worker(now)
+    assert healthy["fresh"] is True
+    assert healthy["last_backup"] == "recent.sqlite3"
+    assert healthy_alerts == []
