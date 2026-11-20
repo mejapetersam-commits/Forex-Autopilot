@@ -40,6 +40,8 @@ def test_execution_reconciliation_dashboard_exposes_sanitized_partial_fill(tmp_p
     assert body["counts"]["partial_fill_count"] == 1
     assert body["intents"][0]["result"] == "partial_fill_confirmed"
     assert body["intents"][0]["average_fill_price"] == 1.1005
+    assert body["intents"][0]["remaining_volume_lots"] == 0.004
+    assert body["intents"][0]["fill_progress_pct"] == 60.0
     assert body["intents"][0]["position_ids"] == ["9001"]
     assert "payload" not in body["intents"][0]
     assert body["read_only"] is True
