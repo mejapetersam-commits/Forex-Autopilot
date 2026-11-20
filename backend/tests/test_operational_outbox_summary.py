@@ -58,3 +58,19 @@ def test_operational_summary_reports_recovery_without_stale_active_alert(tmp_pat
     assert summary["active_alerts"] == []
     assert summary["delivery"]["pending"] == 2
     assert any(item["event_type"] == "HEALTH_RECOVERED" for item in summary["recent_events"])
+
+
+def test_notification_health_dashboard_endpoint_is_read_only(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "api-outbox.sqlite3"))
+    response = TestClient(app).get("/api/v1/dashboard/notification-health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["delivery"]["total"] == 0
+    assert payload["active_alert_count"] == 0
+    assert payload["execution_mode"] == "disabled"
+    assert payload["trading_enabled"] is False
+    assert payload["read_only"] is True
