@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
@@ -62,6 +63,96 @@ def verify_backup(path: str | Path) -> dict[str, Any]:
             connection.close()
     except sqlite3.DatabaseError as exc:
         raise ValueError(f"Backup is not a readable SQLite database: {exc}") from exc
+
+
+
+_BACKUP_NAME = re.compile(r"^telemetry-(\\d{8}T\\d{6}Z)\\.sqlite3$")
+
+
+def inspect_backup_inventory(
+    directory: str | Path,
+    *,
+    max_age_hours: int = 48,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Verify recognized snapshots and report whether a recent recovery point exists.
+
+    Unrecognized files are ignored. Invalid snapshots are reported and never
+    removed. This is an inspection operation; it does not mutate the directory.
+    """
+    if not 1 <= max_age_hours <= 87600:
+        raise ValueError("max_age_hours must be between 1 and 87600.")
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ValueError("Inventory timestamps must be timezone-aware.")
+    current = current.astimezone(timezone.utc)
+    root = Path(directory).expanduser()
+    if not root.exists():
+        return {
+            "status": "missing_directory",
+            "directory_exists": False,
+            "snapshot_count": 0,
+            "verified_count": 0,
+            "invalid_count": 0,
+            "latest_backup_age_hours": None,
+            "max_age_hours": max_age_hours,
+            "fresh_verified_backup": False,
+            "snapshots": [],
+        }
+    if not root.is_dir():
+        raise ValueError("Backup inventory path must be a directory.")
+
+    snapshots: list[dict[str, Any]] = []
+    for candidate in sorted(root.iterdir()):
+        match = _BACKUP_NAME.fullmatch(candidate.name)
+        if not match or not candidate.is_file():
+            continue
+        try:
+            created = datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            snapshots.append({"name": candidate.name, "status": "invalid_filename_timestamp"})
+            continue
+        age_hours = round(max(0.0, (current - created).total_seconds()) / 3600, 2)
+        try:
+            manifest = verify_backup(candidate)
+            snapshots.append({
+                "name": candidate.name,
+                "status": "verified",
+                "created_at": created.isoformat(),
+                "age_hours": age_hours,
+                "size_bytes": manifest["size_bytes"],
+                "sha256": manifest["sha256"],
+                "tables": manifest["tables"],
+            })
+        except (ValueError, OSError) as exc:
+            snapshots.append({
+                "name": candidate.name,
+                "status": "invalid",
+                "created_at": created.isoformat(),
+                "age_hours": age_hours,
+                "error": str(exc)[:500],
+            })
+
+    verified = [item for item in snapshots if item["status"] == "verified"]
+    latest = min(verified, key=lambda item: item["age_hours"]) if verified else None
+    fresh = bool(latest and latest["age_hours"] <= max_age_hours)
+    invalid_count = sum(item["status"] != "verified" for item in snapshots)
+    return {
+        "status": "healthy" if fresh and invalid_count == 0 else (
+            "degraded" if fresh else "attention_required"
+        ),
+        "directory_exists": True,
+        "snapshot_count": len(snapshots),
+        "verified_count": len(verified),
+        "invalid_count": invalid_count,
+        "latest_backup": latest["name"] if latest else None,
+        "latest_backup_age_hours": latest["age_hours"] if latest else None,
+        "max_age_hours": max_age_hours,
+        "fresh_verified_backup": fresh,
+        "snapshots": snapshots,
+        "note": "A verified local snapshot is not an off-device backup. Periodically perform a controlled restore drill on an isolated copy.",
+    }
+
 
 
 def create_backup(source: str | Path, destination: str | Path) -> dict[str, Any]:
@@ -171,6 +262,10 @@ def main() -> None:
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("--backup", required=True)
 
+    inventory_parser = subparsers.add_parser("inventory")
+    inventory_parser.add_argument("--directory", required=True)
+    inventory_parser.add_argument("--max-age-hours", type=int, default=48)
+
     restore_parser = subparsers.add_parser("restore")
     restore_parser.add_argument("--backup", required=True)
     restore_parser.add_argument("--destination", required=True)
@@ -181,6 +276,10 @@ def main() -> None:
         result = create_backup(args.source, args.destination)
     elif args.command == "verify":
         result = verify_backup(args.backup)
+    elif args.command == "inventory":
+        result = inspect_backup_inventory(
+            args.directory, max_age_hours=args.max_age_hours
+        )
     else:
         result = restore_backup(
             args.backup, args.destination, replace=args.replace
