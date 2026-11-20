@@ -24,6 +24,7 @@ from app.execution.position_reconciliation import reconcile_open_positions
 from app.execution.position_lifecycle import compare_position_lifecycle
 from app.execution.coordinator import ExecutionCoordinator
 from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_with_runtime_controls
+from app.execution.portfolio_risk import evaluate_portfolio_risk
 from app.execution.command_queue import ExecutionCommandQueue
 from app.monitoring.health import assess_system_health
 from app.operations.event_outbox import EventOutbox
@@ -476,31 +477,18 @@ def queue_approved_demo_intent(intent_id: str):
         specifications=store.latest_symbol_specifications(),
     )
     max_portfolio_risk_pct = float(os.getenv("FOREX_AUTOPILOT_MAX_PORTFOLIO_STOP_RISK_PCT", "0.50"))
-    portfolio_reasons = []
-    if portfolio.get("status") != "healthy":
-        portfolio_reasons.append("Fresh, complete portfolio telemetry with known protective-stop risk is required.")
-    equity = portfolio.get("account_equity")
-    total_risk = portfolio.get("total_open_stop_risk")
-    if (not isinstance(equity, (int, float)) or equity <= 0
-            or not isinstance(total_risk, (int, float)) or total_risk < 0):
-        portfolio_reasons.append("Aggregate portfolio stop risk or account equity is unknown.")
-    elif total_risk / equity * 100.0 > max_portfolio_risk_pct:
-        portfolio_reasons.append(f"Aggregate open stop risk exceeds the {max_portfolio_risk_pct:.3f}% portfolio ceiling.")
-    if not current_decision["approved"] or portfolio_reasons:
-        reasons = [*current_decision["reasons"], *portfolio_reasons]
+    portfolio_decision = evaluate_portfolio_risk(
+        portfolio, max_stop_risk_pct=max_portfolio_risk_pct
+    )
+    if not current_decision["approved"] or not portfolio_decision["approved"]:
+        reasons = [*current_decision["reasons"], *portfolio_decision["reasons"]]
         execution_ledger().transition(
             intent_id, "rejected", event_type="dispatch_recheck_failed",
-            details={"reasons": reasons, "portfolio_status": portfolio.get("status"),
-                     "portfolio_stop_risk": total_risk, "portfolio_equity": equity,
-                     "max_portfolio_stop_risk_pct": max_portfolio_risk_pct},
+            details={"reasons": reasons, "portfolio": portfolio_decision},
         )
         raise HTTPException(status_code=423, detail={
             "message": "Current broker, individual-risk or aggregate portfolio conditions no longer pass preflight.",
-            "reasons": reasons,
-            "portfolio": {"status": portfolio.get("status"),
-                          "open_position_count": portfolio.get("open_position_count"),
-                          "total_open_stop_risk": total_risk, "account_equity": equity,
-                          "max_portfolio_stop_risk_pct": max_portfolio_risk_pct},
+            "reasons": reasons, "portfolio": portfolio_decision,
         })
     try:
         queued = execution_command_queue().enqueue_approved_intent(
