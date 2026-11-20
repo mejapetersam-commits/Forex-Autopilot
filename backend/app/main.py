@@ -870,6 +870,14 @@ def dashboard_operational_events(
     }
 
 
+@app.get("/api/v1/dashboard/notification-health", include_in_schema=False)
+def dashboard_notification_health():
+    """Read-only operational outbox and active-alert summary; never leases or sends notifications."""
+    summary = EventOutbox().operational_summary(recent_limit=20)
+    summary["execution_mode"] = "disabled"
+    return summary
+
+
 @app.get("/api/v1/dashboard/recovery-status", include_in_schema=False)
 def dashboard_recovery_status():
     """Read-only backup freshness and execution-command quarantine overview."""
