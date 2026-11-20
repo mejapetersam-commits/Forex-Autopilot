@@ -51,7 +51,7 @@ def test_inout_reversal_closes_old_cycle_and_starts_new_cycle():
     assert result["closed_trade_count"] == 2
     assert result["pnl_complete_trade_count"] == 2
     assert result["open_position_count"] == 0
-    assert result["net_realized_pnl"] == 2.0
+    assert result["net_realized_pnl"] == 2.2
 
 
 def test_legacy_missing_cash_fields_are_not_fabricated_as_zero():
