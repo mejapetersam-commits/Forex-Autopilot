@@ -135,7 +135,7 @@ export default function App() {
     </section>
 
     <nav className="dashboard-nav" aria-label="Dashboard sections">
-      <a href="#overview">Overview</a><a href="#connectivity">Connectivity</a><a href="#research">Signals</a><a href="#portfolio">Portfolio</a><a href="#data">Market data</a><a href="#strategy">Performance</a><a href="#operations">Operations</a><a href="#execution">Execution</a><a href="#recovery">Recovery</a><a href="#events">Event log</a>
+      <a href="#overview">Overview</a><a href="#connectivity">Connectivity</a><a href="#research">Signals</a><a href="#portfolio">Portfolio</a><a href="#data">Market data</a><a href="#strategy">Performance</a><a href="#operations">Operations</a>
     </nav>
 
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
