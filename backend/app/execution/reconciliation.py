@@ -145,6 +145,7 @@ def reconcile_broker_history(
                         else:
                             identity_reasons.append("terminal_order_state_after_partial_fill_requires_review")
                     elif broker_state in {"placed", "started", "partial", "request_add", "request_modify", "request_cancel"}:
+                        # Order state is not fill accounting; wait for immutable deal tickets.
                         reports.append({
                             "intent_id": intent_id, "broker_order_id": order_id,
                             "status": current, "result": "broker_order_pending",
