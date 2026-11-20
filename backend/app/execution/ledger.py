@@ -165,6 +165,20 @@ class ExecutionLedger:
         return dict(updated)
 
 
+    def list_intents(self, limit: int = 1000) -> list[dict[str, Any]]:
+        """Return recent intents with decoded payloads for read-only reconciliation."""
+        safe_limit = min(max(int(limit), 1), 5000)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM order_intents ORDER BY id DESC LIMIT ?", (safe_limit,)
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
     def get_intent(self, idempotency_key: str) -> dict[str, Any] | None:
         """Return one durable intent with its decoded payload for guarded dispatch."""
         with self._connect() as connection:
