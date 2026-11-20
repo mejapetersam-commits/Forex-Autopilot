@@ -50,7 +50,7 @@ Compile both MQL5 Expert Advisors in MetaEditor. CI can test source contracts an
 
 ## Release discipline
 
-Before any demo execution is enabled, complete broker-history reconciliation, partial-fill and restart recovery, protective-stop verification, terminal disconnect tests, and sustained Exness demo validation. Keep the public telemetry gateway restricted to its explicitly allowed telemetry routes; do not expose admin or execution command routes through the public tunnel.
+Before any demo execution is enabled, complete broker-history reconciliation, partial-fill and restart recovery, protective-stop verification, terminal disconnect tests, and sustained Exness demo validation. Follow the staged [MT5 demo validation plan](documentation/DEMO_VALIDATION_PLAN.md) and keep all manual gates open until broker-side evidence is reviewed. Keep the public telemetry gateway restricted to its explicitly allowed telemetry routes; do not expose admin or execution command routes through the public tunnel.
 
 For repeatable 24/5 operation, evaluate a dedicated Windows VPS only after the demo prototype and recovery controls have passed validation.
 
