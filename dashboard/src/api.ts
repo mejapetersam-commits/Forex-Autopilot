@@ -130,3 +130,64 @@ export interface DashboardOperations {
   updated_at: string;
 }
 export const getDashboardOperations = () => getJson<DashboardOperations>("/api/v1/dashboard/operations");
+
+export interface StrategyPerformanceResponse {
+  symbol: string;
+  timeframe: string;
+  candles_available: number;
+  data_quality: { status: string; issue_count: number; gap_count: number; issues?: string[] };
+  pip_size_used: number;
+  pip_value_per_lot_used: number;
+  pip_value_source: string;
+  backtest: {
+    status: string;
+    initial_equity?: number;
+    final_equity?: number;
+    net_profit?: number;
+    return_pct?: number;
+    total_trades?: number;
+    winning_trades?: number;
+    losing_trades?: number;
+    win_rate_pct?: number;
+    profit_factor?: number | null;
+    expectancy_per_trade?: number;
+    max_drawdown_pct?: number;
+    mark_to_market_max_drawdown_pct?: number;
+    mark_to_market_equity_curve?: Array<{ time: string | null; equity: number; drawdown_pct: number }>;
+    assumptions?: Record<string, string | number | boolean>;
+    research_status?: string;
+  };
+  analytics: {
+    median_trade_pnl: number;
+    best_trade_pnl: number;
+    worst_trade_pnl: number;
+    payoff_ratio: number | null;
+    max_consecutive_wins: number;
+    max_consecutive_losses: number;
+    interpretation: string;
+  } | null;
+  walk_forward: null | {
+    status: string;
+    candles_available?: number;
+    minimum_required?: number;
+    out_of_sample_summary?: {
+      valid_folds: number;
+      total_trades: number;
+      mean_return_pct: number | null;
+      mean_profit_factor: number | null;
+      worst_drawdown_pct: number | null;
+    };
+    folds?: Array<{
+      fold: number;
+      training_metrics: Record<string, number | null>;
+      out_of_sample_metrics: Record<string, number | string | null>;
+      selected_parameters: Record<string, number>;
+    }>;
+    methodology?: { warning?: string };
+  };
+  trading_enabled: false;
+  execution_mode: string;
+  updated_at: string;
+}
+export const getStrategyPerformance = (symbol: string, timeframe: string, walkForward = false) =>
+  getJson<StrategyPerformanceResponse>(`/api/v1/dashboard/strategy-performance?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&include_walk_forward=${walkForward}`);
