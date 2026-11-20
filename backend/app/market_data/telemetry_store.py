@@ -644,7 +644,7 @@ class TelemetryStore:
         prefix = "FA:" + broker_tag
         with self._connect() as connection:
             rows = connection.execute(
-                """SELECT deal_ticket, order_ticket, terminal_id, environment,
+                """SELECT deal_ticket, order_ticket, position_id, terminal_id, environment,
                           server, symbol, side, entry, volume_lots, price,
                           magic, comment, occurred_at, observed_at,
                           profit, commission, swap, fee
