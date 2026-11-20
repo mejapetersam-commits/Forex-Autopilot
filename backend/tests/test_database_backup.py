@@ -3,7 +3,9 @@ import sqlite3
 
 import pytest
 
-from app.operations.backup import create_backup, restore_backup, verify_backup
+from app.operations.backup import (
+    create_backup, inspect_backup_inventory, restore_backup, verify_backup,
+)
 
 
 def make_database(path, value="original"):
@@ -85,3 +87,62 @@ def test_verify_rejects_non_sqlite_file(tmp_path):
 
     with pytest.raises(ValueError, match="not a readable SQLite"):
         verify_backup(corrupt)
+
+
+
+def test_inventory_reports_recent_verified_snapshot_and_corrupt_file(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    recent = directory / "telemetry-20261120T100000Z.sqlite3"
+    make_database(recent, "fresh")
+    corrupt = directory / "telemetry-20261119T000000Z.sqlite3"
+    corrupt.write_text("not sqlite")
+    (directory / "notes.txt").write_text("ignore")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 11, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "degraded"
+    assert result["snapshot_count"] == 2
+    assert result["verified_count"] == 1
+    assert result["invalid_count"] == 1
+    assert result["latest_backup"] == recent.name
+    assert result["latest_backup_age_hours"] == 1.0
+    assert result["fresh_verified_backup"] is True
+
+
+def test_inventory_requires_recent_verified_recovery_point(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    stale = directory / "telemetry-20261110T000000Z.sqlite3"
+    make_database(stale, "stale")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "attention_required"
+    assert result["fresh_verified_backup"] is False
+    assert result["latest_backup_age_hours"] == 240.0
+
+
+def test_inventory_handles_missing_directory_and_rejects_naive_time(tmp_path):
+    from datetime import datetime
+
+    result = inspect_backup_inventory(tmp_path / "not-created")
+    assert result["status"] == "missing_directory"
+    assert result["fresh_verified_backup"] is False
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        inspect_backup_inventory(
+            tmp_path, now=datetime(2026, 11, 20)
+        )
