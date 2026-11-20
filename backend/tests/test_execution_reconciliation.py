@@ -142,3 +142,19 @@ def test_conflicting_nonempty_position_identifier_is_rejected(tmp_path):
     store.save_execution_history(history(deal(32,12345,0.01,position_id="887766")))
     with pytest.raises(ValueError, match="position_id"):
         store.save_execution_history(history(deal(32,12345,0.01,position_id="112233")))
+
+def test_unknown_intent_tag_recovery_preserves_position_identifiers(tmp_path):
+    import hashlib
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger)
+    ledger.transition(key,"unknown",event_type="terminal_lost_after_dispatch")
+    tag=hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    tagged_deal=deal(41,12345,0.01,position_id="998812").model_copy(
+        update={"comment":"FA:"+tag}
+    )
+    store.save_execution_history(history(tagged_deal))
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert result["results"][0]["result"] == "reconciled_full_fill"
+    assert result["results"][0]["position_ids"] == ["998812"]
+    assert store.execution_deals_for_position("998812")[0]["deal_ticket"] == "41"
