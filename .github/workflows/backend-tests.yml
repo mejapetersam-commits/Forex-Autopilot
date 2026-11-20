@@ -7,16 +7,26 @@ on:
       - "backend/**"
       - "dashboard/**"
       - "mt5/**"
+      - "trading-engine/**"
+      - "config/**"
       - ".github/workflows/backend-tests.yml"
       - "docker-compose.yml"
       - ".dockerignore"
+      - "README.md"
       - "documentation/**"
   pull_request:
     branches: [main]
     paths:
       - "backend/**"
       - "dashboard/**"
+      - "mt5/**"
+      - "trading-engine/**"
+      - "config/**"
       - ".github/workflows/backend-tests.yml"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      - "README.md"
+      - "documentation/**"
   workflow_dispatch:
 
 permissions:
