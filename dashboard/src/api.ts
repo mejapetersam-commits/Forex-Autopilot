@@ -73,6 +73,46 @@ export interface OperationalEventsResponse {
 }
 export const getOperationalEvents = () => getJson<OperationalEventsResponse>("/api/v1/dashboard/events?limit=50");
 
+export interface RecoveryStatusResponse {
+  backups: {
+    status: string;
+    directory_exists: boolean;
+    snapshot_count: number;
+    verified_count: number;
+    invalid_count: number;
+    latest_backup?: string | null;
+    latest_backup_age_hours?: number | null;
+    max_age_hours?: number;
+    fresh_verified_backup: boolean;
+    error?: string;
+    snapshots: Array<{
+      name: string;
+      status: string;
+      age_hours?: number;
+      size_bytes?: number;
+      error?: string;
+    }>;
+  };
+  execution_commands: {
+    counts: Record<"queued" | "leased" | "acknowledged" | "rejected" | "unknown" | "expired", number>;
+    quarantined_total: number;
+    quarantined: Array<{
+      command_id: string;
+      intent_id: string;
+      status: "expired" | "unknown";
+      created_at: string;
+      attempts: number;
+      terminal_id: string | null;
+      lease_until: string | null;
+    }>;
+  };
+  execution_mode: string;
+  trading_enabled: boolean;
+  read_only: boolean;
+  updated_at: string;
+}
+export const getRecoveryStatus = () => getJson<RecoveryStatusResponse>("/api/v1/dashboard/recovery-status");
+
 export interface PortfolioCurrency {
   currency: string;
   net_exposure: number;
