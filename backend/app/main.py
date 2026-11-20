@@ -364,6 +364,20 @@ def dashboard_demo_observation(limit: int = Query(default=100, ge=1, le=500)):
     }
 
 
+@app.get("/api/v1/dashboard/trade-attribution", include_in_schema=False)
+def dashboard_trade_attribution():
+    """Read-only realized P&L from fully closed broker-evidenced demo position cycles."""
+    result = telemetry_store().demo_trade_attribution()
+    return {
+        **result,
+        "status": "observing" if result["deal_count"] else "awaiting_demo_activity",
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/strategy-comparison", include_in_schema=False)
 def dashboard_strategy_comparison(
     limit: int = Query(default=1000, ge=61, le=5000),
