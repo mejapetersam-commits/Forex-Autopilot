@@ -53,6 +53,38 @@ async function getJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export interface BrokerSpecification {
+  symbol: string;
+  digits: number;
+  point: number;
+  tick_size: number;
+  tick_value_profit: number;
+  tick_value_loss: number;
+  contract_size: number;
+  volume_min: number;
+  volume_max: number;
+  volume_step: number;
+  stops_level_points: number;
+  freeze_level_points: number;
+  trade_allowed: boolean;
+  base_currency: string;
+  profit_currency: string;
+  margin_currency: string;
+  account_currency: string;
+  observed_at: string;
+  age_seconds: number | null;
+  fresh: boolean;
+}
+export interface BrokerSpecificationsResponse {
+  items: BrokerSpecification[];
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getBrokerSpecifications = () =>
+  getJson<BrokerSpecificationsResponse>("/api/v1/dashboard/broker-specifications");
+
 export const getOverview = () => getJson<DashboardOverview>("/api/v1/dashboard/overview");
 export const getResearch = () => getJson<ResearchResponse>("/api/v1/dashboard/research");
 
