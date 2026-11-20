@@ -379,3 +379,53 @@ export interface TradeAttributionResponse {
 }
 export const getTradeAttribution = () =>
   getJson<TradeAttributionResponse>("/api/v1/dashboard/trade-attribution");
+
+export interface ExecutionReconciliationResponse {
+  status: string;
+  intents_checked: number;
+  counts: {
+    partial_fill_count: number;
+    reconciled_count: number;
+    awaiting_history_count: number;
+    unknown_count: number;
+    manual_review_count: number;
+  };
+  intents: Array<{
+    intent_id: string;
+    status: string;
+    symbol: string;
+    side: string;
+    requested_volume_lots: number | null;
+    broker_order_id: string | null;
+    result: string;
+    filled_volume_lots: number;
+    average_fill_price: number | null;
+    fill_details: Array<{
+      deal_ticket: string;
+      volume_lots: number;
+      price: number;
+      position_id: string | null;
+      occurred_at: string;
+    }>;
+    deal_tickets: string[];
+    position_ids: string[];
+    last_broker_evidence_at: string | null;
+  }>;
+  manual_review_events: Array<{
+    event_id: string;
+    occurred_at: string;
+    severity: string;
+    intent_id: string | null;
+    outcome: string | null;
+    reasons: string[];
+    broker_order_id: string | null;
+    filled_volume_lots: number | null;
+    requested_volume_lots: number | null;
+  }>;
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getExecutionReconciliation = () =>
+  getJson<ExecutionReconciliationResponse>("/api/v1/dashboard/execution-reconciliation");
