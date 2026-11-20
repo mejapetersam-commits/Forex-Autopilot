@@ -41,7 +41,7 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
         <td><Status good={intent.result === "full_fill_reconciled"}>{intent.status.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{intent.filled_volume_lots.toFixed(3)} / {intent.requested_volume_lots?.toFixed(3) ?? "—"}</td>
         <td>{intent.remaining_volume_lots == null ? "—" : intent.remaining_volume_lots.toFixed(3)}</td>
-        <td>{intent.fill_progress_pct == null ? "—" : <><progress max={100} value={intent.fill_progress_pct} /> {intent.fill_progress_pct.toFixed(1)}%</>}</td>
+        <td>{intent.fill_progress_pct == null ? "—" : <><progress className="fill-progress" max={100} value={intent.fill_progress_pct} /> {intent.fill_progress_pct.toFixed(1)}%</>}</td>
         <td>{intent.average_fill_price == null ? "—" : intent.average_fill_price.toFixed(5)}</td>
         <td>{intent.fill_details.length ? intent.fill_details.map(fill => <div key={fill.deal_ticket}>{fill.deal_ticket}: {fill.volume_lots.toFixed(3)} @ {fill.price.toFixed(5)}</div>) : "—"}</td>
         <td>{intent.broker_order_id ?? "—"}{intent.deal_tickets.length ? " · " + intent.deal_tickets.join(", ") : ""}</td>
