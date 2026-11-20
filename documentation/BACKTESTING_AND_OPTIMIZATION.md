@@ -9,7 +9,7 @@ All machine-facing research endpoints require the configured bridge token in the
 - `GET /api/v1/market-data/quality/{symbol}/{timeframe}`
 - `GET /api/v1/strategy/signal/{symbol}/{timeframe}`
 
-The local dashboard research feed is `GET /api/v1/dashboard/research`.
+The local dashboard research feed is `GET /api/v1/dashboard/research`. The local read-only portfolio feed is `GET /api/v1/dashboard/portfolio`.
 
 ## Backtest assumptions
 
@@ -38,3 +38,19 @@ Parameter screening is not proof of an edge. Use multiple market regimes, additi
 OHLC candles cannot reveal the exact intrabar path. Stop-first handling is intentionally conservative when both levels are touched. Weekend, holiday and broker-session gaps must be reviewed before treating them as missing data. Backtest results are not a promise or forecast of future returns.
 
 All endpoints are research-only. They do not submit, modify or close broker orders.
+
+## Equity curve and portfolio exposure
+
+Completed backtests now return an `equity_curve` series containing the initial
+equity point at the end of the indicator warm-up and a timestamped point for
+each closed trade. The curve is trade-event based, not a mark-to-market series
+for every candle; open-trade floating equity is therefore not represented.
+
+The local portfolio panel reports broker-snapshot open positions, gross/net
+currency exposure converted into the account currency, and estimated loss from
+the current quote to each protective stop. It requires fresh demo execution
+state, account telemetry, symbol quotes and broker contract specifications.
+The conversion currently supports instruments whose profit currency matches
+the account currency. Unsupported conversions, stale inputs, missing stops or
+invalid stop placement are flagged; unknown stop risk is not presented as zero.
+Estimated stop risk excludes slippage, commission, gaps and execution failures.
