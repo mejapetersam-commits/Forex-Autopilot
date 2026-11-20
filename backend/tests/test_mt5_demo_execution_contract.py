@@ -48,5 +48,5 @@ def test_demo_execution_ea_sanitizes_external_broker_comment_control_characters(
     assert 'StringReplace(safe_comment, ShortToString(13), " ");' in source
     assert 'StringReplace(safe_comment, ShortToString(10), " ");' in source
     assert 'StringReplace(safe_comment, ShortToString(9), " ");' in source
-    assert 'StringReplace(safe_comment, "\\\\", "\\\\\\\\");' in source
+    assert r'StringReplace(safe_comment, "\\\"", "\\\\\\"");' in source
     assert 'StringReplace(safe_comment, "\\\"", "\\\\\"\"");' in source
