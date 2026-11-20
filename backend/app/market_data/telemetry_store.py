@@ -119,7 +119,11 @@ class TelemetryStore:
                     magic INTEGER NOT NULL,
                     comment TEXT NOT NULL,
                     occurred_at TEXT NOT NULL,
-                    observed_at TEXT NOT NULL
+                    observed_at TEXT NOT NULL,
+                    profit REAL,
+                    commission REAL,
+                    swap REAL,
+                    fee REAL
                 );
                 CREATE INDEX IF NOT EXISTS idx_execution_deals_order
                     ON execution_deals(order_ticket, entry, occurred_at);
@@ -176,6 +180,11 @@ class TelemetryStore:
                 connection.execute(
                     "ALTER TABLE execution_deals ADD COLUMN position_id TEXT NOT NULL DEFAULT ''"
                 )
+            for cash_column in ("profit", "commission", "swap", "fee"):
+                if cash_column not in deal_columns:
+                    connection.execute(
+                        f"ALTER TABLE execution_deals ADD COLUMN {cash_column} REAL"
+                    )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_execution_deals_position "
                 "ON execution_deals(position_id, occurred_at)"
@@ -483,7 +492,8 @@ class TelemetryStore:
                 payload.environment, payload.server, deal.symbol, deal.side,
                 deal.entry, deal.volume_lots, deal.price, deal.magic,
                 deal.comment, deal.occurred_at.isoformat(),
-                payload.observed_at.isoformat(),
+                payload.observed_at.isoformat(), deal.profit, deal.commission,
+                deal.swap, deal.fee,
             )
             for deal in payload.deals
         ]
@@ -513,11 +523,19 @@ class TelemetryStore:
                 """INSERT INTO execution_deals(
                     deal_ticket, order_ticket, position_id, terminal_id, environment, server,
                     symbol, side, entry, volume_lots, price, magic, comment,
-                    occurred_at, observed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    occurred_at, observed_at, profit, commission, swap, fee
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(deal_ticket) DO UPDATE SET
-                    position_id=excluded.position_id
-                WHERE execution_deals.position_id='' AND excluded.position_id<>''""",
+                    position_id=CASE WHEN execution_deals.position_id='' THEN excluded.position_id ELSE execution_deals.position_id END,
+                    profit=COALESCE(execution_deals.profit, excluded.profit),
+                    commission=COALESCE(execution_deals.commission, excluded.commission),
+                    swap=COALESCE(execution_deals.swap, excluded.swap),
+                    fee=COALESCE(execution_deals.fee, excluded.fee)
+                WHERE (execution_deals.position_id='' AND excluded.position_id<>'')
+                   OR (execution_deals.profit IS NULL AND excluded.profit IS NOT NULL)
+                   OR (execution_deals.commission IS NULL AND excluded.commission IS NOT NULL)
+                   OR (execution_deals.swap IS NULL AND excluded.swap IS NOT NULL)
+                   OR (execution_deals.fee IS NULL AND excluded.fee IS NOT NULL)""",
                 rows,
             )
         return len(rows)
@@ -529,7 +547,8 @@ class TelemetryStore:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT deal_ticket, order_ticket, position_id, symbol, side, entry,
-                          volume_lots, price, magic, comment, occurred_at
+                          volume_lots, price, magic, comment, occurred_at,
+                          profit, commission, swap, fee
                    FROM execution_deals WHERE position_id=?
                    ORDER BY occurred_at, deal_ticket""",
                 (str(position_id),),
@@ -602,7 +621,8 @@ class TelemetryStore:
             rows = connection.execute(
                 """SELECT deal_ticket, order_ticket, position_id, terminal_id, environment,
                           server, symbol, side, entry, volume_lots, price,
-                          magic, comment, occurred_at, observed_at
+                          magic, comment, occurred_at, observed_at,
+                          profit, commission, swap, fee
                    FROM execution_deals WHERE order_ticket=?
                    ORDER BY occurred_at, deal_ticket""",
                 (str(order_ticket),),
@@ -617,7 +637,8 @@ class TelemetryStore:
             rows = connection.execute(
                 """SELECT deal_ticket, order_ticket, terminal_id, environment,
                           server, symbol, side, entry, volume_lots, price,
-                          magic, comment, occurred_at, observed_at
+                          magic, comment, occurred_at, observed_at,
+                          profit, commission, swap, fee
                    FROM execution_deals WHERE comment LIKE ?
                    ORDER BY occurred_at, deal_ticket""",
                 (prefix + "%",),
