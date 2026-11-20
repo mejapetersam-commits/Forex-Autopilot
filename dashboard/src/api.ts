@@ -380,6 +380,28 @@ export interface TradeAttributionResponse {
 export const getTradeAttribution = () =>
   getJson<TradeAttributionResponse>("/api/v1/dashboard/trade-attribution");
 
+export interface ReleaseReadinessGate {
+  key: string;
+  label: string;
+  status: "passed" | "attention_required" | "awaiting_activity" | "awaiting_telemetry" | "operator_validation_required";
+  detail: string;
+}
+export interface ReleaseReadinessResponse {
+  status: string;
+  automated_gates: ReleaseReadinessGate[];
+  manual_gates: ReleaseReadinessGate[];
+  automated_passed: number;
+  automated_total: number;
+  manual_validation_required: number;
+  execution_enabled: false;
+  trading_enabled: false;
+  live_trading_supported: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getReleaseReadiness = () =>
+  getJson<ReleaseReadinessResponse>("/api/v1/dashboard/release-readiness");
+
 export interface ExecutionReconciliationResponse {
   status: string;
   intents_checked: number;
