@@ -66,3 +66,27 @@ def test_ingestion_summary_reports_lifetime_totals_beyond_recent_receipt_window(
     assert summary["series"][0]["batch_count"] == 105
     assert summary["series"][0]["candles_received"] == 105
     assert summary["series"][0]["unique_candles_stored"] == 1
+
+
+def test_candle_rows_roll_back_when_ingestion_receipt_cannot_be_written(tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    with store._connect() as connection:
+        connection.execute(
+            """CREATE TRIGGER reject_candle_receipt
+               BEFORE INSERT ON candle_ingestion_batches
+               BEGIN
+                   SELECT RAISE(ABORT, 'receipt write rejected');
+               END"""
+        )
+
+    try:
+        store.save_candle_batch(batch())
+    except Exception as exc:
+        assert "receipt write rejected" in str(exc)
+    else:
+        raise AssertionError("Expected receipt failure to abort the ingestion transaction")
+
+    assert store.candle_history("EURUSDm", "M5") == []
+    summary = store.candle_ingestion_summary()
+    assert summary["batch_count"] == 0
+    assert summary["series_count"] == 0
