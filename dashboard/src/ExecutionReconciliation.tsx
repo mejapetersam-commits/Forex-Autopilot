@@ -35,17 +35,19 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       <Metric label="MANUAL REVIEW" value={String(data?.counts.manual_review_count ?? "—")} detail="Broker evidence exceptions requiring review"/>
     </div>
     {Boolean(data?.manual_review_events.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{data?.manual_review_events.length} broker reconciliation exception(s) require manual review. Check broker order/deal history before any separate operator action.</span><b>REVIEW</b></div>}
-    <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>REMAINING</th><th>PROGRESS</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
       {data?.intents.map(intent => <tr key={intent.intent_id}>
         <td className="symbol">{intent.intent_id}</td><td>{intent.symbol} / {intent.side.toUpperCase()}</td>
         <td><Status good={intent.result === "full_fill_reconciled"}>{intent.status.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{intent.filled_volume_lots.toFixed(3)} / {intent.requested_volume_lots?.toFixed(3) ?? "—"}</td>
+        <td>{intent.remaining_volume_lots == null ? "—" : intent.remaining_volume_lots.toFixed(3)}</td>
+        <td>{intent.fill_progress_pct == null ? "—" : <><progress max={100} value={intent.fill_progress_pct} /> {intent.fill_progress_pct.toFixed(1)}%</>}</td>
         <td>{intent.average_fill_price == null ? "—" : intent.average_fill_price.toFixed(5)}</td>
         <td>{intent.fill_details.length ? intent.fill_details.map(fill => <div key={fill.deal_ticket}>{fill.deal_ticket}: {fill.volume_lots.toFixed(3)} @ {fill.price.toFixed(5)}</div>) : "—"}</td>
         <td>{intent.broker_order_id ?? "—"}{intent.deal_tickets.length ? " · " + intent.deal_tickets.join(", ") : ""}</td>
         <td>{stamp(intent.last_broker_evidence_at)}</td>
       </tr>)}
-      {!data?.intents.length && <tr><td colSpan={8} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
+      {!data?.intents.length && <tr><td colSpan={10} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
     </tbody></table></div>
     <div className="table-wrap"><table><thead><tr><th>BROKER ORDER</th><th>SYMBOL</th><th>SERVER / TERMINAL</th><th>TYPE</th><th>STATE</th><th>EXECUTED / INITIAL</th><th>REMAINING</th><th>PRICE</th><th>SL / TP</th><th>LAST UPDATE</th></tr></thead><tbody>
       {data?.broker_orders.map(order => <tr key={order.order_ticket}>
