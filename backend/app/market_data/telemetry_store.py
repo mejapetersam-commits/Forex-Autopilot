@@ -608,6 +608,21 @@ class TelemetryStore:
             )
         return len(rows)
 
+    def recent_execution_orders(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return sanitized recent broker order snapshots for read-only operations views."""
+        safe_limit = min(max(int(limit), 1), 500)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT order_ticket, terminal_id, environment, server, symbol,
+                          order_type, state, initial_volume, current_volume, price,
+                          stop_loss, take_profit, magic, setup_at, done_at, observed_at
+                   FROM execution_orders
+                   WHERE environment='demo'
+                   ORDER BY observed_at DESC, order_ticket DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def execution_orders_for_ticket(self, order_ticket: str) -> dict[str, Any] | None:
         with self._connect() as connection:
             row = connection.execute(
