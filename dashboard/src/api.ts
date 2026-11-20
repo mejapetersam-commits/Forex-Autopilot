@@ -35,6 +35,9 @@ export interface ResearchItem {
   research_status: string;
   data_quality: string;
   gap_count: number;
+  valid_candles?: number;
+  readiness_status?: string;
+  coverage_pct?: number;
 }
 
 export interface ResearchResponse {
