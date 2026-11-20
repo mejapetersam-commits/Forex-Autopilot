@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Literal
 from hmac import compare_digest
@@ -381,6 +382,65 @@ def dashboard_strategy_performance(
         "walk_forward": walk_forward,
         "trading_enabled": False,
         "execution_mode": "disabled",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/v1/dashboard/cost-sensitivity", include_in_schema=False)
+def dashboard_cost_sensitivity(
+    symbol: str = Query(default="EURUSDm", min_length=1, max_length=32),
+    timeframe: str = Query(default="H1", pattern="^(M15|H1|H4)$"),
+    limit: int = Query(default=1000, ge=61, le=5000),
+):
+    """Compare historical results under progressively adverse transaction costs."""
+    normalized_symbol = symbol.strip().upper()
+    if normalized_symbol not in dashboard_symbols():
+        raise HTTPException(status_code=403, detail="Symbol is not in the dashboard research allowlist.")
+    normalized_timeframe = timeframe.strip().upper()
+    store = telemetry_store()
+    candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
+    pip_size, pip_value, pip_source = resolve_backtest_pip_values(store, normalized_symbol, None, None)
+    base = BacktestConfig(
+        initial_equity=10000.0, risk_per_trade_pct=0.25,
+        pip_size=pip_size, pip_value_per_lot=pip_value,
+        spread_pips=1.0, slippage_pips_per_side=0.2,
+        commission_per_lot_per_side=3.5,
+    )
+    scenarios = []
+    for multiplier, label in ((1.0, "Base costs"), (1.5, "Moderate stress"), (2.0, "High stress"), (3.0, "Severe stress")):
+        config = replace(
+            base,
+            spread_pips=base.spread_pips * multiplier,
+            slippage_pips_per_side=base.slippage_pips_per_side * multiplier,
+            commission_per_lot_per_side=base.commission_per_lot_per_side * multiplier,
+        )
+        result = run_backtest(candles, config)
+        scenarios.append({
+            "label": label,
+            "cost_multiplier": multiplier,
+            "assumptions": {
+                "spread_pips": config.spread_pips,
+                "slippage_pips_per_side": config.slippage_pips_per_side,
+                "commission_per_lot_per_side": config.commission_per_lot_per_side,
+            },
+            "status": result.get("status"),
+            "total_trades": result.get("total_trades", 0),
+            "return_pct": result.get("return_pct"),
+            "net_profit": result.get("net_profit"),
+            "profit_factor": result.get("profit_factor"),
+            "max_drawdown_pct": result.get("max_drawdown_pct"),
+            "expectancy_per_trade": result.get("expectancy_per_trade"),
+        })
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "candles_available": len(candles),
+        "pip_value_source": pip_source,
+        "scenarios": scenarios,
+        "methodology": "Same historical candles and strategy rules; spread, per-side slippage and per-side commission are multiplied together. OHLC simulation is not tick-level execution.",
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
