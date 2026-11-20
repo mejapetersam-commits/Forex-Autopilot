@@ -665,7 +665,12 @@ class TelemetryStore:
                    FROM execution_deals WHERE environment='demo'
                    ORDER BY occurred_at, deal_ticket"""
             ).fetchall()
+            latest_server = rows[-1]["server"] if rows else None
             account = connection.execute(
+                """SELECT account_currency FROM account_snapshots
+                   WHERE server = ? ORDER BY observed_at DESC, id DESC LIMIT 1"""
+                , (latest_server,)
+            ).fetchone() if latest_server else connection.execute(
                 """SELECT account_currency FROM account_snapshots
                    ORDER BY observed_at DESC, id DESC LIMIT 1"""
             ).fetchone()
