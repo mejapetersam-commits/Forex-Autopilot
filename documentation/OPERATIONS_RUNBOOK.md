@@ -131,3 +131,23 @@ terminal snapshot and admin authentication.
 Backtest results also expose a per-candle mark-to-market equity/drawdown
 approximation. Review its documented OHLC, spread, slippage and commission
 limitations before using it to compare strategies.
+
+
+## Read-only position lifecycle monitoring
+
+The admin-only `GET /api/v1/monitoring/positions/lifecycle` endpoint compares
+the two most recent execution snapshots from the same demo terminal and server.
+It reports newly observed positions, volume reductions, ticket replacements,
+stop-loss/take-profit changes and positions that disappear from the snapshot.
+
+A missing position is **not** automatically labelled closed. The endpoint
+requires linked broker deal evidence showing entry volume and at least the same
+volume closed, and refuses to treat MT5 reversal (`inout`) deals as unambiguous
+full-close evidence. Otherwise it reports
+`position_disappearance_unconfirmed` for operator review. This is a read-only
+observation layer, not a broker instruction or accounting statement.
+
+Lifecycle events are recorded in the operational event journal using the
+snapshot timestamp for idempotency. The endpoint requires a fresh demo
+snapshot and admin authentication. It never closes, modifies or opens a
+position; trading remains disabled.
