@@ -221,3 +221,42 @@ def test_restore_drill_rejects_corrupt_backup_without_creating_artifacts(tmp_pat
         run_restore_drill(corrupt, drill_directory=drill_directory)
 
     assert list(drill_directory.iterdir()) == []
+
+
+def test_backup_cleans_temporary_sqlite_sidecars(tmp_path):
+    source = tmp_path / "source-wal.sqlite3"
+    backup = tmp_path / "snapshot.sqlite3"
+
+    connection = sqlite3.connect(source)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("CREATE TABLE sample (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO sample VALUES ('wal-backed')")
+        connection.commit()
+    finally:
+        connection.close()
+
+    result = create_backup(source, backup)
+
+    assert result["status"] == "verified"
+    assert read_value(backup) == "wal-backed"
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp"))
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp-wal"))
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp-shm"))
+
+
+def test_restore_cleans_temporary_sqlite_sidecars(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    backup = tmp_path / "backup.sqlite3"
+    destination = tmp_path / "destination.sqlite3"
+
+    make_database(source, "recovered")
+    create_backup(source, backup)
+
+    result = restore_backup(backup, destination)
+
+    assert result["status"] == "restored"
+    assert read_value(destination) == "recovered"
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore"))
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore-wal"))
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore-shm"))

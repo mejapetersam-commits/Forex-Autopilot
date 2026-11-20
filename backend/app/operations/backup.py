@@ -26,6 +26,13 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+
+def _cleanup_sqlite_sidecars(path: Path) -> None:
+    """Remove WAL/SHM files belonging to a closed temporary SQLite database."""
+    Path(f"{path}-wal").unlink(missing_ok=True)
+    Path(f"{path}-shm").unlink(missing_ok=True)
+
+
 def verify_backup(path: str | Path) -> dict[str, Any]:
     """Verify SQLite integrity and return a compact, non-sensitive manifest."""
     backup_path = Path(path).expanduser().resolve()
@@ -198,6 +205,7 @@ def create_backup(source: str | Path, destination: str | Path) -> dict[str, Any]
         manifest["size_bytes"] = destination_path.stat().st_size
         return manifest
     finally:
+        _cleanup_sqlite_sidecars(temporary_path)
         temporary_path.unlink(missing_ok=True)
 
 
@@ -258,6 +266,7 @@ def restore_backup(
             "pre_restore_backup": pre_restore,
         }
     finally:
+        _cleanup_sqlite_sidecars(temporary_path)
         temporary_path.unlink(missing_ok=True)
 
 
