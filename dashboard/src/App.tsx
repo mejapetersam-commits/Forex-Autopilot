@@ -366,6 +366,31 @@ export default function App() {
         <article className={overview?.account?.fresh ? "system-status-card pass" : "system-status-card attention"}><span>ACCOUNT TELEMETRY</span><b>{overview?.account ? (overview.account.fresh ? "FRESH" : "STALE") : "NOT REPORTED"}</b><small>{overview?.account?.observed_at ? "Observed " + stamp(overview.account.observed_at) : "No account snapshot timestamp"}</small></article>
         <article className={(overview?.quotes?.length ?? 0) > 0 && (overview?.quotes ?? []).every(quote => quote.fresh) ? "system-status-card pass" : "system-status-card attention"}><span>MARKET QUOTES</span><b>{overview ? (overview.quotes.filter(quote => quote.fresh).length + " / " + overview.quotes.length + " FRESH") : "LOADING"}</b><small>Fresh quotes / reported symbols</small></article>
       </div>
+      <section className="system-diagnostics" aria-label="Operational diagnostics">
+        <div className="section-head"><div><div className="eyebrow">OPERATIONAL DIAGNOSTICS</div><h2>Service checks & investigation cues</h2></div><span className="diagnostic-updated">{lastUpdated ? "Dashboard checked " + stamp(lastUpdated) : "Awaiting first dashboard check"}</span></div>
+        <div className="diagnostic-list">
+          <article className="diagnostic-row">
+            <div><b>Backup worker</b><small>{recovery?.backup_worker.observed_at ? "Last observed " + stamp(recovery.backup_worker.observed_at) : "Worker report not available"}</small></div>
+            <Status good={recovery?.backup_worker.fresh === true} unknown={!recovery}>{!recovery ? "UNKNOWN" : recovery.backup_worker.fresh ? "FRESH" : "STALE"}</Status>
+            <p>{!recovery ? "Refresh recovery status to inspect the backup worker." : recovery.backup_worker.fresh ? "Worker heartbeat is within its reported freshness window." : "Worker heartbeat is stale or has not met its freshness threshold."}</p>
+          </article>
+          <article className="diagnostic-row">
+            <div><b>Verified backup</b><small>{recovery?.backups.latest_backup ? "Latest backup " + stamp(recovery.backups.latest_backup) : "No verified backup timestamp"}</small></div>
+            <Status good={recovery?.backups.fresh_verified_backup === true && recovery.backups.invalid_count === 0} unknown={!recovery}>{!recovery ? "UNKNOWN" : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? "VERIFIED" : "ATTENTION"}</Status>
+            <p>{!recovery ? "Backup inventory has not been reported." : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? recovery.backups.verified_count + " verified snapshot(s); no invalid snapshots reported." : recovery.backups.invalid_count + " invalid snapshot(s); a fresh verified backup is not confirmed."}</p>
+          </article>
+          <article className="diagnostic-row">
+            <div><b>Position reconciliation</b><small>{operations ? operations.reconciliation.managed_positions_checked + " managed position(s) checked" : "Operations report not available"}</small></div>
+            <Status good={operations?.reconciliation.status === "reconciled"} unknown={!operations}>{!operations ? "UNKNOWN" : operations.reconciliation.status === "reconciled" ? "RECONCILED" : "INVESTIGATE"}</Status>
+            <p>{!operations ? "Reconciliation evidence has not been received." : operations.reconciliation.status === "reconciled" ? "Latest reconciliation reports no outstanding mismatch." : "Latest state: " + operations.reconciliation.status.replaceAll("_"," ") + ". Review Risk & Safety before any operational decision."}</p>
+          </article>
+          <article className="diagnostic-row">
+            <div><b>Release checks</b><small>{releaseReadiness ? releaseReadiness.automated_passed + " / " + releaseReadiness.automated_total + " automated checks passed" : "Release report not available"}</small></div>
+            <Status good={releaseReadiness?.status === "ready" && releaseReadiness.manual_validation_required === 0} unknown={!releaseReadiness}>{!releaseReadiness ? "UNKNOWN" : releaseReadiness.status === "ready" && releaseReadiness.manual_validation_required === 0 ? "READY" : "NOT READY"}</Status>
+            <p>{!releaseReadiness ? "Release readiness evidence has not been received." : releaseReadiness.manual_validation_required + " manual validation(s) remain. A dashboard status is not permission to enable execution."}</p>
+          </article>
+        </div>
+      </section>
       <div className="system-section-list">
         <details className="dashboard-accordion" open><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Broker specifications</b><small>Contract sizes, tick values, volume constraints and symbol freshness</small></span><em>Reference data</em></summary><BrokerSpecifications /></details>
         <details className="dashboard-accordion"><summary><span className="strategy-step">02</span><span className="strategy-summary-copy"><b>Notification pipeline</b><small>Outbox queue, delivery outcomes and active persisted alerts</small></span><em>Service health</em></summary><NotificationHealth /></details>
