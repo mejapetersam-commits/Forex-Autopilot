@@ -72,3 +72,25 @@ separate encrypted device or storage account. Periodically perform a restore
 drill to a disposable path. Retention deletion and cloud replication are
 intentionally left to the deployment operator until storage policy and target
 provider are selected.
+
+
+## Automated local backup service
+
+Compose includes a dedicated `telemetry-backup` process. It creates and verifies
+a SQLite online backup at startup, then repeats every 24 hours by default. The
+default retention window is 30 days. Only expired snapshots with the managed
+filename pattern and a passing SQLite integrity check are pruned; corrupt
+snapshots and unrelated files are retained for manual review.
+
+Snapshots use a separate Docker named volume, `telemetry_backups`. This is a
+local recovery layer, **not an encrypted or off-device disaster-recovery copy**.
+Use encrypted host storage and independent off-device replication before
+relying on it for disaster recovery. The backup process has read-only access to
+the telemetry volume, no broker credentials, no network ports and no execution
+permissions.
+
+Optional settings:
+- `FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS` (default 86400; allowed 3600-604800)
+- `FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS` (default 30; allowed 1-3650)
+
+Inspect logs with `docker compose logs --tail=100 telemetry-backup`.
