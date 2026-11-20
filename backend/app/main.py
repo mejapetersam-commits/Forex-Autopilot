@@ -304,6 +304,51 @@ def dashboard_strategy_performance(
     }
 
 
+@app.get("/api/v1/dashboard/strategy-qualification", include_in_schema=False)
+def dashboard_strategy_qualification(
+    symbol: str = Query(default="EURUSDm", min_length=1, max_length=32),
+    timeframe: str = Query(default="H1", pattern="^(M15|H1|H4)$"),
+    limit: int = Query(default=1000, ge=400, le=5000),
+):
+    """On-demand walk-forward qualification for a single market/timeframe pair."""
+    from app.backtesting.qualification import evaluate_strategy_qualification
+
+    normalized_symbol = symbol.strip().upper()
+    if normalized_symbol not in dashboard_symbols():
+        raise HTTPException(status_code=403, detail="Symbol is not in the dashboard research allowlist.")
+    normalized_timeframe = timeframe.strip().upper()
+    store = telemetry_store()
+    candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
+    quality = assess_candle_quality(candles, normalized_timeframe)
+    if len(candles) < 400:
+        walk_forward = {
+            "status": "insufficient_data", "candles_available": len(candles),
+            "minimum_required": 400, "folds": [],
+            "out_of_sample_summary": {"valid_folds": 0, "total_trades": 0},
+        }
+    else:
+        pip_size, pip_value, _ = resolve_backtest_pip_values(store, normalized_symbol, None, None)
+        config = BacktestConfig(
+            initial_equity=10000.0, risk_per_trade_pct=0.25,
+            pip_size=pip_size, pip_value_per_lot=pip_value,
+            spread_pips=1.0, slippage_pips_per_side=0.2,
+            commission_per_lot_per_side=3.5,
+        )
+        walk_forward = optimize_walk_forward(candles, config)
+    qualification = evaluate_strategy_qualification(walk_forward, quality)
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "candles_available": len(candles),
+        "data_quality": quality,
+        "walk_forward": walk_forward,
+        "qualification": qualification,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/strategy-comparison", include_in_schema=False)
 def dashboard_strategy_comparison(
     limit: int = Query(default=1000, ge=61, le=5000),
