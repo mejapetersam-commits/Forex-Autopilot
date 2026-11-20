@@ -254,6 +254,66 @@ class EventOutbox:
         return {"alerts_created": created, "alerts_resolved": resolved,
                 "alerts_still_active": int(active_count)}
 
+    def operational_summary(self, *, recent_limit: int = 10,
+                             now: datetime | None = None) -> dict[str, Any]:
+        """Return aggregate delivery and active-alert health without payloads or lease tokens."""
+        if not 1 <= recent_limit <= 50:
+            raise ValueError("recent_limit must be between 1 and 50.")
+        current = now or _now()
+        current_text = _iso(current)
+        with self._connect() as db:
+            delivery_rows = db.execute(
+                "SELECT status, COUNT(*) AS count FROM notification_outbox GROUP BY status"
+            ).fetchall()
+            delivery = {row["status"]: int(row["count"]) for row in delivery_rows}
+            active_rows = db.execute(
+                """SELECT alert_key, event_type, severity, message, first_seen, last_seen
+                   FROM health_alert_state WHERE active=1
+                   ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+                            last_seen DESC LIMIT ?""",
+                (recent_limit,),
+            ).fetchall()
+            active_total = int(db.execute(
+                "SELECT COUNT(*) FROM health_alert_state WHERE active=1"
+            ).fetchone()[0])
+            pending = db.execute(
+                """SELECT MIN(available_at) AS oldest_due, COUNT(*) AS count
+                   FROM notification_outbox
+                   WHERE status='pending' AND available_at<=?""",
+                (current_text,),
+            ).fetchone()
+            recent = db.execute(
+                """SELECT e.event_id, e.event_type, e.severity, e.message, e.occurred_at,
+                          o.status AS delivery_status, o.attempts
+                   FROM operational_events e JOIN notification_outbox o USING(event_id)
+                   ORDER BY e.occurred_at DESC LIMIT ?""",
+                (recent_limit,),
+            ).fetchall()
+        oldest_age = None
+        if pending["oldest_due"]:
+            try:
+                stamp = datetime.fromisoformat(pending["oldest_due"].replace("Z", "+00:00"))
+                oldest_age = round(max(0.0, (current - stamp).total_seconds()), 1)
+            except (TypeError, ValueError):
+                oldest_age = None
+        return {
+            "delivery": {
+                "pending": delivery.get("pending", 0),
+                "leased": delivery.get("leased", 0),
+                "delivered": delivery.get("delivered", 0),
+                "dead": delivery.get("dead", 0),
+                "total": sum(delivery.values()),
+                "due_pending": int(pending["count"]),
+                "oldest_due_age_seconds": oldest_age,
+            },
+            "active_alerts": [dict(row) for row in active_rows],
+            "active_alert_count": active_total,
+            "recent_events": [dict(row) for row in recent],
+            "updated_at": current_text,
+            "read_only": True,
+            "trading_enabled": False,
+        }
+
     def lease_due(self, *, limit: int = 20, lease_seconds: int = 60,
                   now: datetime | None = None) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 5 <= lease_seconds <= 900:
