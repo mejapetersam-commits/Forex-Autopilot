@@ -248,9 +248,11 @@ class EventOutbox:
                     (timestamp, key),
                 )
                 resolved += 1
-        return {"alerts_created": created, "alerts_resolved": resolved, "alerts_still_active": sum(
-            1 for item in current if item in previous and previous[item]["active"]
-        )}
+            active_count = db.execute(
+                "SELECT COUNT(*) FROM health_alert_state WHERE active=1"
+            ).fetchone()[0]
+        return {"alerts_created": created, "alerts_resolved": resolved,
+                "alerts_still_active": int(active_count)}
 
     def lease_due(self, *, limit: int = 20, lease_seconds: int = 60,
                   now: datetime | None = None) -> list[dict[str, Any]]:
