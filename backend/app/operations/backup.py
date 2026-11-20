@@ -143,6 +143,10 @@ def restore_backup(
             destination_connection.close()
             source_connection.close()
         restored_manifest = verify_backup(temporary_path)
+        # A stale WAL/SHM pair belongs to the previous database and must not be
+        # replayed against the restored snapshot. Restore is an offline operation.
+        Path(str(destination_path) + "-wal").unlink(missing_ok=True)
+        Path(str(destination_path) + "-shm").unlink(missing_ok=True)
         os.replace(temporary_path, destination_path)
         return {
             "status": "restored",
