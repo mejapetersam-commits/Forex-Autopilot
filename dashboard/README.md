@@ -22,11 +22,12 @@ Vite proxies `/api/*` requests to `http://127.0.0.1:8000`. The dashboard uses on
 - `GET /api/v1/dashboard/notification-health` (aggregate outbox delivery counts, active health alerts and sanitized recent event metadata; read-only, no dispatch or leasing)
 - `GET /api/v1/dashboard/data-readiness` (per-symbol/timeframe candle coverage, valid OHLC percentage, integrity issues, diagnostic gaps and research-readiness status; read-only)
 - `GET /api/v1/dashboard/candle-ingestion` (durable receipts and aggregate counts for accepted MT5 bulk candle uploads; read-only)
+- `GET /api/v1/dashboard/cost-sensitivity` (four historical replay scenarios with progressively higher spread, slippage and commission; read-only)
 - Additional read-only portfolio, operations, recovery, execution-reconciliation, strategy-analysis and release-readiness endpoints used by dashboard panels.
 
 No bridge or admin token is embedded in browser code. No trading controls or order submission are exposed. Trading remains disabled by the backend.
 
-## Build
+## Dashboard navigation\n\nThe interface groups overview, connectivity, research, portfolio, market data, strategy performance and operations into a responsive sticky section navigation. The strategy workspace includes a transaction-cost stress laboratory comparing base, moderate, high and severe cost assumptions on identical stored candles.\n\n## Build
 
 ```bash
 npm run build
