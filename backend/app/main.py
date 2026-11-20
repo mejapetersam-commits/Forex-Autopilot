@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 from datetime import datetime, timezone
 from typing import Literal
@@ -617,8 +618,38 @@ def dashboard_recovery_status():
             "snapshots": [],
         }
     commands = execution_command_queue().operational_summary(limit=20)
+    heartbeat_path = Path(os.getenv(
+        "FOREX_AUTOPILOT_TELEMETRY_DB", "data/telemetry.sqlite3"
+    )).expanduser().parent / "backup-worker-heartbeat.json"
+    worker_interval = max(3600, int(os.getenv(
+        "FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS", "86400"
+    )))
+    worker_max_age = max(7200, worker_interval * 2 + 300)
+    worker = {"status": "missing", "fresh": False, "age_seconds": None}
+    try:
+        heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+        observed = datetime.fromisoformat(
+            str(heartbeat["observed_at"]).replace("Z", "+00:00")
+        )
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            raise ValueError("Worker heartbeat timestamp must be timezone-aware.")
+        age = (datetime.now(timezone.utc) - observed.astimezone(timezone.utc)).total_seconds()
+        fresh = -300 <= age <= worker_max_age and heartbeat.get("status") == "ok"
+        worker = {
+            "status": "healthy" if fresh else "stale",
+            "fresh": fresh,
+            "age_seconds": round(max(0.0, age), 1),
+            "max_age_seconds": worker_max_age,
+            "last_backup": heartbeat.get("backup"),
+            "observed_at": observed.isoformat(),
+        }
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        worker["status"] = "invalid"
     return {
         "backups": backups,
+        "backup_worker": worker,
         "execution_commands": commands,
         "execution_mode": "disabled",
         "trading_enabled": False,
