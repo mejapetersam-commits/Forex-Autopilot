@@ -151,3 +151,8 @@ Lifecycle events are recorded in the operational event journal using the
 snapshot timestamp for idempotency. The endpoint requires a fresh demo
 snapshot and admin authentication. It never closes, modifies or opens a
 position; trading remains disabled.
+
+
+## Aggregate portfolio stop-risk dispatch gate
+
+Immediately before an approved intent is queued, the API rebuilds the portfolio estimate from current MT5 execution state, account equity, quotes and symbol specifications. Dispatch is blocked unless the portfolio is healthy and complete, every open position has a valid protective stop with a supported fresh conversion, and aggregate estimated stop risk is at or below `FOREX_AUTOPILOT_MAX_PORTFOLIO_STOP_RISK_PCT` (default `0.50` percent of account equity). Unknown or stale risk is a hard denial, never treated as zero. The gate is read-only and does not change positions. This estimate uses current quotes and broker tick values; gaps, slippage, commissions, swaps and execution failures can increase realized losses. Trading remains disabled by default and live execution is prohibited.
