@@ -222,7 +222,8 @@ broker order/deal history before taking any separate operator action.
 The local dashboard's read-only
 `GET /api/v1/dashboard/execution-reconciliation` endpoint summarizes recent
 submitted intents, partial/full-fill audit evidence, volume-weighted average
-fill price, individual broker deal tickets and manual-review events. It reads
+fill price, individual broker deal tickets, recent sanitized broker order states
+and manual-review events. It reads
 the durable ledger and event journal only; it does not invoke reconciliation,
 advance intent states, queue commands or expose the original intent payload.
 The Execution History panel refreshes independently with the other dashboard
