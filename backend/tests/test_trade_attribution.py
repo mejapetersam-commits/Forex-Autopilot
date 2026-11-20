@@ -77,6 +77,7 @@ def test_legacy_missing_cash_fields_are_not_fabricated_as_zero():
     assert result["pnl_incomplete_trade_count"] == 1
     assert result["net_realized_pnl"] == 0
     assert result["expectancy_per_trade"] is None
+    assert result["coverage"] == "partial"
 
 
 def test_unmatched_exit_is_reported_not_counted_as_a_trade():
@@ -124,6 +125,9 @@ def test_store_persists_cash_components_idempotently_and_exposes_currency(tmp_pa
     with store._connect() as connection:
         connection.execute(
             "INSERT INTO account_snapshots(server, account_currency, balance, equity, margin, free_margin, leverage, observed_at) VALUES ('Exness-MT5Trial','USD',1000,1000,0,1000,100,'2026-11-19T10:02:00+00:00')"
+        )
+        connection.execute(
+            "INSERT INTO account_snapshots(server, account_currency, balance, equity, margin, free_margin, leverage, observed_at) VALUES ('Other-Broker','KES',5000,5000,0,5000,100,'2026-11-19T10:03:00+00:00')"
         )
     result = store.demo_trade_attribution()
     assert result["deal_count"] == 2
