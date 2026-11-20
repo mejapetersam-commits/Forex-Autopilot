@@ -192,3 +192,33 @@ def test_duplicate_terminal_result_must_match_immutable_intent(tmp_path):
             result={"intent_id": "i-forged", "broker_order_id": "456"},
             expected_intent_id="i-forged",
         )
+
+def test_late_broker_callback_after_expiry_is_rejected_and_stays_quarantined(tmp_path):
+    import sqlite3
+
+    queue = make_queue(tmp_path)
+    queue.enqueue_approved_intent(
+        command_id="c-late-callback", intent_id="i-late-callback",
+        payload=command_payload(), environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-a")
+    with sqlite3.connect(queue.database_path) as db:
+        db.execute(
+            "UPDATE execution_commands SET lease_until='2000-01-01T00:00:00+00:00' "
+            "WHERE command_id='c-late-callback'"
+        )
+
+    expired = queue.expire_leases()
+    assert [item["command_id"] for item in expired] == ["c-late-callback"]
+    with pytest.raises(ValueError, match="not leased"):
+        queue.record_result(
+            "c-late-callback", terminal_id="terminal-a", outcome="acknowledged",
+            result={"intent_id": "i-late-callback", "broker_order_id": "late-123"},
+            expected_intent_id="i-late-callback",
+        )
+
+    summary = queue.operational_summary()
+    assert summary["counts"]["expired"] == 1
+    assert summary["counts"]["queued"] == 0
+    assert queue.lease_next(terminal_id="terminal-b") is None
+
