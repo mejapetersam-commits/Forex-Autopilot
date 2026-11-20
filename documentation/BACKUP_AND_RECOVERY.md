@@ -43,7 +43,7 @@ writing to it is not supported. Confirm the selected backup and preserve a copy
 of the current database first.
 
 ```bash
-docker compose stop api telemetry-backup
+docker compose stop api telemetry-backup telemetry-health-monitor
 ```
 
 Then run the restore utility in an environment that can access both the backup
