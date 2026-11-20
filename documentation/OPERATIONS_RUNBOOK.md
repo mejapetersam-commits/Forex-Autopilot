@@ -147,6 +147,28 @@ the current database, verify the selected snapshot, then restore and validate
 telemetry before restarting.
 
 
+## Consolidated release-readiness dashboard
+
+The local read-only `GET /api/v1/dashboard/release-readiness` endpoint combines
+fresh broker/account telemetry, market-history coverage, verified backup
+freshness, broker order/deal reconciliation, and position identity/protection
+checks. It reports each automated gate separately so missing telemetry is not
+mistaken for a passing check.
+
+The same panel lists manual release gates that cannot be proven by backend
+tests or inferred from telemetry alone: compiling both Expert Advisors in
+MetaEditor, exercising order/partial-fill/reject/cancel/protective-stop
+scenarios on a dedicated demo account, testing terminal disconnect/restart
+recovery, and completing sustained forward-demo observation with broker
+statement reconciliation.
+
+Manual gates remain marked `operator_validation_required`; the dashboard
+does not provide a control to mark them complete. The endpoint always reports
+`execution_enabled=false`, `trading_enabled=false` and
+`live_trading_supported=false`. A green automated sub-check is not a release
+approval and does not authorize demo or live order dispatch.
+
+
 ## Broker position reconciliation
 
 The admin-only `GET /api/v1/monitoring/positions/reconciliation` endpoint
