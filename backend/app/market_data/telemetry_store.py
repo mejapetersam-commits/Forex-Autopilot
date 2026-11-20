@@ -691,8 +691,8 @@ class TelemetryStore:
         with self._connect() as connection:
             totals = connection.execute(
                 """SELECT COUNT(*) AS deal_count,
-                          SUM(CASE WHEN profit IS NOT NULL AND commission IS NOT NULL
-                                    AND swap IS NOT NULL AND fee IS NOT NULL THEN 1 ELSE 0 END)
+                          COALESCE(SUM(CASE WHEN profit IS NOT NULL AND commission IS NOT NULL
+                                    AND swap IS NOT NULL AND fee IS NOT NULL THEN 1 ELSE 0 END), 0)
                               AS cash_complete_deal_count,
                           COUNT(DISTINCT terminal_id) AS terminal_count,
                           COUNT(DISTINCT magic) AS strategy_magic_count,
