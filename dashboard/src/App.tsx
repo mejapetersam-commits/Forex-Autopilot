@@ -364,15 +364,25 @@ export default function App() {
       <NotificationHealth />
     </div>}
 
-    {page === "strategies" && <div id="strategy" className="dashboard-group">
-      <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Review strategy results, comparisons, demo observations and trade attribution.</p></div>
-      <details className="dashboard-accordion"><summary>Open performance and research panels <span>5 panels · performance, cost stress, comparison, demo, attribution</span></summary>
-      <StrategyPerformance />
-      <CostSensitivity />
-      <StrategyComparison />
-      <DemoObservation />
-      <TradeAttribution />
-      </details>
+    {page === "strategies" && <div id="strategy" className="dashboard-group strategies-workspace">
+      <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Move from historical simulation to robustness checks, cross-market comparison and broker-confirmed demo evidence. Each workspace can be opened independently.</p></div>
+      <div className="strategy-workflow" aria-label="Research workflow">
+        <div><span>01</span><b>Test</b><small>Historical simulation</small></div>
+        <i aria-hidden="true">→</i>
+        <div><span>02</span><b>Stress</b><small>Transaction costs</small></div>
+        <i aria-hidden="true">→</i>
+        <div><span>03</span><b>Compare</b><small>Markets and timeframes</small></div>
+        <i aria-hidden="true">→</i>
+        <div><span>04</span><b>Observe</b><small>Broker demo evidence</small></div>
+      </div>
+      <div className="strategy-panel-list">
+        <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Strategy performance lab</b><small>Backtest, equity curve, drawdown and walk-forward validation</small></span><em>Historical research</em></summary><StrategyPerformance /></details>
+        <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">02</span><span className="strategy-summary-copy"><b>Execution cost stress lab</b><small>Compare baseline, moderate, high and severe cost assumptions</small></span><em>Robustness check</em></summary><CostSensitivity /></details>
+        <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">03</span><span className="strategy-summary-copy"><b>Cross-market comparison</b><small>Ranked research grid and walk-forward qualification checks</small></span><em>Research ranking</em></summary><StrategyComparison /></details>
+        <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">04</span><span className="strategy-summary-copy"><b>Demo observation centre</b><small>Broker-reported orders, deals and terminal snapshots</small></span><em>Broker evidence</em></summary><DemoObservation /></details>
+        <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">05</span><span className="strategy-summary-copy"><b>Realized P&amp;L & trade attribution</b><small>Closed-cycle results using complete broker cash components</small></span><em>Demo performance</em></summary><TradeAttribution /></details>
+      </div>
+      <p className="strategy-disclaimer">Research simulations, cross-market rankings and broker-reported demo results are separate evidence types. Historical results are not live performance, incomplete broker records are excluded from complete-only P&amp;L, and no panel submits orders.</p>
     </div>}
 
     {page === "risk" && <div id="operations" className="dashboard-group">
