@@ -146,3 +146,24 @@ def test_inventory_handles_missing_directory_and_rejects_naive_time(tmp_path):
         inspect_backup_inventory(
             tmp_path, now=datetime(2026, 11, 20)
         )
+
+
+
+def test_inventory_does_not_accept_future_dated_snapshot_as_fresh(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    future = directory / "telemetry-20261121T000000Z.sqlite3"
+    make_database(future, "future")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["fresh_verified_backup"] is False
+    assert result["verified_count"] == 0
+    assert result["invalid_count"] == 1
+    assert result["snapshots"][0]["status"] == "future_dated"
