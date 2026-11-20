@@ -354,8 +354,13 @@ void ProcessCommand(string response)
       outcome = "rejected";
 
    string safe_comment = broker_comment;
+   // Broker comments are external text. Escape JSON delimiters and replace
+   // control characters so a valid trade result cannot become invalid JSON.
    StringReplace(safe_comment, "\\", "\\\\");
    StringReplace(safe_comment, "\"", "\\\"");
+   StringReplace(safe_comment, ShortToString(13), " ");
+   StringReplace(safe_comment, ShortToString(10), " ");
+   StringReplace(safe_comment, ShortToString(9), " ");
    string result = StringFormat(
       "{\"intent_id\":\"%s\",\"broker_order_id\":\"%I64u\","
       "\"broker_deal_id\":\"%I64u\",\"retcode\":%u,"
