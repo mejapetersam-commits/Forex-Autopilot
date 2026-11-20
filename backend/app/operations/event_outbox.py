@@ -7,6 +7,7 @@ provider configuration, timeouts, redaction and operator approval.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -74,6 +75,17 @@ class EventOutbox:
                 );
                 CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
                     ON notification_outbox(status, available_at, lease_until);
+                CREATE TABLE IF NOT EXISTS health_alert_state (
+                    alert_key TEXT PRIMARY KEY,
+                    event_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    active INTEGER NOT NULL CHECK(active IN (0,1)),
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    resolved_at TEXT
+                );
             """)
 
     def record(
@@ -135,6 +147,110 @@ class EventOutbox:
             params.append(limit)
             rows = db.execute(query, params).fetchall()
         return [dict(row) for row in rows]
+
+    def reconcile_health_alerts(
+        self, alerts: list[dict[str, Any]], *, now: datetime | None = None
+    ) -> dict[str, int]:
+        """Persist health alert transitions and explicit recovery events atomically.
+
+        An alert remains active across monitor cycles without generating repeated
+        notifications. A recovery event is emitted only when an active alert
+        disappears from a subsequent health assessment.
+        """
+        timestamp = _iso(now or _now())
+        current: dict[str, dict[str, Any]] = {}
+        for alert in alerts:
+            code = str(alert.get("code") or "")
+            symbol = str(alert.get("symbol") or "all").upper()
+            severity = str(alert.get("severity") or "")
+            message = str(alert.get("message") or "")
+            if not code or severity not in _ALLOWED_SEVERITIES or not message:
+                raise ValueError("Health alert is missing a valid code, severity or message.")
+            key = f"{code}:{symbol}"
+            current[key] = {
+                "event_type": code,
+                "severity": severity,
+                "message": message[:2000],
+                "payload": {
+                    "source": "periodic_health_monitor",
+                    "alert_code": code,
+                    "symbol": alert.get("symbol"),
+                },
+            }
+
+        created = 0
+        resolved = 0
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = {
+                row["alert_key"]: dict(row)
+                for row in db.execute("SELECT * FROM health_alert_state").fetchall()
+            }
+            for key, alert in current.items():
+                old = previous.get(key)
+                payload = json.dumps(alert["payload"], sort_keys=True, separators=(",", ":"), allow_nan=False)
+                if old and old["active"]:
+                    db.execute(
+                        "UPDATE health_alert_state SET last_seen=?, severity=?, message=?, payload_json=? WHERE alert_key=?",
+                        (timestamp, alert["severity"], alert["message"], payload, key),
+                    )
+                    continue
+                event_id = str(uuid.uuid4())
+                event_key = "health-transition:" + hashlib.sha256(
+                    f"{key}:{timestamp}".encode("utf-8")
+                ).hexdigest()
+                db.execute(
+                    "INSERT INTO operational_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (event_id, event_key, alert["event_type"], alert["severity"],
+                     alert["message"], payload, timestamp),
+                )
+                db.execute(
+                    "INSERT INTO notification_outbox(event_id,channel,status,available_at,updated_at) VALUES (?, 'operator', 'pending', ?, ?)",
+                    (event_id, timestamp, timestamp),
+                )
+                if old:
+                    db.execute(
+                        "UPDATE health_alert_state SET event_type=?, severity=?, message=?, payload_json=?, active=1, last_seen=?, resolved_at=NULL WHERE alert_key=?",
+                        (alert["event_type"], alert["severity"], alert["message"], payload, timestamp, key),
+                    )
+                else:
+                    db.execute(
+                        "INSERT INTO health_alert_state(alert_key,event_type,severity,message,payload_json,active,first_seen,last_seen,resolved_at) VALUES (?,?,?,?,?,1,?,?,NULL)",
+                        (key, alert["event_type"], alert["severity"], alert["message"], payload, timestamp, timestamp),
+                    )
+                created += 1
+
+            for key, old in previous.items():
+                if not old["active"] or key in current:
+                    continue
+                event_id = str(uuid.uuid4())
+                event_key = "health-recovered:" + hashlib.sha256(
+                    f"{key}:{timestamp}".encode("utf-8")
+                ).hexdigest()
+                payload = json.dumps({
+                    "source": "periodic_health_monitor",
+                    "alert_code": old["event_type"],
+                    "alert_key": key,
+                    "first_seen": old["first_seen"],
+                    "last_seen": old["last_seen"],
+                    "resolved_at": timestamp,
+                }, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                db.execute(
+                    "INSERT INTO operational_events VALUES (?, ?, 'HEALTH_RECOVERED', 'info', ?, ?, ?)",
+                    (event_id, event_key, f"Health alert recovered: {old['event_type']}.", payload, timestamp),
+                )
+                db.execute(
+                    "INSERT INTO notification_outbox(event_id,channel,status,available_at,updated_at) VALUES (?, 'operator', 'pending', ?, ?)",
+                    (event_id, timestamp, timestamp),
+                )
+                db.execute(
+                    "UPDATE health_alert_state SET active=0, resolved_at=? WHERE alert_key=?",
+                    (timestamp, key),
+                )
+                resolved += 1
+        return {"alerts_created": created, "alerts_resolved": resolved, "alerts_still_active": sum(
+            1 for item in current if item in previous and previous[item]["active"]
+        )}
 
     def lease_due(self, *, limit: int = 20, lease_seconds: int = 60,
                   now: datetime | None = None) -> list[dict[str, Any]]:
