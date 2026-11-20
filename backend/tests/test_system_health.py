@@ -15,6 +15,28 @@ def test_health_is_healthy_with_fresh_connected_telemetry():
     assert result["trading_enabled"] is False
 
 
+def test_health_rejects_mismatched_broker_server_snapshots():
+    now = datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    heartbeat = {
+        "server": "Broker-Demo-1",
+        "terminal_connected": True,
+        "observed_at": stamp,
+    }
+    account = {
+        "server": "Broker-Demo-2",
+        "equity": 1000,
+        "margin": 200,
+        "observed_at": stamp,
+    }
+    quotes = [{"symbol": "EURUSDm", "observed_at": stamp}]
+
+    result = assess_system_health(heartbeat, account, quotes, now=now)
+
+    assert result["status"] == "critical"
+    assert "BROKER_SERVER_MISMATCH" in {alert["code"] for alert in result["alerts"]}
+
+
 def test_health_reports_missing_and_stale_telemetry_as_critical():
     now = datetime.now(timezone.utc)
     result = assess_system_health(None, None, [], now=now)
