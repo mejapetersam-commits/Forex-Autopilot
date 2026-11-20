@@ -553,3 +553,8 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .system-status-card>b{color:#edf3ef}
 @media(max-width:900px){.system-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.system-status-grid{grid-template-columns:1fr}.system-section-list>.dashboard-accordion>summary,.system-event-accordion>summary{gap:9px;padding:11px 10px}.system-section-list .strategy-accordion>summary>em,.system-section-list>.dashboard-accordion>summary>em,.system-event-accordion>summary>em{display:none}}
+
+
+.system-evidence-meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;color:var(--fa-muted);font-size:10px}
+.shell.theme-dark .system-evidence-meta{color:#a9bbb4}
+@media(max-width:560px){.system-evidence-meta{flex-direction:column;gap:5px}}
