@@ -18,6 +18,8 @@ React + TypeScript + Vite read-only monitoring and research interface.
 Vite proxies `/api/*` requests to `http://127.0.0.1:8000`. The dashboard uses only local, unauthenticated, read-only dashboard endpoints:
 - `GET /api/v1/dashboard/overview`
 - `GET /api/v1/dashboard/research`
+- `GET /api/v1/dashboard/broker-specifications` (sanitized symbol contract constraints, freshness and broker trade-allowed metadata)
+- Additional read-only portfolio, operations, recovery, execution-reconciliation, strategy-analysis and release-readiness endpoints used by dashboard panels.
 
 No bridge or admin token is embedded in browser code. No trading controls or order submission are exposed. Trading remains disabled by the backend.
 
