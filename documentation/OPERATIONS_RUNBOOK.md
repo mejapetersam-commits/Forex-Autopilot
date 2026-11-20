@@ -96,7 +96,7 @@ Live trading remains disabled until those controls are implemented, independentl
 ## Scheduled telemetry backups
 
 The telemetry-backup Compose service runs independently of the API and
-gateway. It takes a verified online SQLite snapshot at startup, then follows
+gateway. Its SQLite source connection is read-only; the volume mount also allows SQLite WAL shared-memory coordination. It takes a verified online SQLite snapshot at startup, then follows
 the configured interval and retention window. Defaults are 24 hours and 30
 days. The snapshots live in the separate telemetry_backups Docker volume.
 
