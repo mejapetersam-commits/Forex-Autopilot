@@ -174,6 +174,35 @@ class ExecutionCommandQueue:
         return [dict(row) for row in rows]
 
 
+    def operational_summary(self, limit: int = 20) -> dict[str, Any]:
+        """Return sanitized command counts and quarantined-command metadata."""
+        safe_limit = min(max(int(limit), 1), 100)
+        with self._connect() as db:
+            counts = {
+                row["status"]: int(row["count"])
+                for row in db.execute(
+                    "SELECT status, COUNT(*) AS count FROM execution_commands GROUP BY status"
+                ).fetchall()
+            }
+            rows = db.execute(
+                """SELECT command_id, intent_id, status, created_at, attempts,
+                          terminal_id, lease_until
+                   FROM execution_commands
+                   WHERE status IN ('expired', 'unknown')
+                   ORDER BY created_at DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+            total = int(db.execute(
+                "SELECT COUNT(*) FROM execution_commands WHERE status IN ('expired','unknown')"
+            ).fetchone()[0])
+        return {
+            "counts": {key: counts.get(key, 0) for key in
+                       ("queued", "leased", "acknowledged", "rejected", "unknown", "expired")},
+            "quarantined_total": total,
+            "quarantined": [dict(row) for row in rows],
+        }
+
+
     def expire_leases(self) -> list[dict[str, Any]]:
         """Atomically quarantine timed-out leases and return only newly expired rows."""
         now_text = self._now().isoformat()
