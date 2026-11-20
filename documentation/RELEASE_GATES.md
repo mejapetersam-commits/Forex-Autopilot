@@ -21,6 +21,10 @@
 - Terminal restart protection uses the complete persistent command ID as an MT5 Global Variable marker; expired leases are quarantined to unknown and can only be recovered from authenticated broker order/deal history.
 - Existing portfolio risk controls remain the source of truth for currency exposure, correlation, projected drawdown, open-position count and emergency halt.
 
+
+- On-demand strategy qualification with minimum out-of-sample sample size, two valid chronological folds, positive mean out-of-sample return, minimum mean profit factor, maximum drawdown and healthy candle-quality gates. "Eligible for demo observation" is a research label only; it is not strategy approval or execution authorization.
+- Read-only Demo Observation Centre summarises broker-confirmed demo deal/order counts, symbol/magic groupings and latest terminal position snapshots. It deliberately does not calculate profitability from the current deal schema because realised profit, commission and swap are not yet ingested.
+
 ## Still required before demo execution can be enabled
 
 - Both MT5 Expert Advisors have been compiled locally in MetaEditor with 0 errors and 0 warnings. Recompile after the latest history/tagging changes; CI does not compile MQL5.
