@@ -44,3 +44,18 @@ automatically convert notification failure into a trading-state change.
 The event journal is operational observability only. It does not authorise,
 queue or execute trades. Trading remains disabled by the system's existing
 configuration and controls.
+
+
+## Periodic health-event publishing
+
+The `telemetry-health-monitor` Compose service checks broker heartbeat,
+account snapshots and quotes every 30 seconds by default. It records each
+distinct alert code/symbol once per UTC day in the durable event journal, using
+an idempotency key to avoid repeated dashboard refreshes or polling cycles
+creating duplicate events. The dashboard then displays those events and their
+outbox status.
+
+The outbox currently persists and leases notification work only. No email,
+SMS, Telegram or other external delivery is configured or claimed. Add a
+provider adapter only after an operator selects a destination and secret
+management policy.
