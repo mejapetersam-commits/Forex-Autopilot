@@ -74,6 +74,14 @@ export interface OperationalEventsResponse {
 export const getOperationalEvents = () => getJson<OperationalEventsResponse>("/api/v1/dashboard/events?limit=50");
 
 export interface RecoveryStatusResponse {
+  backup_worker: {
+    status: string;
+    fresh: boolean;
+    age_seconds: number | null;
+    max_age_seconds?: number;
+    last_backup?: string | null;
+    observed_at?: string;
+  };
   backups: {
     status: string;
     directory_exists: boolean;
