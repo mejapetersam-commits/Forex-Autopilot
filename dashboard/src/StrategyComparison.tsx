@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowDownUp, BarChart3, RefreshCw } from "lucide-react";
-import { getStrategyComparison, type StrategyComparisonResponse } from "./api";
+import { getStrategyComparison, getStrategyQualification, type StrategyComparisonResponse, type StrategyQualificationResponse } from "./api";
 
 function metric(value: number | null | undefined, suffix = "", digits = 2) {
   return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits) + suffix;
@@ -12,13 +12,15 @@ export default function StrategyComparison() {
   const [data, setData] = useState<StrategyComparisonResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [qualifying, setQualifying] = useState<string | null>(null);
+  const [qualification, setQualification] = useState<StrategyQualificationResponse | null>(null);
   async function load() {
     setLoading(true); setError("");
     try { setData(await getStrategyComparison()); }
     catch (err) { setError(err instanceof Error ? err.message : "Comparison request failed"); }
     finally { setLoading(false); }
   }
-  const ranked = [...(data?.items ?? [])].sort((a,b) =>
+  async function qualify(item: {symbol:string; timeframe:string}) {\n    setQualifying(item.symbol + item.timeframe); setError(""); setQualification(null);\n    try { setQualification(await getStrategyQualification(item.symbol, item.timeframe)); }\n    catch (err) { setError(err instanceof Error ? err.message : "Qualification request failed"); }\n    finally { setQualifying(null); }\n  }\n  const ranked = [...(data?.items ?? [])].sort((a,b) =>
     (a.research_rank ?? 999) - (b.research_rank ?? 999)
   );
   return <section className="panel strategy-comparison">
@@ -31,7 +33,7 @@ export default function StrategyComparison() {
     {error && <div className="lab-error">{error}</div>}
     {data && <>
       <div className="comparison-summary"><div><b>{data.ranked_count}</b><span>COMPLETED SIMULATIONS</span></div><div><b>{data.items.length}</b><span>MARKET / TIMEFRAME PAIRS</span></div><div><b>0.25%</b><span>RISK PER TRADE ASSUMPTION</span></div></div>
-      <div className="table-wrap"><table className="comparison-table"><thead><tr><th>RANK</th><th>MARKET</th><th>TIMEFRAME</th><th>RETURN</th><th>PROFIT FACTOR</th><th>WIN RATE</th><th>MAX DD</th><th>TRADES</th><th>DATA</th></tr></thead><tbody>
+      <div className="table-wrap"><table className="comparison-table"><thead><tr><th>RANK</th><th>MARKET</th><th>TIMEFRAME</th><th>RETURN</th><th>PROFIT FACTOR</th><th>WIN RATE</th><th>MAX DD</th><th>TRADES</th><th>DATA</th><th>QUALIFY</th></tr></thead><tbody>
         {ranked.map(item => <tr key={item.symbol + item.timeframe}>
           <td className="rank-cell">{item.research_rank ? "#"+item.research_rank : "—"}</td><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td>
           <td className={(item.return_pct ?? 0) >= 0 ? "positive" : "negative"}>{metric(item.return_pct,"%")}</td>
@@ -39,6 +41,12 @@ export default function StrategyComparison() {
           <td><span className={`comparison-status ${statusClass(item.status)}`}>{item.status.replaceAll("_"," ")}</span>{item.gap_count > 0 && <small className="gap-note">{item.gap_count} gaps</small>}</td>
         </tr>)}
       </tbody></table></div>
+      {qualification && <div className="qualification-result">
+        <div className="qualification-heading"><div><div className="eyebrow">WALK-FORWARD QUALIFICATION</div><h3>{qualification.symbol} · {qualification.timeframe}</h3></div><span className={qualification.qualification.status === "eligible_for_demo_observation" ? "qualification-eligible" : "qualification-review"}>{qualification.qualification.status.replaceAll("_"," ")}</span></div>
+        <div className="qualification-checks">{Object.entries(qualification.qualification.checks).map(([key,value]) => <div key={key}><span>{key.replaceAll("_"," ")}</span><b>{value == null ? "—" : String(value)}</b></div>)}</div>
+        {qualification.qualification.reasons.length > 0 && <ul>{qualification.qualification.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>}
+        <p>{qualification.qualification.disclaimer}</p>
+      </div>}
       <div className="comparison-warning">{data.warning} Ranking prioritizes profit factor and then return; it is not a strategy approval score. Review trade count, drawdown, candle gaps and walk-forward performance before drawing conclusions.</div>
     </>}
     <div className="lab-footer">FIXED RESEARCH ASSUMPTIONS · HISTORICAL COMPARISON ONLY · EXECUTION DISABLED</div>
