@@ -210,7 +210,7 @@ export default function App() {
       <div className="metrics ops-metrics">
         <Metric label="RECONCILIATION" value={operations?.reconciliation.status.replaceAll("_", " ").toUpperCase() ?? "LOADING"} detail="Managed positions checked against intent ledger"/>
         <Metric label="ORPHANED POSITIONS" value={String(operations?.reconciliation.orphaned_positions.length ?? "—")} detail="Require operator investigation; never auto-closed"/>
-        <Metric label="MISSING PROTECTION" value={String(operations?.reconciliation.protection_issues.length ?? "—")} detail="Broker snapshot lacks SL or TP evidence"/>
+        <Metric label="MISSING PROTECTION" value={String(operations?.reconciliation.protection_issues?.length ?? "—")} detail="Broker snapshot lacks SL or TP evidence"/>
         <Metric label="LIFECYCLE EVENTS" value={String(operations?.lifecycle.events.length ?? "—")} detail={operations?.lifecycle.previous_snapshot_available ? "Compared with prior terminal snapshot" : "Waiting for comparable snapshot baseline"}/>
         <Metric label="PORTFOLIO STOP RISK" value={operations?.portfolio_risk_gate.aggregate_stop_risk_pct == null ? "UNKNOWN" : operations.portfolio_risk_gate.aggregate_stop_risk_pct.toFixed(3) + "%"} detail={operations?.portfolio_risk_gate.max_stop_risk_pct != null ? "Ceiling " + operations.portfolio_risk_gate.max_stop_risk_pct.toFixed(2) + "% of equity" : "Aggregate risk ceiling"}/>
       </div>
@@ -219,7 +219,7 @@ export default function App() {
         <div><b>{operations?.portfolio_risk_gate.approved ? "AGGREGATE RISK WITHIN LIMIT" : "DISPATCH RISK GATE BLOCKED / UNVERIFIED"}</b>
         <span>{operations?.portfolio_risk_gate.reasons?.length ? operations.portfolio_risk_gate.reasons.join(" · ") : "Fresh, complete portfolio risk is within the configured ceiling."}</span></div>
       </div>
-      {Boolean(operations?.reconciliation.protection_issues.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{operations?.reconciliation.protection_issues.length} managed position(s) lack broker-confirmed stop-loss or take-profit protection. Treat as urgent operator review; this dashboard will not modify positions.</span><b>PROTECTION</b></div>}
+      {Boolean(operations?.reconciliation.protection_issues?.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{operations?.reconciliation.protection_issues?.length ?? 0} managed position(s) lack broker-confirmed stop-loss or take-profit protection. Treat as urgent operator review; this dashboard will not modify positions.</span><b>PROTECTION</b></div>}
       {Boolean(operations?.reconciliation.orphaned_positions.length) && <div className="table-wrap"><table><thead><tr><th>UNMATCHED TICKET</th><th>SYMBOL</th><th>SIDE</th><th>VOLUME</th><th>REVIEW REASON</th></tr></thead><tbody>
         {operations?.reconciliation.orphaned_positions.map(position => <tr key={position.ticket}><td className="symbol">{position.ticket}</td><td>{position.symbol}</td><td>{position.side}</td><td>{position.volume_lots.toFixed(2)}</td><td>{position.reason.replaceAll("_", " ")}</td></tr>)}
       </tbody></table></div>}
