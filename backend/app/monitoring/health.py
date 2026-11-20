@@ -41,6 +41,16 @@ def assess_system_health(
         alerts.append({"code": "HEARTBEAT_STALE", "severity": "critical", "message": "MT5 heartbeat is stale or has an invalid timestamp."})
     checks.append({"name": "mt5_heartbeat", "healthy": bool(heartbeat and heartbeat.get("terminal_connected") and heartbeat_age is not None and heartbeat_age <= stale_after_seconds), "age_seconds": round(heartbeat_age, 1) if heartbeat_age is not None else None})
 
+    if heartbeat and account:
+        heartbeat_server = str(heartbeat.get("server") or "").strip().casefold()
+        account_server = str(account.get("server") or "").strip().casefold()
+        if heartbeat_server and account_server and heartbeat_server != account_server:
+            alerts.append({
+                "code": "BROKER_SERVER_MISMATCH",
+                "severity": "critical",
+                "message": "Heartbeat and account telemetry identify different broker servers.",
+            })
+
     account_age = _age(account.get("observed_at") if account else None, current)
     account_healthy = bool(account and account_age is not None and account_age <= stale_after_seconds)
     if not account:
