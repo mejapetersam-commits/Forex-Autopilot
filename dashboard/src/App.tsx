@@ -137,7 +137,7 @@ export default function App() {
     </section>
 
     <nav className="dashboard-nav" aria-label="Main navigation">
-      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key)}>{label}</button>)}
+      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} type="button" className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{label}</button>)}
     </nav>
     <div className="page-intro"><div className="eyebrow">YOUR TRADING WORKSPACE</div><h2>{({overview:"Welcome to your overview",market:"Market Watch",portfolio:"Portfolio",strategies:"Strategies & research",risk:"Risk & safety",system:"System centre"} as const)[page]}</h2><p>{({overview:"Your essential account and system snapshot, all in one place.",market:"Quotes, candidate signals and historical market data.",portfolio:"Exposure, positions and portfolio risk information.",strategies:"Research, backtesting and strategy comparisons.",risk:"Operational safeguards, recovery and release readiness.",system:"Broker connectivity, specifications, notifications and event history."} as const)[page]}</p></div>
 
