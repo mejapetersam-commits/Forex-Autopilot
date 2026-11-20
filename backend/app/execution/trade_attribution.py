@@ -117,6 +117,7 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
         close_volume = min(state["volume"], volume)
         if volume > state["volume"] + EPSILON:
             incomplete += 1
+            state["cash_complete"] = False
         _add_cash(state["cash"], cash)
         state["cash_complete"] = state["cash_complete"] and cash_complete
         state["deal_count"] += 1
