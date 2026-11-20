@@ -1,4 +1,5 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Search, Clock3 } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ExecutionReconciliationResponse } from "./api";
 
@@ -17,11 +18,19 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 }
 
 export default function ExecutionReconciliation({ data }: { data: ExecutionReconciliationResponse | null }) {
+  const [intentSearch, setIntentSearch] = useState("");
+  const [intentStatus, setIntentStatus] = useState("all");
+  const visibleIntents = useMemo(() => (data?.intents ?? []).filter(intent => {
+    const query = intentSearch.trim().toLowerCase();
+    const matchesQuery = !query || [intent.intent_id, intent.symbol, intent.side, intent.status, intent.result, intent.broker_order_id, ...intent.deal_tickets].some(value => String(value ?? "").toLowerCase().includes(query));
+    return matchesQuery && (intentStatus === "all" || intent.status.toLowerCase() === intentStatus);
+  }), [data, intentSearch, intentStatus]);
   return <section className="panel">
     <div className="section-head">
       <div><div className="eyebrow">EXECUTION HISTORY</div><h2>Broker fills & reconciliation</h2><p className="subhead">Read-only evidence from durable intent audits and authenticated demo broker history.</p></div>
-      <Status good={Boolean(data && data.status !== "review_required")}>{data?.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status>
+      <Status good={data?.status === "reconciled"}>{data?.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status>
     </div>
+    <div className="reconciliation-meta"><span><Clock3 size={13}/> Evidence updated {stamp(data?.updated_at)}</span><span>{data?.intents_checked ?? "—"} intent(s) checked</span></div>
     <div className="metrics">
       <Metric label="PARTIAL FILLS" value={String(data?.counts.partial_fill_count ?? "—")} detail="Awaiting additional fill evidence or completion"/>
       <Metric label="RECONCILED INTENTS" value={String(data?.counts.reconciled_count ?? "—")} detail="Broker-confirmed full fill or terminal outcome"/>
@@ -35,8 +44,14 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       <Metric label="MANUAL REVIEW" value={String(data?.counts.manual_review_count ?? "—")} detail="Broker evidence exceptions requiring review"/>
     </div>
     {Boolean(data?.manual_review_events.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{data?.manual_review_events.length} broker reconciliation exception(s) require manual review. Check broker order/deal history before any separate operator action.</span><b>REVIEW</b></div>}
+    <div className="reconciliation-tools">
+      <label><span>Find an intent</span><div className="reconciliation-search"><Search size={14}/><input type="search" value={intentSearch} onChange={event => setIntentSearch(event.target.value)} placeholder="Search ID, symbol, order or deal…" /></div></label>
+      <label><span>Intent status</span><select value={intentStatus} onChange={event => setIntentStatus(event.target.value)}><option value="all">All statuses</option>{Array.from(new Set((data?.intents ?? []).map(item => item.status))).sort().map(status => <option key={status} value={status.toLowerCase()}>{status.replaceAll("_"," ")}</option>)}</select></label>
+      <span className="reconciliation-count">{visibleIntents.length} of {data?.intents.length ?? 0} intents</span>
+      {(intentSearch || intentStatus !== "all") && <button type="button" className="event-reset" onClick={() => {setIntentSearch("");setIntentStatus("all");}}>Clear filters</button>}
+    </div>
     <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>REMAINING</th><th>PROGRESS</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
-      {data?.intents.map(intent => <tr key={intent.intent_id}>
+      {visibleIntents.map(intent => <tr key={intent.intent_id}>
         <td className="symbol">{intent.intent_id}</td><td>{intent.symbol} / {intent.side.toUpperCase()}</td>
         <td><Status good={intent.result === "full_fill_reconciled"}>{intent.status.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{intent.filled_volume_lots.toFixed(3)} / {intent.requested_volume_lots?.toFixed(3) ?? "—"}</td>
@@ -47,7 +62,7 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
         <td>{intent.broker_order_id ?? "—"}{intent.deal_tickets.length ? " · " + intent.deal_tickets.join(", ") : ""}</td>
         <td>{stamp(intent.last_broker_evidence_at)}</td>
       </tr>)}
-      {!data?.intents.length && <tr><td colSpan={10} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
+      {!visibleIntents.length && <tr><td colSpan={10} className="empty">{data?.intents.length ? "No intents match these filters." : "No submitted execution intents have been recorded for dashboard review."}</td></tr>}
     </tbody></table></div>
     <div className="table-wrap"><table><thead><tr><th>BROKER ORDER</th><th>SYMBOL</th><th>SERVER / TERMINAL</th><th>TYPE</th><th>STATE</th><th>EXECUTED / INITIAL</th><th>REMAINING</th><th>PRICE</th><th>SL / TP</th><th>LAST UPDATE</th></tr></thead><tbody>
       {data?.broker_orders.map(order => <tr key={order.order_ticket}>
