@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ExecutionReconciliationResponse } from "./api";
 
 function stamp(value?: string | null) {
@@ -7,7 +8,7 @@ function stamp(value?: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function Status({ good, children }: { good: boolean; children: React.ReactNode }) {
+function Status({ good, children }: { good: boolean; children: ReactNode }) {
   return <span className={`status ${good ? "good" : "bad"}`}><i />{children}</span>;
 }
 
