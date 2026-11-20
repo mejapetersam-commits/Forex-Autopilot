@@ -224,10 +224,26 @@ def reconcile_broker_history(
         partial_fill = 0 < filled < requested
         deal_tickets = sorted(deal["deal_ticket"] for deal in entries)
         position_ids = sorted({str(deal["position_id"]) for deal in entries if deal.get("position_id")})
+        average_fill_price = (
+            sum(float(deal["volume_lots"]) * float(deal["price"]) for deal in entries) / filled
+            if filled > 0 else None
+        )
+        fill_details = [
+            {
+                "deal_ticket": str(deal["deal_ticket"]),
+                "volume_lots": round(float(deal["volume_lots"]), 8),
+                "price": float(deal["price"]),
+                "position_id": str(deal.get("position_id") or "") or None,
+                "occurred_at": deal["occurred_at"],
+            }
+            for deal in entries
+        ]
         details = {
             "broker_order_id": order_id,
             "filled_volume_lots": round(filled, 8),
             "requested_volume_lots": requested,
+            "average_fill_price": average_fill_price,
+            "fill_details": fill_details,
             "deal_tickets": deal_tickets,
             "position_ids": position_ids,
             "evidence": "authenticated_mt5_demo_deal_history",
@@ -274,6 +290,8 @@ def reconcile_broker_history(
             "filled_volume_lots": round(filled, 8),
             "requested_volume_lots": requested,
             "deal_count": len(entries),
+            "average_fill_price": average_fill_price,
+            "fill_details": fill_details,
             "deal_tickets": deal_tickets,
             "position_ids": position_ids,
         })
