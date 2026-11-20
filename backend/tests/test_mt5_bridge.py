@@ -438,3 +438,61 @@ def test_bulk_candle_upload_rejects_missing_authentication():
         json={"batches": []},
     )
     assert response.status_code == 401
+
+
+def test_bulk_candle_retries_are_idempotent_and_visible_in_dashboard_ledger():
+    headers = {"X-Bridge-Token": TOKEN}
+    batch = {
+        "symbol": "EURUSDm",
+        "timeframe": "M5",
+        "candles": [
+            {
+                "opened_at": "2026-11-18T12:00:00Z",
+                "open": 1.0800,
+                "high": 1.0810,
+                "low": 1.0790,
+                "close": 1.0805,
+                "tick_volume": 100,
+            },
+            {
+                "opened_at": "2026-11-18T12:05:00Z",
+                "open": 1.0805,
+                "high": 1.0820,
+                "low": 1.0800,
+                "close": 1.0815,
+                "tick_volume": 120,
+            },
+        ],
+    }
+
+    first = client.post(
+        "/api/v1/mt5/candles/bulk", headers=headers, json={"batches": [batch]}
+    )
+    retry = client.post(
+        "/api/v1/mt5/candles/bulk", headers=headers, json={"batches": [batch]}
+    )
+    assert first.status_code == retry.status_code == 200
+    assert first.json()["candles_received"] == 2
+    assert retry.json()["candles_received"] == 2
+
+    history = client.get(
+        "/api/v1/mt5/history/candles/EURUSDm/M5?limit=500", headers=headers
+    )
+    assert history.status_code == 200
+    assert history.json()["count"] == 2
+    assert [
+        candle["opened_at"] for candle in history.json()["data"]
+    ] == ["2026-11-18T12:00:00+00:00", "2026-11-18T12:05:00+00:00"]
+
+    ledger = client.get("/api/v1/dashboard/candle-ingestion")
+    assert ledger.status_code == 200
+    summary = ledger.json()
+    assert summary["batch_count"] == 2
+    assert summary["series_count"] == 1
+    series = summary["series"][0]
+    assert series["candles_received"] == 4
+    assert series["unique_candles_stored"] == 2
+    assert series["first_stored_candle_at"] == "2026-11-18T12:00:00+00:00"
+    assert series["latest_stored_candle_at"] == "2026-11-18T12:05:00+00:00"
+    assert summary["trading_enabled"] is False
+
