@@ -45,6 +45,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import datetime,json,os,time; p='/var/backups/forex-autopilot/backup-worker-heartbeat.json'; d=json.load(open(p)); t=datetime.datetime.fromisoformat(d['observed_at'].replace('Z','+00:00')).timestamp(); age=time.time()-t; limit=max(7200,int(os.getenv('FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS','86400'))*2+300); raise SystemExit(0 if d.get('status')=='ok' and -300<=age<=limit else 1)"
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
   api:
     build:
