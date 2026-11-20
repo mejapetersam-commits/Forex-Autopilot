@@ -121,6 +121,36 @@ export interface DataReadinessResponse {
 }
 export const getDataReadiness = (minimumCandles = 500, limit = 5000) =>
   getJson<DataReadinessResponse>(`/api/v1/dashboard/data-readiness?minimum_candles=${minimumCandles}&limit=${limit}`);
+export interface CandleIngestionBatch {
+  batch_id: string;
+  symbol: string;
+  timeframe: string;
+  received_count: number;
+  first_candle_at: string;
+  last_candle_at: string;
+  ingested_at: string;
+}
+export interface CandleIngestionSeries {
+  symbol: string;
+  timeframe: string;
+  batch_count: number;
+  candles_received: number;
+  last_ingested_at: string;
+  latest_candle_at: string;
+}
+export interface CandleIngestionResponse {
+  recent_batches: CandleIngestionBatch[];
+  series: CandleIngestionSeries[];
+  batch_count: number;
+  series_count: number;
+  read_only: true;
+  trading_enabled: false;
+  execution_mode: string;
+  updated_at: string;
+}
+export const getCandleIngestion = () =>
+  getJson<CandleIngestionResponse>("/api/v1/dashboard/candle-ingestion");
+
 
 
 export interface OperationalEvent {
