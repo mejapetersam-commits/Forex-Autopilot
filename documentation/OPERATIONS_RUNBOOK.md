@@ -182,10 +182,11 @@ deals, ambiguous over-closes, open positions and incomplete cycles. Profit
 factor is left unavailable when there is no realized gross loss rather than
 presenting an infinite ratio.
 
-The latest account snapshot supplies the displayed account currency. Verify
-that snapshot belongs to the same account/server as the deal history before
-using figures for formal accounting. Magic number and symbol are grouping
-keys only; they do not independently prove strategy attribution. This
+The displayed account currency is taken from the latest account snapshot
+matching the single broker server represented in imported demo history. If the
+history spans multiple servers, currency is left unknown rather than guessed.
+The bridge reports the actual broker deal magic; magic number and symbol are
+grouping keys only and do not independently prove strategy attribution. This
 dashboard is not an audited broker statement and does not calculate daily
 loss or unrealized P&L. Reconcile results against the Exness demo statement
 before using them for strategy decisions. No trading action is available from
