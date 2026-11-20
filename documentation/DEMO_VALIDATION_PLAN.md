@@ -91,7 +91,9 @@ or closed by reconciliation.
 
 - Restart the MT5 terminal while an intent is pending or its result is
   uncertain.
-- Confirm the persistent command marker prevents duplicate dispatch.
+- Confirm the persistent command marker prevents duplicate dispatch after a normal terminal restart.
+- Confirm expired leases and late broker callbacks remain quarantined; a late callback must not reopen or redeliver an expired command.
+- Record the terminal's global-variable marker inventory as part of recovery evidence. MT5 terminal global variables are automatically deleted after four weeks without access. A restored old database, terminal data-folder reset, or marker expiry must therefore trigger manual broker-history reconciliation before any command is considered for a new dispatch. Never rely on the terminal marker as the only long-term duplicate-prevention record.
 - Confirm expired leases and uncertain outcomes remain quarantined.
 - Restart the API and verify the durable intent ledger and broker history
   survive.
