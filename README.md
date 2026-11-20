@@ -21,7 +21,7 @@ A demo-first MT5 market-data, research, risk-management and execution platform.
 - `backend/app/dashboard.html`: local read-only dashboard.
 - `mt5/Experts/ForexAutopilotTelemetry.mq5`: read-only MT5 telemetry bridge, including demo broker deal-history upload.
 - `mt5/Experts/ForexAutopilotDemoExecution.mq5`: separate demo-only execution adapter; disabled by default.
-- `deploy/telemetry-gateway/` and `docker-compose.yml`: loopback-bound API and restricted telemetry gateway.
+- `deploy/telemetry-gateway/` and `docker-compose.yml`: loopback-bound API, restricted telemetry gateway, periodic health-event monitor and verified backup/retention worker.
 - `documentation/`: operations, backtesting, architecture and release gates.
 
 ## Local setup (macOS)
