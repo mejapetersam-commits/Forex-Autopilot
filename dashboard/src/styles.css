@@ -90,3 +90,5 @@ button{font:inherit}.shell{max-width:1440px;margin:auto;padding:0 42px 30px}.top
 .observation-limitations>span,.observation-limitations li{font-size:10px;line-height:1.65;color:#aeb5a5}
 .observation-limitations ul{margin:8px 0 0;padding-left:17px}
 @media(max-width:600px){.observation-terminal{align-items:flex-start;flex-wrap:wrap}.observation-terminal>.comparison-status{margin-left:28px}}
+
+.fill-progress{display:inline-block;width:76px;height:7px;vertical-align:middle;margin-right:6px;accent-color:#d3f36b}
