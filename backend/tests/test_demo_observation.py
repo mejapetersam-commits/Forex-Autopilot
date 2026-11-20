@@ -33,6 +33,7 @@ def test_demo_observation_rolls_up_only_broker_confirmed_deals(tmp_path):
     assert eur["exit_deals"] == 1
     assert eur["gross_deal_volume_lots"] == 0.02
     assert summary["pnl_available"] is False
+    assert summary["deal_totals"]["cash_complete_deal_count"] == 0
     assert summary["latest_terminal"] is None
 
 
