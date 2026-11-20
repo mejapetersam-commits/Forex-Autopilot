@@ -51,6 +51,8 @@ def test_inout_reversal_closes_old_cycle_and_starts_new_cycle():
     assert result["closed_trade_count"] == 2
     assert result["pnl_complete_trade_count"] == 2
     assert result["open_position_count"] == 0
+    assert result["closed_trades"][0]["profit"] == 3.0
+    assert result["closed_trades"][1]["profit"] == -0.5
     assert abs(result["net_realized_pnl"] - 2.2) < 1e-9
 
 
@@ -117,7 +119,7 @@ def test_store_persists_cash_components_idempotently_and_exposes_currency(tmp_pa
     assert result["deal_count"] == 2
     assert result["closed_trade_count"] == 1
     assert result["pnl_complete_trade_count"] == 1
-    assert result["net_realized_pnl"] == 0.78
+    assert abs(result["net_realized_pnl"] - 0.78) < 1e-9
     assert result["account_currency"] == "USD"
     assert result["groups"][0]["symbol"] == "EURUSDM"
 
