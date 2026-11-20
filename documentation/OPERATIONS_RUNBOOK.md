@@ -191,6 +191,34 @@ position; trading remains disabled.
 Immediately before an approved intent is queued, the API rebuilds the portfolio estimate from current MT5 execution state, account equity, quotes and symbol specifications. Dispatch is blocked unless the portfolio is healthy and complete, every open position has a valid protective stop with a supported fresh conversion, and aggregate estimated stop risk is at or below `FOREX_AUTOPILOT_MAX_PORTFOLIO_STOP_RISK_PCT` (default `0.50` percent of account equity). Unknown or stale risk is a hard denial, never treated as zero. The gate is read-only and does not change positions. This estimate uses current quotes and broker tick values; gaps, slippage, commissions, swaps and execution failures can increase realized losses. Trading remains disabled by default and live execution is prohibited.
 
 
+## Broker order and partial-fill reconciliation
+
+The admin-only `GET /api/v1/monitoring/reconciliation` endpoint compares
+durable execution intents with authenticated demo broker order/deal history.
+The terminal uploads a rolling history window, so repeated uploads are expected:
+deal tickets are persisted idempotently, and conflicting reuse of a ticket is
+rejected rather than silently replacing prior evidence.
+
+For each intent, reconciliation first correlates the broker order ID recorded
+in the acknowledgement and can recover an uncertain acknowledgement through
+the deterministic `FA:` comment tag. It verifies demo environment, terminal,
+server, magic number, symbol and side before applying any state transition.
+Multiple matching broker orders, identity disagreements, reversals and fills
+larger than the requested volume are held for manual review.
+
+Multiple entry deals for one order are accumulated by unique broker deal ticket.
+A partial fill remains `partially_filled` while additional broker evidence may
+arrive; when cumulative entry volume reaches the requested volume, the intent
+moves through `filled` to `reconciled`. A missing history row never means
+rejected, cancelled or safe to retry. Expired/unknown commands remain
+quarantined; reconciliation does not redeliver them.
+
+The endpoint requires a fresh demo terminal snapshot and admin authentication.
+Its result is evidence reconciliation, not a broker statement or permission to
+enable execution. Review every manual-review result against the terminal's
+broker order/deal history before taking any separate operator action.
+
+
 ## Broker-reported realized P&L and trade attribution
 
 The read-only `GET /api/v1/dashboard/trade-attribution` endpoint reports
