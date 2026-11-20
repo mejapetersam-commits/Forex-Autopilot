@@ -447,7 +447,8 @@ class TelemetryStore:
                     profit_currency=excluded.profit_currency,
                     margin_currency=excluded.margin_currency,
                     account_currency=excluded.account_currency,
-                    observed_at=excluded.observed_at""",
+                    observed_at=excluded.observed_at
+                WHERE excluded.observed_at >= symbol_specifications.observed_at""",
                 (
                     payload.symbol, payload.digits, payload.point, payload.tick_size,
                     payload.tick_value_profit, payload.tick_value_loss,
