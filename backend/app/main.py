@@ -1114,12 +1114,53 @@ def execution_reconciliation():
             "results": [],
             "trading_enabled": False,
         }
-    return reconcile_broker_history(
+    result = reconcile_broker_history(
         execution_ledger(), store,
         expected_magic=int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001")),
         expected_terminal_id=terminal["terminal_id"],
         expected_server=terminal["server"],
     )
+    result["operational_events_recorded"] = record_reconciliation_events(result)
+    return result
+
+
+def record_reconciliation_events(result: dict) -> int:
+    """Publish durable, idempotent operator events for reconciliation exceptions."""
+    outbox = EventOutbox()
+    recorded = 0
+    for item in result.get("results", []):
+        outcome = item.get("result")
+        if outcome not in {"manual_review_required", "reconciled_partial_fill"}:
+            continue
+        intent_id = str(item.get("intent_id", "unknown"))
+        reasons = sorted(set(item.get("reasons", [])))
+        fingerprint = hashlib.sha256(
+            (outcome + "|" + "|".join(reasons)).encode("utf-8")
+        ).hexdigest()[:16]
+        severity = "critical" if outcome == "manual_review_required" else "warning"
+        message = (
+            "Broker execution evidence requires manual review."
+            if severity == "critical"
+            else "Broker reported a partial fill; remaining volume requires reconciliation."
+        )
+        event = outbox.record(
+            event_key=f"execution-reconciliation:{intent_id}:{fingerprint}",
+            event_type="execution_reconciliation_review",
+            severity=severity,
+            message=message,
+            payload={
+                "intent_id": intent_id,
+                "outcome": outcome,
+                "reasons": reasons,
+                "broker_order_id": item.get("broker_order_id"),
+                "filled_volume_lots": item.get("filled_volume_lots"),
+                "requested_volume_lots": item.get("requested_volume_lots"),
+                "source": "broker_history_reconciliation",
+            },
+        )
+        if event:
+            recorded += 1
+    return recorded
 
 
 @app.get(
