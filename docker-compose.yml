@@ -7,7 +7,43 @@ services:
       - telemetry_data:/data
     restart: "no"
 
-  api:
+
+  backup-volume-init:
+    image: alpine:3.21
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /backups && chown -R 10001:10001 /backups"]
+    volumes:
+      - telemetry_backups:/backups
+    restart: "no"
+
+  telemetry-backup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "10001:10001"
+    command: ["python", "-m", "app.operations.backup_scheduler"]
+    depends_on:
+      telemetry-volume-init:
+        condition: service_completed_successfully
+      backup-volume-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_BACKUP_DIR: /var/backups/forex-autopilot
+      FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS: ${FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS:-86400}
+      FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS: ${FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - telemetry_data:/var/lib/forex-autopilot:ro
+      - telemetry_backups:/var/backups/forex-autopilot
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+\n  api:
     build:
       context: ./backend
       dockerfile: Dockerfile
