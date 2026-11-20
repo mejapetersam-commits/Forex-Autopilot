@@ -43,3 +43,20 @@ button{font:inherit}.shell{max-width:1440px;margin:auto;padding:0 42px 30px}.top
 .lab-footer{margin-top:17px;padding-top:13px;border-top:1px solid #2d3e45;color:#71858c;font:9px 'DM Mono';letter-spacing:.7px}
 @media(max-width:900px){.lab-detail-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:560px){.lab-detail-grid{grid-template-columns:repeat(2,1fr)}.lab-chart-head{align-items:flex-start;flex-direction:column}.lab-toolbar>*{flex:1 1 100%}.lab-toolbar select{width:100%}.chart-scale{font-size:8px}.lab-metrics .metric strong{font-size:19px}}
+
+
+.strategy-comparison{border-color:#344a50;background:linear-gradient(145deg,#192831,#17232b 62%)}
+.comparison-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.comparison-summary>div{display:flex;flex-direction:column;gap:6px;padding:14px;background:#1c2a31;border:1px solid #304149;border-radius:7px}
+.comparison-summary b{font:700 21px Manrope;color:#d3f36b}
+.comparison-summary span{font:9px 'DM Mono';letter-spacing:.7px;color:#82949b}
+.comparison-table{min-width:760px}
+.comparison-table th{white-space:nowrap}
+.comparison-table td{font-variant-numeric:tabular-nums}
+.rank-cell{font:700 11px 'DM Mono';color:#d3f36b}
+.comparison-status{display:inline-block;padding:4px 7px;border-radius:4px;font:9px 'DM Mono';text-transform:uppercase;white-space:nowrap}
+.comparison-status.good{background:#263b31;color:#c6e99a}
+.comparison-status.muted{background:#29363b;color:#9aabb0}
+.comparison-status.bad{background:#3a2927;color:#f0a39a}
+.gap-note{display:block;margin-top:4px;color:#d8a77a;font-size:9px}
+.comparison-warning{margin-top:13px;padding:12px 14px;background:#302b22;border:1px solid #65553b;border-radius:7px;color:#d9c49b;font-size:10px;line-height:1.65}
