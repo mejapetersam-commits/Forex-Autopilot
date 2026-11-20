@@ -99,6 +99,7 @@ def run_backtest(
     max_drawdown_pct = 0.0
     trades: list[dict[str, Any]] = []
     equity_curve = [equity]
+    equity_curve_points = [{"time": rows[settings.minimum_candles - 1].get("opened_at"), "equity": round(equity, 2), "event": "initial"}]
     warmup = settings.minimum_candles
     spread = settings.spread_pips * settings.pip_size
     slippage = settings.slippage_pips_per_side * settings.pip_size
@@ -227,6 +228,7 @@ def run_backtest(
             "risk_budget": round(position["risk_budget"], 2),
         })
         equity_curve.append(equity)
+        equity_curve_points.append({"time": bar.get("opened_at"), "equity": round(equity, 2), "event": exit_reason})
         position = None
 
     pnls = [trade["net_pnl"] for trade in trades]
@@ -281,6 +283,7 @@ def run_backtest(
             "data_quality": "OHLC-only; no tick-level execution simulation",
         },
         "trades": trades,
+        "equity_curve": equity_curve_points,
         "execution_enabled": False,
         "research_status": "historical_simulation_not_a_profitability_guarantee",
     }
