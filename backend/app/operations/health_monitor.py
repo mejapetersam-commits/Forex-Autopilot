@@ -62,12 +62,52 @@ def run_health_monitor_cycle(*, now=None) -> dict[str, object]:
         stale_after_seconds=stale_after, now=current,
     )
     backup_worker, backup_alerts = assess_backup_worker(current)
-    alerts = list(health["alerts"]) + backup_alerts
+    upload_stale_after = max(60, int(os.getenv(
+        "FOREX_AUTOPILOT_CANDLE_UPLOAD_STALE_AFTER_SECONDS", "900"
+    )))
+    ingestion = store.candle_ingestion_summary(
+        stale_after_seconds=upload_stale_after, now=current,
+    )
+    upload_alerts = []
+    for series in ingestion["series"]:
+        freshness = series.get("upload_freshness")
+        if freshness not in {"aging", "stale"}:
+            continue
+        symbol = str(series.get("symbol") or "unknown").upper()
+        timeframe = str(series.get("timeframe") or "unknown").upper()
+        age = series.get("upload_age_seconds")
+        age_label = f"{round(float(age))} seconds" if age is not None else "an unknown duration"
+        threshold_label = f"{upload_stale_after} seconds"
+        if freshness == "stale":
+            upload_alerts.append({
+                "code": "CANDLE_UPLOAD_STALE",
+                "symbol": f"{symbol}:{timeframe}",
+                "severity": "warning",
+                "message": (
+                    f"No successful candle upload for {symbol} {timeframe} for {age_label}; "
+                    f"configured inactivity threshold is {threshold_label}. This measures "
+                    "upload inactivity only and does not confirm broker market hours or closures."
+                ),
+            })
+        else:
+            upload_alerts.append({
+                "code": "CANDLE_UPLOAD_AGING",
+                "symbol": f"{symbol}:{timeframe}",
+                "severity": "warning",
+                "message": (
+                    f"Candle uploads for {symbol} {timeframe} are aging ({age_label}); "
+                    f"configured inactivity threshold is {threshold_label}. This is an "
+                    "upload-inactivity warning, not broker-session confirmation."
+                ),
+            })
+    alerts = list(health["alerts"]) + backup_alerts + upload_alerts
     outbox = EventOutbox()
     transitions = outbox.reconcile_health_alerts(alerts, now=current)
+    has_critical_alert = any(item.get("severity") == "critical" for item in alerts)
     return {
-        "health_status": "critical" if backup_alerts else health["status"],
+        "health_status": "critical" if has_critical_alert else health["status"],
         "backup_worker": backup_worker,
+        "candle_upload_alerts_detected": len(upload_alerts),
         "alerts_detected": len(alerts),
         "events_recorded": transitions["alerts_created"],
         "events_resolved": transitions["alerts_resolved"],

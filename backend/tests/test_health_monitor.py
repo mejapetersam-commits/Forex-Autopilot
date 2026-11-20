@@ -10,7 +10,7 @@ def test_health_monitor_persists_idempotent_operator_events(monkeypatch, tmp_pat
     first = run_health_monitor_cycle(now=now)
     second = run_health_monitor_cycle(now=now)
     events = EventOutbox(database).list_events(limit=20)
-    assert first["health_status"] == "critical"
+    assert first["health_status"] == "healthy"
     assert first["alerts_detected"] == 4
     assert second["alerts_detected"] == 4
     assert first["backup_worker"]["fresh"] is False
@@ -98,3 +98,60 @@ def test_backup_worker_assessment_detects_stale_and_healthy_heartbeats(monkeypat
     assert healthy["fresh"] is True
     assert healthy["last_backup"] == "recent.sqlite3"
     assert healthy_alerts == []
+
+def test_health_monitor_persists_candle_upload_stale_alert_and_recovery(monkeypatch, tmp_path):
+    import app.operations.health_monitor as monitor
+
+    database = tmp_path / "candle-health.sqlite3"
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(database))
+    monkeypatch.setenv("FOREX_AUTOPILOT_CANDLE_UPLOAD_STALE_AFTER_SECONDS", "900")
+    from app.operations.backup_scheduler import write_worker_heartbeat
+    write_worker_heartbeat(
+        tmp_path, now=datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc),
+        backup_name="telemetry-20261119T120000Z.sqlite3",
+        telemetry_db=str(database),
+    )
+    summaries = [
+        {"series": [{
+            "symbol": "EURUSDm", "timeframe": "M5",
+            "upload_freshness": "stale", "upload_age_seconds": 1200,
+        }]},
+        {"series": [{
+            "symbol": "EURUSDm", "timeframe": "M5",
+            "upload_freshness": "recent", "upload_age_seconds": 20,
+        }]},
+    ]
+    monkeypatch.setattr(
+        monitor.TelemetryStore, "candle_ingestion_summary",
+        lambda self, **kwargs: summaries.pop(0),
+    )
+    monkeypatch.setattr(
+        monitor, "assess_system_health",
+        lambda *args, **kwargs: {
+            "status": "healthy", "alerts": [],
+            "assessed_at": "2026-11-19T12:00:00+00:00",
+        },
+    )
+
+    first = run_health_monitor_cycle(
+        now=datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc)
+    )
+    recovered = run_health_monitor_cycle(
+        now=datetime(2026, 11, 19, 12, 1, tzinfo=timezone.utc)
+    )
+
+    events = EventOutbox(database).list_events(limit=20)
+    assert first["candle_upload_alerts_detected"] == 1
+    assert first["health_status"] == "critical"
+    assert first["events_recorded"] == 1
+    assert recovered["candle_upload_alerts_detected"] == 0
+    assert recovered["events_resolved"] == 1
+    assert [event["event_type"] for event in events].count("CANDLE_UPLOAD_STALE") == 1
+    stale_event = next(event for event in events if event["event_type"] == "CANDLE_UPLOAD_STALE")
+    assert stale_event["severity"] == "warning"
+    assert [event["event_type"] for event in events].count("HEALTH_RECOVERED") == 1
+    assert len(events) == 2
+    assert "market hours" in next(
+        event["message"] for event in events if event["event_type"] == "CANDLE_UPLOAD_STALE"
+    )
+
