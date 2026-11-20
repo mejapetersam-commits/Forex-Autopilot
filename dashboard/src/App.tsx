@@ -41,6 +41,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "risk" | "system">("overview");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -123,10 +125,10 @@ export default function App() {
   const alerts = typeof overview?.system_health === "object" ? overview.system_health.alerts ?? [] : [];
   const health = typeof overview?.system_health === "object" ? overview.system_health.status : overview?.system_health;
 
-  return <main className="shell">
+  return <main className={`shell page-${page} theme-${theme}`}>
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Activity size={21}/></div><div><b>FOREX AUTOPILOT</b><span>MARKET INTELLIGENCE · DEMO MONITORING</span></div></div>
-      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)}>{overview?.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
+      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)}>{overview?.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
     </header>
 
     <section className="hero">
@@ -134,9 +136,10 @@ export default function App() {
       <div className="safety"><ShieldCheck size={19}/><div><b>PROTECTION ACTIVE</b><span>Execution disabled · Live trading unavailable</span></div></div>
     </section>
 
-    <nav className="dashboard-nav" aria-label="Dashboard sections">
-      <a href="#overview">Overview</a><a href="#connectivity">Connectivity</a><a href="#research">Signals</a><a href="#portfolio">Portfolio</a><a href="#data">Market data</a><a href="#strategy">Performance</a><a href="#operations">Operations</a>
+    <nav className="dashboard-nav" aria-label="Main navigation">
+      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key)}>{label}</button>)}
     </nav>
+    <div className="page-intro"><div className="eyebrow">YOUR TRADING WORKSPACE</div><h2>{({overview:"Welcome to your overview",market:"Market Watch",portfolio:"Portfolio",strategies:"Strategies & research",risk:"Risk & safety",system:"System centre"} as const)[page]}</h2><p>{({overview:"Your essential account and system snapshot, all in one place.",market:"Quotes, candidate signals and historical market data.",portfolio:"Exposure, positions and portfolio risk information.",strategies:"Research, backtesting and strategy comparisons.",risk:"Operational safeguards, recovery and release readiness.",system:"Broker connectivity, specifications, notifications and event history."} as const)[page]}</p></div>
 
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
 
