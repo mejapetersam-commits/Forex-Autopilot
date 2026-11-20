@@ -17,7 +17,7 @@ from app.backtesting.engine import BacktestConfig, run_backtest
 from app.backtesting.optimization import optimize_walk_forward
 from app.backtesting.analytics import analyse_backtest
 from app.strategy.registry import list_strategies
-from app.market_data.quality import assess_candle_quality
+from app.market_data.quality import assess_candle_quality, assess_candle_readiness
 from app.execution.ledger import ExecutionLedger
 from app.execution.reconciliation import reconcile_broker_history
 from app.execution.position_reconciliation import reconcile_open_positions
@@ -218,10 +218,17 @@ def dashboard_research():
             candles = store.candle_history(symbol, timeframe, 500)
             signal = evaluate_signal(candles, StrategyConfig())
             quality = assess_candle_quality(candles, timeframe)
+            readiness = assess_candle_readiness(
+                candles, timeframe,
+                minimum_candles=max(1, int(os.getenv("FOREX_AUTOPILOT_MIN_RESEARCH_CANDLES", "500"))),
+            )
             rows.append({
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "candles": len(candles),
+                "valid_candles": readiness["valid_candles"],
+                "readiness_status": readiness["status"],
+                "coverage_pct": readiness["coverage_pct"],
                 "signal": signal["signal"],
                 "reason": signal.get("reason", "Insufficient historical candles."),
                 "latest_close": signal.get("indicators", {}).get("latest_close"),
@@ -250,6 +257,36 @@ def monitoring_health():
         store.latest_quotes(),
         stale_after_seconds=stale_after,
     )
+
+
+
+@app.get("/api/v1/dashboard/data-readiness", include_in_schema=False)
+def dashboard_data_readiness(
+    minimum_candles: int = Query(default=500, ge=1, le=5000),
+    limit: int = Query(default=5000, ge=1, le=5000),
+):
+    """Read-only history coverage and candle integrity grid for dashboard symbols."""
+    store = telemetry_store()
+    items = []
+    for symbol in sorted(dashboard_symbols()):
+        for timeframe in ("M5", "M15", "H1", "H4"):
+            candles = store.candle_history(symbol, timeframe, limit)
+            readiness = assess_candle_readiness(
+                candles, timeframe, minimum_candles=minimum_candles,
+            )
+            items.append({"symbol": symbol, "timeframe": timeframe, **readiness})
+    ready_count = sum(item["ready_for_research"] for item in items)
+    return {
+        "status": "ready" if ready_count == len(items) else "attention_required",
+        "items": items,
+        "ready_series": ready_count,
+        "series_checked": len(items),
+        "minimum_candles": minimum_candles,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/api/v1/dashboard/strategy-performance", include_in_schema=False)
@@ -320,6 +357,11 @@ def dashboard_strategy_qualification(
     store = telemetry_store()
     candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
     quality = assess_candle_quality(candles, normalized_timeframe)
+    readiness = assess_candle_readiness(
+        candles, normalized_timeframe,
+        minimum_candles=max(1, int(os.getenv("FOREX_AUTOPILOT_MIN_RESEARCH_CANDLES", "500"))),
+    )
+    quality["ready_for_research"] = readiness["ready_for_research"]
     if len(candles) < 400:
         walk_forward = {
             "status": "insufficient_data", "candles_available": len(candles),
@@ -341,6 +383,7 @@ def dashboard_strategy_qualification(
         "timeframe": normalized_timeframe,
         "candles_available": len(candles),
         "data_quality": quality,
+        "data_readiness": readiness,
         "walk_forward": walk_forward,
         "qualification": qualification,
         "execution_mode": "disabled",
