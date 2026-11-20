@@ -234,7 +234,7 @@ export default function App() {
     {page === "overview" && <section id="overview" className="metrics">
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
-      <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail="Broker-reported available margin"/>
+      <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail={account?.fresh ? "Broker-reported available margin" : "Awaiting account telemetry"}/>
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : overview ? "No alerts in latest health report" : "Awaiting health report"}/>
     </section>}
 
@@ -252,13 +252,13 @@ export default function App() {
       <article className="panel overview-card">
         <div className="section-head"><div><div className="eyebrow">MARKET PULSE</div><h2>Latest quotes</h2></div><button className="text-action" type="button" onClick={() => setPage("market")}>Open Market Watch →</button></div>
         <div className="quote-list">
-          {overview?.quotes.slice(0, 4).map(quote => <div className="quote-item" key={quote.symbol}>
+          {(overview?.quotes ?? []).slice(0, 4).map(quote => <div className="quote-item" key={quote.symbol}>
             <div><b>{quote.symbol}</b><span>{quote.fresh ? "Fresh quote" : "Stale quote"}</span></div>
             <div className="quote-values"><b>{Number.isFinite(quote.bid) ? quote.bid.toFixed(5) : "—"}</b><span>Bid</span></div>
             <div className="quote-values"><b>{Number.isFinite(quote.ask) ? quote.ask.toFixed(5) : "—"}</b><span>Ask</span></div>
             <Status good={quote.fresh}>{quote.fresh ? "Fresh" : "Stale"}</Status>
           </div>)}
-          {!overview?.quotes.length && <p className="empty">No market quotes have been received yet.</p>}
+          {!(overview?.quotes ?? []).length && <p className="empty">No market quotes have been received yet.</p>}
         </div>
       </article>
       <article className="panel overview-card overview-activity">
