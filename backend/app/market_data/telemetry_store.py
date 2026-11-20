@@ -623,3 +623,66 @@ class TelemetryStore:
                 (prefix + "%",),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def demo_observation_summary(self, limit: int = 100) -> dict[str, Any]:
+        """Read-only rollup of broker-confirmed demo deals; no inferred PnL."""
+        safe_limit = min(max(int(limit), 1), 500)
+        with self._connect() as connection:
+            totals = connection.execute(
+                """SELECT COUNT(*) AS deal_count,
+                          COUNT(DISTINCT terminal_id) AS terminal_count,
+                          COUNT(DISTINCT magic) AS strategy_magic_count,
+                          MIN(occurred_at) AS first_deal_at,
+                          MAX(observed_at) AS last_observed_at
+                   FROM execution_deals WHERE environment='demo'"""
+            ).fetchone()
+            groups = connection.execute(
+                """SELECT magic, symbol,
+                          SUM(CASE WHEN entry='in' THEN 1 ELSE 0 END) AS entry_deals,
+                          SUM(CASE WHEN entry IN ('out','out_by','inout') THEN 1 ELSE 0 END) AS exit_deals,
+                          COUNT(*) AS deal_count,
+                          SUM(volume_lots) AS gross_deal_volume_lots,
+                          MAX(occurred_at) AS last_deal_at,
+                          MAX(observed_at) AS last_observed_at
+                   FROM execution_deals WHERE environment='demo'
+                   GROUP BY magic, symbol
+                   ORDER BY last_deal_at DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+            order_totals = connection.execute(
+                """SELECT COUNT(*) AS order_count,
+                          SUM(CASE WHEN state IN ('filled','completed','done') THEN 1 ELSE 0 END) AS completed_orders,
+                          SUM(CASE WHEN state IN ('rejected','canceled','cancelled','expired') THEN 1 ELSE 0 END) AS failed_orders,
+                          MAX(observed_at) AS last_order_observed_at
+                   FROM execution_orders WHERE environment='demo'"""
+            ).fetchone()
+            latest_state = connection.execute(
+                """SELECT terminal_id, environment, server, observed_at,
+                          daily_loss_pct, payload_json
+                   FROM execution_state_snapshots
+                   WHERE environment='demo'
+                   ORDER BY observed_at DESC, id DESC LIMIT 1"""
+            ).fetchone()
+        import json
+        positions = json.loads(latest_state["payload_json"]) if latest_state else []
+        return {
+            "deal_totals": dict(totals),
+            "order_totals": dict(order_totals),
+            "groups": [dict(row) for row in groups],
+            "latest_terminal": {
+                "terminal_id": latest_state["terminal_id"],
+                "environment": latest_state["environment"],
+                "server": latest_state["server"],
+                "observed_at": latest_state["observed_at"],
+                "reported_open_positions": len(positions),
+                "daily_loss_pct_estimate": latest_state["daily_loss_pct"],
+            } if latest_state else None,
+            "pnl_available": False,
+            "limitations": [
+                "Broker deal telemetry currently does not include realized profit, commission or swap.",
+                "Magic number is a grouping key, not proof that a strategy generated a trade.",
+                "Deal counts and gross volume are not equivalent to completed round trips.",
+            ],
+        }
+
