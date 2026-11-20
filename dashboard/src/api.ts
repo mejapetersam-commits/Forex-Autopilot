@@ -219,3 +219,22 @@ export interface StrategyComparisonResponse {
 }
 export const getStrategyComparison = () =>
   getJson<StrategyComparisonResponse>("/api/v1/dashboard/strategy-comparison");
+
+export interface StrategyQualificationResponse {
+  symbol: string;
+  timeframe: string;
+  candles_available: number;
+  qualification: {
+    status: string;
+    eligible_for_demo_observation: boolean;
+    checks: Record<string, string | number | null>;
+    thresholds: Record<string, number>;
+    reasons: string[];
+    disclaimer: string;
+  };
+  execution_mode: string;
+  trading_enabled: false;
+  updated_at: string;
+}
+export const getStrategyQualification = (symbol: string, timeframe: string) =>
+  getJson<StrategyQualificationResponse>(`/api/v1/dashboard/strategy-qualification?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
