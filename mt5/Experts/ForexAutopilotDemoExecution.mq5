@@ -8,7 +8,7 @@
 
 #include <Trade/Trade.mqh>
 
-input string InpApiBaseUrl = "https://YOUR-API-HOST";
+input string InpApiBaseUrl = "https://forex-telemetry.thebigvoicelimited.co.ke";
 input string InpBridgeToken = "";          // Set locally; never commit credentials.
 input string InpTerminalId = "mt5-terminal-1"; // Match the telemetry EA terminal ID.
 input string InpAllowedSymbols = "EURUSDm,GBPUSDm";
