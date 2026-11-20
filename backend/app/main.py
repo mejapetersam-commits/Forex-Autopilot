@@ -508,7 +508,10 @@ def dashboard_portfolio():
 def dashboard_execution_reconciliation(
     limit: int = Query(default=50, ge=1, le=100),
 ):
-    """Expose sanitized, read-only broker fill evidence for the local dashboard."""
+    """Expose sanitized, read-only broker fill evidence for the local dashboard.
+
+    Terminal rejections/cancellations are outcomes, not missing-history alerts.
+    """
     ledger = execution_ledger()
     intents = ledger.list_intents(limit=limit)
     evidence_events = {
