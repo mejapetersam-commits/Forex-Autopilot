@@ -62,12 +62,13 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
                 "deal_count": 1, "position_id": position_id,
             }
 
-        def finish(current: dict[str, Any], at: str) -> None:
+        def finish(current: dict[str, Any], at: str, close_ticket: str) -> None:
             net = sum(current["cash"].values()) if current["cash_complete"] else None
             closed.append({
                 "position_id": current["position_id"], "terminal_id": current["terminal_id"],
                 "magic": current["magic"], "symbol": current["symbol"],
                 "opened_at": current["opened_at"], "closed_at": at,
+                "closed_by_deal_ticket": str(close_ticket),
                 "volume_lots": current["closed_volume"],
                 "deal_count": current["deal_count"],
                 "profit": current["cash"]["profit"] if current["cash_complete"] else None,
@@ -118,7 +119,7 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
             state["closed_volume"] += close_volume
             remaining_old = state["volume"] - close_volume
             if remaining_old <= EPSILON:
-                finish(state, deal["occurred_at"])
+                finish(state, deal["occurred_at"], deal["deal_ticket"])
                 positions.pop(key, None)
             else:
                 state["volume"] = remaining_old
@@ -162,7 +163,14 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
     losses = [trade["net_pnl"] for trade in pnl_trades if trade["net_pnl"] < 0]
     gross_profit, gross_loss = sum(wins), abs(sum(losses))
     equity = peak = max_drawdown = 0.0
-    for trade in sorted(pnl_trades, key=lambda item: (item["closed_at"], item["position_id"])):
+    def trade_close_order(trade: dict[str, Any]) -> tuple[str, int, int | str]:
+        ticket = str(trade.get("closed_by_deal_ticket") or "")
+        try:
+            return (trade["closed_at"], 0, int(ticket))
+        except (TypeError, ValueError):
+            return (trade["closed_at"], 1, ticket)
+
+    for trade in sorted(pnl_trades, key=trade_close_order):
         equity += trade["net_pnl"]
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
