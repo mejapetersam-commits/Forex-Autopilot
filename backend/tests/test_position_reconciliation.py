@@ -95,3 +95,31 @@ def test_partial_close_volume_is_not_mistaken_for_identity_mismatch():
     assert result["status"] == "complete"
     assert result["mismatched_positions"] == []
     assert result["read_only"] is True
+
+
+def test_non_finite_or_invalid_managed_volume_requires_review():
+    import hashlib
+    key = "intent-invalid-volume"
+    tag = hashlib.sha256(key.encode()).hexdigest()[:12]
+    for volume in (float("nan"), float("inf"), 0, -0.01, "not-a-number"):
+        result = reconcile_open_positions(
+            [{"ticket": "70", "position_id": "80", "symbol": "EURUSDm",
+              "side": "buy", "volume_lots": volume, "magic": 61119001,
+              "comment": "FA:" + tag}],
+            [_intent(key)], expected_magic=61119001,
+        )
+        assert result["status"] == "review_required"
+        assert "broker_position_volume_invalid" in result["mismatched_positions"][0]["reasons"]
+        assert result["trading_enabled"] is False
+
+
+def test_malformed_magic_record_is_reported_instead_of_crashing():
+    result = reconcile_open_positions(
+        [{"ticket": "90", "position_id": "91", "symbol": "EURUSDm",
+          "side": "buy", "volume_lots": 0.01, "magic": "unknown"}],
+        [], expected_magic=61119001,
+    )
+    assert result["status"] == "review_required"
+    assert result["invalid_position_records"] == [{
+        "position_index": 0, "reason": "broker_position_magic_invalid"
+    }]
