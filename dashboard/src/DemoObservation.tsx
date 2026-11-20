@@ -39,7 +39,7 @@ export default function DemoObservation() {
         {data.groups.map((row) => <tr key={row.magic + row.symbol}><td>{row.magic}</td><td className="symbol">{row.symbol}</td><td>{row.deal_count}</td><td>{row.entry_deals}</td><td>{row.exit_deals}</td><td>{row.gross_deal_volume_lots.toFixed(2)}</td><td>{stamp(row.last_deal_at)}</td></tr>)}
         {!data.groups.length && <tr><td colSpan={7} className="empty">No broker-confirmed demo deals received. This is an empty observation record, not a zero-loss result.</td></tr>}
       </tbody></table></div>
-      <div className="observation-limitations"><b>Evidence limitations</b><span>Realized P&amp;L, commission and swap are not yet present in the stored deal schema, so profitability, win rate and expectancy are intentionally not calculated.</span><ul>{data.limitations.map(item => <li key={item}>{item}</li>)}</ul></div>
+      <div className="observation-limitations"><b>Evidence limitations</b><span>Cash components are now ingested from broker history. See the separate realized P&amp;L panel; legacy deals with missing components remain excluded from its performance metrics.</span><ul>{data.limitations.map(item => <li key={item}>{item}</li>)}</ul></div>
       <div className="lab-footer">READ-ONLY BROKER EVIDENCE · NO STRATEGY ATTRIBUTION CLAIM · EXECUTION DISABLED · UPDATED {stamp(data.updated_at)}</div>
     </>}
   </section>;
