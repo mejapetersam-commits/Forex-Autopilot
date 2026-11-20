@@ -104,6 +104,42 @@ export interface OperationalEventsResponse {
   updated_at: string;
 }
 export const getOperationalEvents = () => getJson<OperationalEventsResponse>("/api/v1/dashboard/events?limit=50");
+export interface NotificationHealthResponse {
+  delivery: {
+    pending: number;
+    leased: number;
+    delivered: number;
+    dead: number;
+    total: number;
+    due_pending: number;
+    oldest_due_age_seconds: number | null;
+  };
+  active_alerts: Array<{
+    alert_key: string;
+    event_type: string;
+    severity: "info" | "warning" | "critical";
+    message: string;
+    first_seen: string;
+    last_seen: string;
+  }>;
+  active_alert_count: number;
+  recent_events: Array<{
+    event_id: string;
+    event_type: string;
+    severity: "info" | "warning" | "critical";
+    message: string;
+    occurred_at: string;
+    delivery_status: string;
+    attempts: number;
+  }>;
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getNotificationHealth = () =>
+  getJson<NotificationHealthResponse>("/api/v1/dashboard/notification-health");
+
 
 export interface RecoveryStatusResponse {
   backup_worker: {
