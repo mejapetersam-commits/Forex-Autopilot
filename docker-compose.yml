@@ -93,6 +93,31 @@ services:
       retries: 3
       start_period: 10s
 
+
+  telemetry-health-monitor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "10001:10001"
+    command: ["python", "-m", "app.operations.health_monitor"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS: ${FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS:-60}
+      FOREX_AUTOPILOT_HEALTH_MONITOR_INTERVAL_SECONDS: ${FOREX_AUTOPILOT_HEALTH_MONITOR_INTERVAL_SECONDS:-30}
+    volumes:
+      - telemetry_data:/var/lib/forex-autopilot
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   telemetry-gateway:
     image: nginx:1.28-alpine
     user: "101:101"
