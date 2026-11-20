@@ -29,16 +29,17 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       <Metric label="UNKNOWN OUTCOMES" value={String(data?.counts.unknown_count ?? "—")} detail="Quarantined; never automatically resent"/>
     </div>
     {Boolean(data?.manual_review_events.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{data?.manual_review_events.length} broker reconciliation exception(s) require manual review. Check broker order/deal history before any separate operator action.</span><b>REVIEW</b></div>}
-    <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>AVG FILL</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
       {data?.intents.map(intent => <tr key={intent.intent_id}>
         <td className="symbol">{intent.intent_id}</td><td>{intent.symbol} / {intent.side.toUpperCase()}</td>
         <td><Status good={intent.result === "full_fill_reconciled"}>{intent.status.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{intent.filled_volume_lots.toFixed(3)} / {intent.requested_volume_lots?.toFixed(3) ?? "—"}</td>
         <td>{intent.average_fill_price == null ? "—" : intent.average_fill_price.toFixed(5)}</td>
+        <td>{intent.fill_details.length ? intent.fill_details.map(fill => <div key={fill.deal_ticket}>{fill.deal_ticket}: {fill.volume_lots.toFixed(3)} @ {fill.price.toFixed(5)}</div>) : "—"}</td>
         <td>{intent.broker_order_id ?? "—"}{intent.deal_tickets.length ? " · " + intent.deal_tickets.join(", ") : ""}</td>
         <td>{stamp(intent.last_broker_evidence_at)}</td>
       </tr>)}
-      {!data?.intents.length && <tr><td colSpan={7} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
+      {!data?.intents.length && <tr><td colSpan={8} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
     </tbody></table></div>
     {Boolean(data?.manual_review_events.length) && <div className="table-wrap"><table><thead><tr><th>REVIEW TIME</th><th>INTENT</th><th>SEVERITY</th><th>REASONS</th><th>ORDER</th></tr></thead><tbody>
       {data?.manual_review_events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td className="symbol">{event.intent_id ?? "—"}</td><td><Status good={false}>{event.severity.toUpperCase()}</Status></td><td>{event.reasons.join(", ") || event.outcome || "Review required"}</td><td>{event.broker_order_id ?? "—"}</td></tr>)}
