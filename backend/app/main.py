@@ -636,6 +636,119 @@ def dashboard_execution_reconciliation(
     }
 
 
+@app.get("/api/v1/dashboard/release-readiness", include_in_schema=False)
+def dashboard_release_readiness():
+    """Consolidated read-only automated and operator release gates.
+
+    Manual broker/terminal validations are deliberately never inferred from
+    source-code tests or dashboard telemetry.
+    """
+    overview = dashboard_overview()
+    data = dashboard_data_readiness(minimum_candles=500, limit=5000)
+    operations = dashboard_operations()
+    recovery = dashboard_recovery_status()
+    execution = dashboard_execution_reconciliation(limit=50)
+    observation = dashboard_demo_observation(limit=500)
+
+    def gate(key: str, label: str, state: str, detail: str) -> dict:
+        return {"key": key, "label": label, "status": state, "detail": detail}
+
+    account_fresh = bool(overview.get("account") and overview["account"].get("fresh"))
+    terminal_fresh = bool(overview.get("bridge_connected") and overview.get("heartbeat", {}).get("fresh"))
+    automated = [
+        gate(
+            "broker_telemetry", "Fresh demo broker telemetry",
+            "passed" if terminal_fresh and account_fresh else "attention_required",
+            "Terminal heartbeat and account snapshot are fresh."
+            if terminal_fresh and account_fresh
+            else "A fresh connected terminal heartbeat and account snapshot are required.",
+        ),
+        gate(
+            "market_history", "Market history quality and coverage",
+            "passed" if data["status"] == "ready" else "attention_required",
+            f'{data["ready_series"]} of {data["series_checked"]} symbol/timeframe series meet the {data["minimum_candles"]}-candle research gate.',
+        ),
+        gate(
+            "verified_backup", "Verified recovery point and worker",
+            "passed" if recovery["backups"].get("fresh_verified_backup")
+            and recovery["backup_worker"].get("fresh")
+            and recovery["backups"].get("invalid_count", 0) == 0 else "attention_required",
+            "A fresh verified backup exists and the backup worker heartbeat is healthy."
+            if recovery["backups"].get("fresh_verified_backup")
+            and recovery["backup_worker"].get("fresh")
+            and recovery["backups"].get("invalid_count", 0) == 0
+            else "A fresh verified backup, healthy worker heartbeat and zero invalid snapshots are required.",
+        ),
+    ]
+
+    recon_counts = execution["counts"]
+    observed_execution = bool(execution["intents_checked"] or execution["order_counts"]["total"])
+    if not observed_execution:
+        recon_state = "awaiting_activity"
+        recon_detail = "No broker order/intent activity has yet exercised reconciliation."
+    elif any(recon_counts.get(k, 0) for k in (
+        "partial_fill_count", "awaiting_history_count", "unknown_count", "manual_review_count"
+    )):
+        recon_state = "attention_required"
+        recon_detail = "Partial, unknown, missing-history or manual-review outcomes remain unresolved."
+    else:
+        recon_state = "passed"
+        recon_detail = "Observed broker order and intent records have no unresolved reconciliation exceptions."
+    automated.append(gate("broker_reconciliation", "Broker order and deal reconciliation", recon_state, recon_detail))
+
+    has_terminal_snapshot = operations["reconciliation"].get("status") not in {
+        "waiting_for_terminal_snapshot", "terminal_snapshot_stale_or_not_demo"
+    }
+    protection_issues = operations["reconciliation"].get("protection_issues", [])
+    orphaned = operations["reconciliation"].get("orphaned_positions", [])
+    mismatched = operations["reconciliation"].get("mismatched_positions", [])
+    if not has_terminal_snapshot:
+        position_state = "awaiting_telemetry"
+        position_detail = "A fresh demo position snapshot is required before position protection can be audited."
+    elif protection_issues or orphaned or mismatched:
+        position_state = "attention_required"
+        position_detail = "Broker positions include missing protection, orphaned identity or mismatched records."
+    else:
+        position_state = "passed"
+        position_detail = "Latest fresh demo snapshot has no reported orphan, mismatch or missing-protection issue."
+    automated.append(gate("position_integrity", "Position identity and protection audit", position_state, position_detail))
+
+    deal_count = observation["deal_totals"]["deal_count"]
+    order_count = execution["order_counts"]["total"]
+    automated.append(gate(
+        "demo_broker_history", "Broker-side demo history observed",
+        "passed" if deal_count > 0 and order_count > 0 else "awaiting_activity",
+        f"{deal_count} managed deals and {order_count} broker orders are currently visible."
+        if deal_count > 0 and order_count > 0
+        else "A controlled demo execution must produce broker order and deal history before this gate can pass.",
+    ))
+
+    manual = [
+        gate("metaeditor_compile", "Compile both MT5 Expert Advisors in MetaEditor", "operator_validation_required",
+             "Requires a clean compile on the target MT5 terminal; CI source checks are not a substitute."),
+        gate("demo_execution_scenarios", "Exercise demo order and protective-stop scenarios", "operator_validation_required",
+             "Verify accepted orders, partial fills, rejects, cancels, broker SL/TP and statement matching on a dedicated demo account."),
+        gate("terminal_restart_recovery", "Test terminal disconnect and restart recovery", "operator_validation_required",
+             "Verify uncertain outcomes remain quarantined and are recovered only from broker-side evidence."),
+        gate("forward_demo_trial", "Complete sustained forward-demo observation", "operator_validation_required",
+             "Requires a documented multi-week demo run and reconciliation against broker statements."),
+    ]
+    passed_automated = sum(item["status"] == "passed" for item in automated)
+    return {
+        "status": "not_ready",
+        "automated_gates": automated,
+        "manual_gates": manual,
+        "automated_passed": passed_automated,
+        "automated_total": len(automated),
+        "manual_validation_required": len(manual),
+        "execution_enabled": False,
+        "trading_enabled": False,
+        "live_trading_supported": False,
+        "read_only": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/operations", include_in_schema=False)
 def dashboard_operations():
     """Safe read-only operations summary for the local dashboard; no admin secrets or mutations."""
