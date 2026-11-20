@@ -20,31 +20,13 @@ def run_health_monitor_cycle(*, now=None) -> dict[str, object]:
         stale_after_seconds=stale_after, now=current,
     )
     outbox = EventOutbox()
-    date_key = current.strftime("%Y%m%d")
-    recorded = []
-    for alert in health["alerts"]:
-        code = str(alert["code"])
-        symbol = str(alert.get("symbol") or "all").upper()
-        event = outbox.record(
-            event_key=f"health:{code}:{symbol}:{date_key}",
-            event_type=code,
-            severity=alert["severity"],
-            message=alert["message"],
-            payload={
-                "source": "periodic_health_monitor",
-                "alert_code": code,
-                "symbol": alert.get("symbol"),
-                "health_status": health["status"],
-                "assessed_at": health["assessed_at"],
-            },
-            channel="operator",
-            occurred_at=current,
-        )
-        recorded.append(event["event_id"])
+    transitions = outbox.reconcile_health_alerts(health["alerts"], now=current)
     return {
         "health_status": health["status"],
         "alerts_detected": len(health["alerts"]),
-        "events_recorded_or_already_present": len(recorded),
+        "events_recorded": transitions["alerts_created"],
+        "events_resolved": transitions["alerts_resolved"],
+        "alerts_still_active": transitions["alerts_still_active"],
         "assessed_at": health["assessed_at"],
     }
 
