@@ -513,6 +513,7 @@ def dashboard_execution_reconciliation(
     Terminal rejections/cancellations are outcomes, not missing-history alerts.
     """
     ledger = execution_ledger()
+    store = telemetry_store()
     intents = ledger.list_intents(limit=limit)
     evidence_events = {
         "broker_history_partial_fill",
@@ -577,6 +578,13 @@ def dashboard_execution_reconciliation(
         if len(review_events) >= 20:
             break
 
+    broker_orders = store.recent_execution_orders(limit=min(limit, 50))
+    pending_order_states = {"started", "placed", "partial", "request_add", "request_modify", "request_cancel"}
+    order_counts = {
+        "total": len(broker_orders),
+        "pending": sum(order["state"] in pending_order_states for order in broker_orders),
+        "terminal": sum(order["state"] in {"filled", "canceled", "rejected", "expired"} for order in broker_orders),
+    }
     counts = {
         "partial_fill_count": sum(row["result"] == "partial_fill_confirmed" for row in rows),
         "reconciled_count": sum(row["status"] == "reconciled" for row in rows),
@@ -590,10 +598,12 @@ def dashboard_execution_reconciliation(
     }
     return {
         "status": "review_required" if review_events else (
-            "observing" if rows else "awaiting_demo_activity"
+            "observing" if rows or broker_orders else "awaiting_demo_activity"
         ),
         "intents_checked": len(rows),
         "counts": counts,
+        "order_counts": order_counts,
+        "broker_orders": broker_orders,
         "intents": rows,
         "manual_review_events": review_events,
         "execution_mode": "disabled",
