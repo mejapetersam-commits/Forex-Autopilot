@@ -246,7 +246,9 @@ def run_backtest(
         marked_equity = settings.initial_equity
         for trade in trades:
             if trade["exit_index"] <= candle_index:
-                marked_equity += float(trade["net_pnl"])
+                # Use the same cent-rounded realised balance exposed by the
+                # trade ledger; summing rounded trade PnL can drift by a cent.
+                marked_equity = float(trade["equity_after"])
             elif trade["entry_index"] <= candle_index < trade["exit_index"]:
                 side = trade["side"]
                 estimated_exit = (
