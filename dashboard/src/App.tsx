@@ -9,6 +9,7 @@ import ExecutionReconciliation from "./ExecutionReconciliation";
 import ReleaseReadiness from "./ReleaseReadiness";
 import BrokerSpecifications from "./BrokerSpecifications";
 import NotificationHealth from "./NotificationHealth";
+import DataReadiness from "./DataReadiness";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -179,6 +180,7 @@ export default function App() {
       <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
     </section>
 
+    <DataReadiness />
     <BrokerSpecifications />
     <NotificationHealth />
     <StrategyPerformance />
