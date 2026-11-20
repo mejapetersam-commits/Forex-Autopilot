@@ -385,9 +385,20 @@ export default function App() {
       <p className="strategy-disclaimer">Research simulations, cross-market rankings and broker-reported demo results are separate evidence types. Historical results are not live performance, incomplete broker records are excluded from complete-only P&amp;L, and no panel submits orders.</p>
     </div>}
 
-    {page === "risk" && <div id="operations" className="dashboard-group">
-    <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Read-only monitoring of risk gates, position reconciliation, recovery and release conditions.</p></div>
-    <details className="dashboard-accordion"><summary>Open operations and safety panels <span>4 panels · execution, recovery, reconciliation, release readiness</span></summary>
+    {page === "risk" && <div id="operations" className="dashboard-group risk-workspace">
+    <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Understand the current protection posture, investigate exceptions and review what evidence is still required.</p></div>
+    <div className="risk-posture-banner">
+      <div className="risk-posture-icon"><ShieldCheck size={21}/></div>
+      <div><b>READ-ONLY SAFETY POSTURE</b><span>Execution disabled · Live trading unavailable · No automatic position changes or command retries</span></div>
+      <Status good={operations?.read_only === true && operations?.trading_enabled === false}>PROTECTED MODE</Status>
+    </div>
+    <div className="risk-status-grid">
+      <article className={operations?.portfolio_risk_gate.approved ? "risk-status-card pass" : "risk-status-card attention"}><span>PORTFOLIO RISK GATE</span><b>{operations ? (operations.portfolio_risk_gate.approved ? "APPROVED" : "BLOCKED / UNVERIFIED") : "LOADING"}</b><small>{operations?.portfolio_risk_gate.aggregate_stop_risk_pct == null ? "Aggregate stop risk unavailable" : operations.portfolio_risk_gate.aggregate_stop_risk_pct.toFixed(3) + "% aggregate stop risk"}</small></article>
+      <article className={operations?.reconciliation.status === "reconciled" ? "risk-status-card pass" : "risk-status-card attention"}><span>POSITION RECONCILIATION</span><b>{operations?.reconciliation.status?.replaceAll("_"," ").toUpperCase() ?? "LOADING"}</b><small>{operations?.reconciliation.orphaned_positions.length ?? "—"} unmatched position(s) · {operations?.reconciliation.protection_issues?.length ?? "—"} protection issue(s)</small></article>
+      <article className={recovery?.backups.fresh_verified_backup && recovery?.backups.invalid_count === 0 ? "risk-status-card pass" : "risk-status-card attention"}><span>RECOVERY READINESS</span><b>{recovery?.backups.status?.replaceAll("_"," ").toUpperCase() ?? "LOADING"}</b><small>{recovery?.backups.fresh_verified_backup ? "Fresh verified backup available" : "Fresh verified backup not confirmed"}</small></article>
+      <article className={releaseReadiness?.status === "ready" ? "risk-status-card pass" : "risk-status-card attention"}><span>RELEASE READINESS</span><b>{releaseReadiness?.status?.replaceAll("_"," ").toUpperCase() ?? "LOADING"}</b><small>{releaseReadiness ? releaseReadiness.automated_passed + "/" + releaseReadiness.automated_total + " automated checks passed · " + releaseReadiness.manual_validation_required + " manual checks remain" : "Awaiting readiness evidence"}</small></article>
+    </div>
+    <details className="dashboard-accordion"><summary>Open detailed operations and safety evidence <span>4 panels · risk gate, recovery, reconciliation, release readiness</span></summary>
     <section id="execution" className="panel">
       <div className="section-head"><div><div className="eyebrow">EXECUTION CONTROL ROOM</div><h2>Position oversight & risk gate</h2><p className="subhead">Live demo-position reconciliation, lifecycle evidence and aggregate risk status. This view is read-only.</p></div><Status good={operations?.read_only === true && operations?.trading_enabled === false}>READ ONLY</Status></div>
       <div className="metrics ops-metrics">
