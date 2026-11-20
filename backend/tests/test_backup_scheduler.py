@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime, timezone
-from app.operations.backup_scheduler import run_backup_cycle
+from app.operations.backup_scheduler import run_backup_cycle, write_worker_heartbeat
 
 def make_db(path):
     with sqlite3.connect(path) as db:
@@ -46,3 +46,28 @@ def test_scheduler_rejects_naive_timestamp_and_invalid_retention(tmp_path):
         assert "timezone-aware" in str(exc)
     else:
         raise AssertionError("naive timestamps must fail")
+
+
+
+def test_worker_heartbeat_is_atomic_and_records_last_verified_backup(tmp_path):
+    import json
+
+    now = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+    result = write_worker_heartbeat(
+        tmp_path, now=now, backup_name="telemetry-20261120T120000Z.sqlite3"
+    )
+    heartbeat = json.loads((tmp_path / "backup-worker-heartbeat.json").read_text())
+    assert result == heartbeat
+    assert heartbeat["status"] == "ok"
+    assert heartbeat["observed_at"] == now.isoformat()
+    assert heartbeat["backup"] == "telemetry-20261120T120000Z.sqlite3"
+    assert not (tmp_path / "backup-worker-heartbeat.json.tmp").exists()
+
+
+def test_worker_heartbeat_rejects_naive_timestamp(tmp_path):
+    try:
+        write_worker_heartbeat(tmp_path, now=datetime(2026, 11, 20))
+    except ValueError as exc:
+        assert "timezone-aware" in str(exc)
+    else:
+        raise AssertionError("naive heartbeat time must fail")
