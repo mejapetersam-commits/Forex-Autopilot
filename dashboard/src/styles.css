@@ -516,3 +516,21 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .risk-posture-banner span{color:#a9bbb4}
 @media(max-width:900px){.risk-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.risk-status-grid{grid-template-columns:1fr}.risk-posture-banner{align-items:flex-start;flex-wrap:wrap}.risk-posture-banner>.status{margin-left:51px}}
+
+
+/* Risk evidence investigation and release audit clarity */
+.reconciliation-meta,.readiness-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;color:var(--fa-muted);font-size:10px}
+.reconciliation-meta>span:first-child,.readiness-meta>span:first-child{display:inline-flex;align-items:center;gap:6px}
+.reconciliation-tools{display:flex;align-items:end;gap:11px;flex-wrap:wrap;padding:13px 0}
+.reconciliation-tools label{display:grid;gap:6px;min-width:170px}
+.reconciliation-tools label:first-child{flex:1 1 260px}
+.reconciliation-tools label>span{font-size:9px;font-weight:800;letter-spacing:.65px;text-transform:uppercase;color:var(--fa-muted)}
+.reconciliation-search{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;border:1px solid var(--fa-line);border-radius:9px;background:var(--fa-surface);color:var(--fa-muted)}
+.reconciliation-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--fa-ink);font:500 11px 'DM Sans',sans-serif}
+.reconciliation-tools select{min-height:38px;padding:8px 10px;border:1px solid var(--fa-line);border-radius:9px;background:var(--fa-surface);color:var(--fa-ink);font:500 11px 'DM Sans',sans-serif}
+.reconciliation-count{padding-bottom:10px;color:var(--fa-muted);font-size:10px;white-space:nowrap}
+.readiness-meta{padding:11px 12px;border:1px solid var(--fa-line);border-radius:9px;background:var(--fa-surface)}
+.release-readiness h3 small{display:inline-block;margin-left:7px;color:var(--fa-muted);font-size:9px;font-weight:500}
+.shell.theme-dark .reconciliation-search,.shell.theme-dark .reconciliation-tools select{background:#1d2c33;color:#edf3ef;border-color:#3a4b51}
+.shell.theme-dark .reconciliation-search input{color:#edf3ef}
+@media(max-width:560px){.reconciliation-tools label,.reconciliation-tools label:first-child{flex:1 1 100%;min-width:0}.reconciliation-count{padding-bottom:0}.readiness-meta{align-items:flex-start;flex-direction:column}}
