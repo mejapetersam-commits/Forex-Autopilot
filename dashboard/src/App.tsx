@@ -20,7 +20,8 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 
 export default function App() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [research, setResearch] = useState<ResearchItem[]>([]);\n  const [events, setEvents] = useState<OperationalEvent[]>([]);
+  const [research, setResearch] = useState<ResearchItem[]>([]);
+  const [events, setEvents] = useState<OperationalEvent[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -28,9 +29,10 @@ export default function App() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, r] = await Promise.all([getOverview(), getResearch()]);
+      const [o, r, e] = await Promise.all([getOverview(), getResearch(), getOperationalEvents()]);
       setOverview(o);
       setResearch(r.items ?? []);
+      setEvents(e.items ?? []);
       setLastUpdated(new Date().toISOString());
       setError("");
     } catch (e) {
