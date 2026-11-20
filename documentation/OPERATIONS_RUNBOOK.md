@@ -112,3 +112,22 @@ in the host's encrypted backup and disaster-recovery policy. Restore remains a
 controlled offline procedure: stop the API and backup service first, preserve
 the current database, verify the selected snapshot, then restore and validate
 telemetry before restarting.
+
+
+## Broker position reconciliation
+
+The admin-only `GET /api/v1/monitoring/positions/reconciliation` endpoint
+compares open positions carrying the configured execution magic number against
+known durable intent tags. A managed position without a matching deterministic
+`FA:` intent tag is reported as an orphan and recorded as a critical
+operational event. Other magic numbers are excluded.
+
+This is a read-only audit. It does not close, modify or hedge positions. A
+matching tag is correlation evidence, not proof that all broker-side position
+details are correct; operators should still compare ticket, symbol, side,
+volume, stop and target with broker history. The endpoint requires a fresh demo
+terminal snapshot and admin authentication.
+
+Backtest results also expose a per-candle mark-to-market equity/drawdown
+approximation. Review its documented OHLC, spread, slippage and commission
+limitations before using it to compare strategies.
