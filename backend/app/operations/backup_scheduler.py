@@ -39,22 +39,25 @@ def run_backup_cycle(source, backup_dir, *, retention_days=30, now=None):
         removed.append(candidate.name)
     return {"backup": manifest, "retention_days": retention_days, "removed": removed}
 
-def write_worker_heartbeat(backup_dir, *, now=None, backup_name=None):
-    """Atomically publish the last successful backup-cycle timestamp."""
+def write_worker_heartbeat(backup_dir, *, now=None, backup_name=None, telemetry_db=None):
+    """Atomically publish worker liveness beside backups and the shared database."""
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None or current.utcoffset() is None:
         raise ValueError("Worker heartbeat timestamp must be timezone-aware.")
-    directory = Path(backup_dir).expanduser()
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / "backup-worker-heartbeat.json"
-    temporary = target.with_suffix(".json.tmp")
     payload = {
         "status": "ok",
         "observed_at": current.astimezone(timezone.utc).isoformat(),
         "backup": backup_name,
     }
-    temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    os.replace(temporary, target)
+    directories = {Path(backup_dir).expanduser()}
+    if telemetry_db:
+        directories.add(Path(telemetry_db).expanduser().parent)
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / "backup-worker-heartbeat.json"
+        temporary = target.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, target)
     return payload
 
 def main():
@@ -76,7 +79,8 @@ def main():
         try:
             result = run_backup_cycle(source, backup_dir, retention_days=retention)
             write_worker_heartbeat(
-                backup_dir, backup_name=Path(result["backup"]["path"]).name
+                backup_dir, backup_name=Path(result["backup"]["path"]).name,
+                telemetry_db=source,
             )
             _LOG.info("Verified backup %s (%s bytes); pruned %s snapshots",
                       result["backup"]["path"], result["backup"]["size_bytes"], len(result["removed"]))
