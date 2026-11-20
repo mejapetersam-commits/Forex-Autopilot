@@ -54,3 +54,17 @@ The conversion currently supports instruments whose profit currency matches
 the account currency. Unsupported conversions, stale inputs, missing stops or
 invalid stop placement are flagged; unknown stop risk is not presented as zero.
 Estimated stop risk excludes slippage, commission, gaps and execution failures.
+
+
+## Mark-to-market research curves
+
+Backtest results include both the existing trade-close `equity_curve` and a
+`mark_to_market_equity_curve` point for the initial state and every tested
+candle. The latter estimates open-position equity at each candle close using
+the configured spread, slippage and round-turn commission assumptions. Each
+point includes its timestamp, estimated equity and drawdown from the running
+peak; `mark_to_market_max_drawdown_pct` summarizes that series.
+
+This remains a candle-close approximation. It is not tick-level or intrabar
+mark-to-market, and it does not model live execution, financing, swaps,
+variable spreads, partial liquidity or broker-specific margin closeout.
