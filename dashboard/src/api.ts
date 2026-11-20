@@ -101,3 +101,32 @@ export interface PortfolioResponse {
   updated_at: string;
 }
 export const getPortfolio = () => getJson<PortfolioResponse>("/api/v1/dashboard/portfolio");
+
+export interface DashboardOperations {
+  reconciliation: {
+    status: string;
+    managed_positions_checked: number;
+    orphaned_positions: Array<{
+      ticket: string; position_id: string; symbol: string; side: string;
+      volume_lots: number; reason: string;
+    }>;
+  };
+  lifecycle: {
+    status: string;
+    previous_snapshot_available: boolean;
+    managed_positions_current: number;
+    events: Array<Record<string, string | number | boolean | null>>;
+  };
+  portfolio_risk_gate: {
+    approved: boolean;
+    aggregate_stop_risk_pct: number | null;
+    max_stop_risk_pct: number;
+    reasons: string[];
+  };
+  recent_position_events: OperationalEvent[];
+  execution_mode: string;
+  trading_enabled: boolean;
+  read_only: boolean;
+  updated_at: string;
+}
+export const getDashboardOperations = () => getJson<DashboardOperations>("/api/v1/dashboard/operations");
