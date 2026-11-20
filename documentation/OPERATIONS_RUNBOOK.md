@@ -219,6 +219,17 @@ enable execution. Review every manual-review result against the terminal's
 broker order/deal history before taking any separate operator action.
 
 
+The local dashboard's read-only
+`GET /api/v1/dashboard/execution-reconciliation` endpoint summarizes recent
+submitted intents, partial/full-fill audit evidence, volume-weighted average
+fill price, individual broker deal tickets and manual-review events. It reads
+the durable ledger and event journal only; it does not invoke reconciliation,
+advance intent states, queue commands or expose the original intent payload.
+The Execution History panel refreshes independently with the other dashboard
+sections. A displayed partial fill remains informational and does not authorize
+a retry or a new order.
+
+
 ## Broker-reported realized P&L and trade attribution
 
 The read-only `GET /api/v1/dashboard/trade-attribution` endpoint reports
