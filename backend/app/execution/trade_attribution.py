@@ -91,6 +91,9 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
             continue
 
         if deal["entry"] == "inout":
+            if volume + EPSILON < state["volume"]:
+                incomplete += 1
+                state["cash_complete"] = False
             close_volume = min(state["volume"], volume)
             close_ratio = close_volume / volume
             _add_cash(state["cash"], cash, close_ratio)
