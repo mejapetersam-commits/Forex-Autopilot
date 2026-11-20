@@ -29,6 +29,16 @@ def test_partial_entries_and_exits_are_one_closed_trade_with_all_cash_components
     assert result["open_position_count"] == 0
 
 
+def test_same_second_deals_are_ordered_by_numeric_broker_ticket():
+    rows = [
+        deal(2, "in", "buy", 0.01, at="2026-11-19T10:00:00+00:00"),
+        deal(10, "out", "sell", 0.01, profit=1.0, at="2026-11-19T10:00:00+00:00"),
+    ]
+    result = build_trade_attribution(rows)
+    assert result["closed_trade_count"] == 1
+    assert result["pnl_complete_trade_count"] == 1
+    assert result["net_realized_pnl"] == 1.0
+
 def test_partial_exit_does_not_finalize_remaining_position():
     rows = [
         deal(1, "in", "buy", 0.03),
