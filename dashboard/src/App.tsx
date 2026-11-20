@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, getRecoveryStatus, getExecutionReconciliation, getReleaseReadiness, type ReleaseReadinessResponse, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations, type RecoveryStatusResponse, type ExecutionReconciliationResponse } from "./api";
 import StrategyPerformance from "./StrategyPerformance";
+import CostSensitivity from "./CostSensitivity";
 import StrategyComparison from "./StrategyComparison";
 import DemoObservation from "./DemoObservation";
 import TradeAttribution from "./TradeAttribution";
@@ -196,6 +197,7 @@ export default function App() {
     <div id="strategy" className="dashboard-group">
       <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Review strategy results, comparisons, demo observations and trade attribution.</p></div>
       <StrategyPerformance />
+      <CostSensitivity />
       <StrategyComparison />
       <DemoObservation />
       <TradeAttribution />
