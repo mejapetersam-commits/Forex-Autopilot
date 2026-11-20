@@ -280,3 +280,40 @@ export interface DemoObservationResponse {
   updated_at: string;
 }
 export const getDemoObservation = () => getJson<DemoObservationResponse>("/api/v1/dashboard/demo-observation");
+
+export interface TradeAttributionResponse {
+  status: string;
+  deal_count: number;
+  closed_trade_count: number;
+  pnl_complete_trade_count: number;
+  pnl_incomplete_trade_count: number;
+  unmatched_deal_count: number;
+  overclose_or_ambiguous_count: number;
+  open_position_count: number;
+  missing_cash_deal_count: number;
+  net_realized_pnl: number;
+  account_currency: string | null;
+  win_rate_pct: number | null;
+  profit_factor: number | null;
+  expectancy_per_trade: number | null;
+  average_win: number | null;
+  average_loss: number | null;
+  max_drawdown_cash: number | null;
+  coverage: string;
+  groups: Array<{
+    magic: number; symbol: string; closed_trade_count: number;
+    pnl_complete_trade_count: number; pnl_incomplete_trade_count: number;
+    net_realized_pnl: number; win_rate_pct: number | null;
+    profit_factor: number | null; expectancy_per_trade: number | null;
+    open_position_count: number; unmatched_deal_count: number;
+  }>;
+  closed_trades: Array<Record<string, string | number | boolean | null>>;
+  open_positions: Array<Record<string, string | number>>;
+  limitations: string[];
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getTradeAttribution = () =>
+  getJson<TradeAttributionResponse>("/api/v1/dashboard/trade-attribution");
