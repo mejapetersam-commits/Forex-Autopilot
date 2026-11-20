@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Activity, BarChart3, FlaskConical, Play, ShieldCheck } from "lucide-react";
 import { getStrategyPerformance, type StrategyPerformanceResponse } from "./api";
 
-const symbols = ["EURUSDm", "GBPUSDm"];
-const timeframes = ["M15", "H1", "H4"];
 
 function number(value: number | null | undefined, digits = 2) {
   return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
