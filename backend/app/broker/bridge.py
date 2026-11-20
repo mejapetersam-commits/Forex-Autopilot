@@ -320,7 +320,18 @@ class MT5ExecutionDeal(BaseModel):
     price: float = Field(gt=0)
     magic: int = Field(ge=0)
     comment: str = Field(default="", max_length=128)
+    profit: float | None = None
+    commission: float | None = None
+    swap: float | None = None
+    fee: float | None = None
     occurred_at: datetime
+
+    @field_validator("profit", "commission", "swap", "fee")
+    @classmethod
+    def require_finite_cash_amounts(cls, value: float | None) -> float | None:
+        if value is not None and not isfinite(value):
+            raise ValueError("Broker deal cash amounts must be finite.")
+        return value
 
     @field_validator("symbol")
     @classmethod
