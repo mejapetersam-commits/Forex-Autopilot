@@ -445,13 +445,26 @@ class TelemetryStore:
                 (safe_limit,),
             ).fetchall()
             totals = connection.execute(
-                """SELECT symbol, timeframe, COUNT(*) AS batch_count,
-                          SUM(received_count) AS candles_received,
-                          MAX(ingested_at) AS last_ingested_at,
-                          MAX(last_candle_at) AS latest_candle_at
-                   FROM candle_ingestion_batches
-                   GROUP BY symbol, timeframe
-                   ORDER BY symbol, timeframe"""
+                """SELECT batches.symbol, batches.timeframe,
+                          COUNT(*) AS batch_count,
+                          SUM(batches.received_count) AS candles_received,
+                          MAX(batches.ingested_at) AS last_ingested_at,
+                          MAX(batches.last_candle_at) AS latest_candle_at,
+                          (SELECT COUNT(*) FROM candles
+                           WHERE candles.symbol = batches.symbol
+                             AND candles.timeframe = batches.timeframe)
+                              AS unique_candles_stored,
+                          (SELECT MIN(opened_at) FROM candles
+                           WHERE candles.symbol = batches.symbol
+                             AND candles.timeframe = batches.timeframe)
+                              AS first_stored_candle_at,
+                          (SELECT MAX(opened_at) FROM candles
+                           WHERE candles.symbol = batches.symbol
+                             AND candles.timeframe = batches.timeframe)
+                              AS latest_stored_candle_at
+                   FROM candle_ingestion_batches AS batches
+                   GROUP BY batches.symbol, batches.timeframe
+                   ORDER BY batches.symbol, batches.timeframe"""
             ).fetchall()
         return {
             "recent_batches": [dict(row) for row in rows],
