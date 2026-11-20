@@ -519,6 +519,14 @@ class TelemetryStore:
                         raise ValueError(
                             f"Conflicting broker evidence for existing deal ticket {row[0]} (position_id)."
                         )
+                    for column, row_index in {
+                        "profit": 15, "commission": 16, "swap": 17, "fee": 18,
+                    }.items():
+                        if (existing[column] is not None and row[row_index] is not None
+                                and abs(float(existing[column]) - float(row[row_index])) > 1e-8):
+                            raise ValueError(
+                                f"Conflicting broker evidence for existing deal ticket {row[0]} ({column})."
+                            )
             connection.executemany(
                 """INSERT INTO execution_deals(
                     deal_ticket, order_ticket, position_id, terminal_id, environment, server,
@@ -681,6 +689,9 @@ class TelemetryStore:
         with self._connect() as connection:
             totals = connection.execute(
                 """SELECT COUNT(*) AS deal_count,
+                          SUM(CASE WHEN profit IS NOT NULL AND commission IS NOT NULL
+                                    AND swap IS NOT NULL AND fee IS NOT NULL THEN 1 ELSE 0 END)
+                              AS cash_complete_deal_count,
                           COUNT(DISTINCT terminal_id) AS terminal_count,
                           COUNT(DISTINCT magic) AS strategy_magic_count,
                           MIN(occurred_at) AS first_deal_at,
@@ -728,9 +739,10 @@ class TelemetryStore:
                 "reported_open_positions": len(positions),
                 "daily_loss_pct_estimate": latest_state["daily_loss_pct"],
             } if latest_state else None,
-            "pnl_available": False,
+            "pnl_available": bool(totals["cash_complete_deal_count"]),
             "limitations": [
-                "Broker deal telemetry currently does not include realized profit, commission or swap.",
+                "Older broker history rows may predate cash-component ingestion and remain incomplete.",
+                "Only fully closed position cycles with complete cash fields are included in realized P&L.",
                 "Magic number is a grouping key, not proof that a strategy generated a trade.",
                 "Deal counts and gross volume are not equivalent to completed round trips.",
             ],
