@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { getOverview, getResearch, getOperationalEvents, type DashboardOverview, type ResearchItem, type OperationalEvent } from "./api";
+import { getOverview, getResearch, getOperationalEvents, getPortfolio, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse } from "./api";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -22,6 +22,7 @@ export default function App() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [research, setResearch] = useState<ResearchItem[]>([]);
   const [events, setEvents] = useState<OperationalEvent[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -29,10 +30,11 @@ export default function App() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, r, e] = await Promise.all([getOverview(), getResearch(), getOperationalEvents()]);
+      const [o, r, e, p] = await Promise.all([getOverview(), getResearch(), getOperationalEvents(), getPortfolio()]);
       setOverview(o);
       setResearch(r.items ?? []);
       setEvents(e.items ?? []);
+      setPortfolio(p);
       setLastUpdated(new Date().toISOString());
       setError("");
     } catch (e) {
@@ -90,6 +92,26 @@ export default function App() {
     </section>
 
     {alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
+
+    <section className="panel">
+      <div className="section-head"><div><div className="eyebrow">PORTFOLIO RISK & EXPOSURE</div><h2>Open-position concentration</h2><p className="subhead">Broker telemetry estimates converted into account currency. Missing or stale inputs are not guessed.</p></div><Status good={portfolio?.status === "healthy"}>{portfolio?.status?.toUpperCase() ?? "LOADING"}</Status></div>
+      <div className="metrics">
+        <Metric label="OPEN POSITIONS" value={String(portfolio?.open_position_count ?? "—")} detail="Broker-reported positions"/>
+        <Metric label="OPEN STOP RISK" value={portfolio?.total_open_stop_risk == null ? "UNKNOWN" : money(portfolio.total_open_stop_risk, portfolio.account_currency ?? "USD")} detail="Only when every position has a valid stop"/>
+        <Metric label="ACCOUNT EQUITY" value={portfolio?.account_equity == null ? "—" : money(portfolio.account_equity, portfolio.account_currency ?? "USD")} detail="Latest broker snapshot"/>
+        <Metric label="CURRENCY PAIRS" value={String(portfolio?.currencies.length ?? 0)} detail="Currencies with calculated exposure"/>
+      </div>
+      {Boolean(portfolio?.reasons?.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{portfolio?.reasons?.join(" · ")}</span></div>}
+      <div className="table-wrap"><table><thead><tr><th>CURRENCY</th><th>NET EXPOSURE</th><th>GROSS EXPOSURE</th><th>GROSS / EQUITY</th></tr></thead><tbody>
+        {portfolio?.currencies.map(item => <tr key={item.currency}><td className="symbol">{item.currency}</td><td>{money(item.net_exposure, portfolio.account_currency ?? "USD")}</td><td>{money(item.gross_exposure, portfolio.account_currency ?? "USD")}</td><td>{item.gross_exposure_pct_equity.toFixed(2)}%</td></tr>)}
+        {!portfolio?.currencies.length && <tr><td colSpan={4} className="empty">No current position exposure to report.</td></tr>}
+      </tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>TICKET</th><th>INSTRUMENT</th><th>SIDE</th><th>VOLUME</th><th>NOTIONAL</th><th>STOP RISK</th></tr></thead><tbody>
+        {portfolio?.positions.map(position => <tr key={position.ticket}><td>{position.ticket}</td><td className="symbol">{position.symbol}</td><td>{position.side.toUpperCase()}</td><td>{position.volume_lots.toFixed(2)}</td><td>{money(position.notional_account_currency, portfolio.account_currency ?? "USD")}</td><td>{position.estimated_stop_risk == null ? "UNKNOWN" : money(position.estimated_stop_risk, portfolio.account_currency ?? "USD")}</td></tr>)}
+        {!portfolio?.positions.length && <tr><td colSpan={6} className="empty">No open positions reported.</td></tr>}
+      </tbody></table></div>
+      <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
+    </section>
 
     <section className="panel">
       <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
