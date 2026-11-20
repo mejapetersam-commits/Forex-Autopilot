@@ -37,11 +37,28 @@ def test_demo_execution_ea_checks_symbol_volume_stops_margin_and_trade_permissio
         assert required in source
 
 
-def test_demo_execution_ea_marks_attempt_before_broker_submission():
+def test_demo_execution_ea_persists_attempt_before_broker_submission():
     source = EA_SOURCE.read_text(encoding="utf-8")
-    assert source.index("MarkAttempted(command_id);", source.index("// Persist the attempt marker")) < source.index("g_trade.Buy(")
+    marker = source.index("if(!MarkAttempted(command_id))", source.index("// Persist the attempt marker"))
+    assert marker < source.index("g_trade.Buy(")
+    assert "GlobalVariableSet(key" in source
+    assert "GlobalVariablesFlush();" in source
     assert 'SendResult(command_id, outcome, result);' in source
     assert '"unknown"' in source
+
+
+def test_demo_execution_ea_runs_broker_order_check_before_submission():
+    source = EA_SOURCE.read_text(encoding="utf-8")
+    assert "bool CheckBrokerOrder(" in source
+    assert "OrderCheck(request, check)" in source
+    assert source.index("CheckBrokerOrder(" , source.index("void ProcessCommand")) < source.index("g_trade.Buy(")
+
+
+def test_demo_execution_ea_can_be_attached_safely_while_disabled():
+    source = EA_SOURCE.read_text(encoding="utf-8")
+    disabled = source.index("if(!InpEnableDemoExecution)", source.index("int OnInit"))
+    assert "return INIT_SUCCEEDED;" in source[disabled:disabled + 500]
+    assert "if(!InpEnableDemoExecution || !IsTradingPermitted())" in source
 
 def test_demo_execution_ea_sanitizes_external_broker_comment_control_characters():
     source = EA_SOURCE.read_text(encoding="utf-8")
