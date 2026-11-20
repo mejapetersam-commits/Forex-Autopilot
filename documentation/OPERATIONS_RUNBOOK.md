@@ -25,10 +25,10 @@ From the repository root, ensure the deployment environment contains a long rand
 
 ```bash
 docker compose config -q
-docker compose up -d --build api telemetry-gateway
+docker compose up -d --build api telemetry-gateway telemetry-backup
 docker compose ps
 curl -fsS http://127.0.0.1:8000/health
-docker compose logs --tail=100 api telemetry-gateway
+docker compose logs --tail=100 api telemetry-gateway telemetry-backup
 ```
 
 The API and gateway are bound to loopback addresses. Do not expose the API directly to the public internet. Keep the SQLite volume persistent and backed up.
@@ -90,3 +90,23 @@ Do not set `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED=true`, clear the pause/kill s
 7. Keep a human-operated emergency stop available.
 
 Live trading remains disabled until those controls are implemented, independently tested and explicitly deployed.
+
+
+## Scheduled telemetry backups
+
+The telemetry-backup Compose service runs independently of the API and
+gateway. It takes a verified online SQLite snapshot at startup, then follows
+the configured interval and retention window. Defaults are 24 hours and 30
+days. The snapshots live in the separate telemetry_backups Docker volume.
+
+```bash
+docker compose logs --tail=100 telemetry-backup
+docker compose exec telemetry-backup python -m app.operations.backup verify --backup /var/backups/forex-autopilot/telemetry-YYYYMMDDTHHMMSSZ.sqlite3
+```
+
+The named volume protects against ordinary application/container replacement,
+but it is not a substitute for encrypted off-device copies. Include this volume
+in the host's encrypted backup and disaster-recovery policy. Restore remains a
+controlled offline procedure: stop the API and backup service first, preserve
+the current database, verify the selected snapshot, then restore and validate
+telemetry before restarting.
