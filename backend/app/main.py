@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Literal
 from hmac import compare_digest
+from math import isfinite
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -531,6 +532,26 @@ def dashboard_execution_reconciliation(
         latest = broker_events[-1] if broker_events else None
         details = latest["details"] if latest else {}
         payload = intent.get("payload", {})
+        requested_volume = payload.get("volume_lots")
+        filled_volume = details.get("filled_volume_lots", 0.0)
+        try:
+            requested_number = float(requested_volume)
+            filled_number = float(filled_volume)
+            fill_values_valid = (
+                isfinite(requested_number) and requested_number > 0
+                and isfinite(filled_number) and filled_number >= 0
+            )
+        except (TypeError, ValueError):
+            fill_values_valid = False
+            requested_number = filled_number = 0.0
+        remaining_volume = (
+            max(0.0, requested_number - filled_number)
+            if fill_values_valid else None
+        )
+        fill_progress = (
+            min(100.0, filled_number / requested_number * 100.0)
+            if fill_values_valid else None
+        )
         rows.append({
             "intent_id": intent["idempotency_key"],
             "status": intent["status"],
@@ -549,6 +570,8 @@ def dashboard_execution_reconciliation(
                 else "awaiting_broker_history"
             ),
             "filled_volume_lots": details.get("filled_volume_lots", 0.0),
+            "remaining_volume_lots": remaining_volume,
+            "fill_progress_pct": fill_progress,
             "average_fill_price": details.get("average_fill_price"),
             "fill_details": (details.get("fill_details") or [])[:20],
             "deal_tickets": (details.get("deal_tickets") or [])[:20],
