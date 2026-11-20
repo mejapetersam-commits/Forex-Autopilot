@@ -353,6 +353,10 @@ void SendExecutionHistory()
       ulong position_id = (ulong)HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
       double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
       double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+      double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+      double commission = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+      double swap = HistoryDealGetDouble(ticket, DEAL_SWAP);
+      double fee = HistoryDealGetDouble(ticket, DEAL_FEE);
       datetime deal_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
       string symbol = JsonEscape(HistoryDealGetString(ticket, DEAL_SYMBOL));
       string comment = JsonEscape(HistoryDealGetString(ticket, DEAL_COMMENT));
@@ -372,9 +376,11 @@ void SendExecutionHistory()
          "\"position_id\":\"%I64u\",\"symbol\":\"%s\","
          "\"side\":\"%s\",\"entry\":\"%s\","
          "\"volume_lots\":%.4f,\"price\":%.10f,\"magic\":%I64u,"
-         "\"comment\":\"%s\",\"occurred_at\":\"%s\"}",
+         "\"comment\":\"%s\",\"profit\":%.8f,\"commission\":%.8f,"
+         "\"swap\":%.8f,\"fee\":%.8f,\"occurred_at\":\"%s\"}",
          ticket, order_ticket, position_id, symbol, side, entry, volume, price,
-         InpExecutionMagicNumber, comment, BrokerTimeIso(deal_time, server_offset)
+         InpExecutionMagicNumber, comment, profit, commission, swap, fee,
+         BrokerTimeIso(deal_time, server_offset)
       );
       included++;
    }
