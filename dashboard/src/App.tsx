@@ -133,16 +133,20 @@ export default function App() {
       <div className="safety"><ShieldCheck size={19}/><div><b>PROTECTION ACTIVE</b><span>Execution disabled · Live trading unavailable</span></div></div>
     </section>
 
+    <nav className="dashboard-nav" aria-label="Dashboard sections">
+      <a href="#overview">Overview</a><a href="#connectivity">Connectivity</a><a href="#research">Signals</a><a href="#portfolio">Portfolio</a><a href="#data">Market data</a><a href="#strategy">Performance</a><a href="#operations">Operations</a><a href="#execution">Execution</a><a href="#recovery">Recovery</a><a href="#events">Event log</a>
+    </nav>
+
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
 
-    <section className="metrics">
+    <section id="overview" className="metrics">
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
       <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail="Broker-reported available margin"/>
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : "No reported alerts"}/>
     </section>
 
-    <section className="panel">
+    <section id="connectivity" className="panel">
       <div className="section-head"><div><div className="eyebrow">BROKER BRIDGE</div><h2>Connection & market quotes</h2></div><span className="muted">Auto-refresh · 15 seconds</span></div>
       <div className="connection-row"><div className="connection-icon">{overview?.bridge_connected ? <Wifi/> : <WifiOff/>}</div><div className="connection-copy"><b>{overview?.bridge_connected ? "Terminal heartbeat received" : "Waiting for terminal heartbeat"}</b><span>{overview?.heartbeat?.observed_at ? `Last heartbeat: ${stamp(overview.heartbeat.observed_at)}` : "Attach the read-only telemetry EA to begin reporting."}</span></div><Status good={Boolean(overview?.heartbeat?.fresh)}>{overview?.heartbeat?.fresh ? "Fresh" : "Stale / missing"}</Status></div>
       <div className="table-wrap"><table><thead><tr><th>INSTRUMENT</th><th>BID</th><th>ASK</th><th>SPREAD</th><th>TELEMETRY</th></tr></thead><tbody>
@@ -151,7 +155,7 @@ export default function App() {
       </tbody></table></div>
     </section>
 
-    <section className="panel">
+    <section id="research" className="panel">
       <div className="section-head"><div><div className="eyebrow">RESEARCH WORKSPACE</div><h2>Strategy candidates</h2><p className="subhead">Signals are informational research outputs, not trade instructions.</p></div><span className="research-tag"><CircleDot size={13}/> RESEARCH ONLY</span></div>
       <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>SIGNAL</th><th>CANDLES</th><th>DATA QUALITY</th><th>READINESS</th><th>COVERAGE</th><th>GAPS</th></tr></thead><tbody>
         {research.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
@@ -161,7 +165,7 @@ export default function App() {
 
     {alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
 
-    <section className="panel">
+    <section id="portfolio" className="panel">
       <div className="section-head"><div><div className="eyebrow">PORTFOLIO RISK & EXPOSURE</div><h2>Open-position concentration</h2><p className="subhead">Broker telemetry estimates converted into account currency. Missing or stale inputs are not guessed.</p></div><Status good={portfolio?.status === "healthy"}>{portfolio?.status?.toUpperCase() ?? "LOADING"}</Status></div>
       <div className="metrics">
         <Metric label="OPEN POSITIONS" value={String(portfolio?.open_position_count ?? "—")} detail="Broker-reported positions"/>
@@ -181,16 +185,25 @@ export default function App() {
       <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
     </section>
 
-    <CandleIngestion />
-    <DataReadiness />
-    <BrokerSpecifications />
-    <NotificationHealth />
-    <StrategyPerformance />
-    <StrategyComparison />
-    <DemoObservation />
-    <TradeAttribution />
+    <div id="data" className="dashboard-group">
+      <div className="group-heading"><div className="eyebrow">DATA & INFRASTRUCTURE</div><h2>Market data quality and broker configuration</h2><p>Inspect incoming history, data integrity, contract metadata and notification delivery.</p></div>
+      <CandleIngestion />
+      <DataReadiness />
+      <BrokerSpecifications />
+      <NotificationHealth />
+    </div>
 
-    <section className="panel">
+    <div id="strategy" className="dashboard-group">
+      <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Review strategy results, comparisons, demo observations and trade attribution.</p></div>
+      <StrategyPerformance />
+      <StrategyComparison />
+      <DemoObservation />
+      <TradeAttribution />
+    </div>
+
+    <div id="operations" className="dashboard-group">
+    <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Read-only monitoring of risk gates, position reconciliation, recovery and release conditions.</p></div>
+    <section id="execution" className="panel">
       <div className="section-head"><div><div className="eyebrow">EXECUTION CONTROL ROOM</div><h2>Position oversight & risk gate</h2><p className="subhead">Live demo-position reconciliation, lifecycle evidence and aggregate risk status. This view is read-only.</p></div><Status good={operations?.read_only === true && operations?.trading_enabled === false}>READ ONLY</Status></div>
       <div className="metrics ops-metrics">
         <Metric label="RECONCILIATION" value={operations?.reconciliation.status.replaceAll("_", " ").toUpperCase() ?? "LOADING"} detail="Managed positions checked against intent ledger"/>
@@ -215,7 +228,7 @@ export default function App() {
       <p className="subhead">Unmatched managed positions are flagged for review, never automatically closed. A missing position is not called closed unless broker deal history confirms the full close.</p>
     </section>
 
-    <section className="panel">
+    <section id="recovery" className="panel">
       <div className="section-head"><div><div className="eyebrow">RECOVERY & CONTINUITY</div><h2>Backup health & command quarantine</h2><p className="subhead">Verified recovery points and commands held for broker reconciliation. This panel is read-only.</p></div><Status good={Boolean(recovery?.backup_worker.fresh && recovery?.backups.fresh_verified_backup && recovery?.backups.invalid_count === 0)}>{recovery?.backups.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status></div>
       <div className="metrics">
         <Metric label="FRESH VERIFIED BACKUP" value={recovery?.backups.fresh_verified_backup ? "YES" : "NO"} detail={recovery?.backups.latest_backup_age_hours == null ? "No verified recovery point" : "Latest is " + recovery.backups.latest_backup_age_hours + " hours old"}/>
@@ -235,13 +248,15 @@ export default function App() {
     <ExecutionReconciliation data={executionReconciliation} />
     <ReleaseReadiness data={releaseReadiness} />
 
-    <section className="panel">
+    <section id="events" className="panel">
       <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
       <div className="table-wrap"><table><thead><tr><th>TIME</th><th>SEVERITY</th><th>EVENT</th><th>DETAIL</th><th>DELIVERY</th><th>ATTEMPTS</th></tr></thead><tbody>
         {events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
         {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
       </tbody></table></div>
     </section>
+
+    </div>
 
     <footer><span><ShieldCheck size={14}/> READ-ONLY DASHBOARD · EXECUTION DISABLED</span><span>Last refreshed: {stamp(lastUpdated)}</span></footer>
   </main>;
