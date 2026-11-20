@@ -36,7 +36,7 @@ services:
       FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS: ${FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS:-86400}
       FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS: ${FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS:-30}
     volumes:
-      - telemetry_data:/var/lib/forex-autopilot:ro
+      - telemetry_data:/var/lib/forex-autopilot
       - telemetry_backups:/var/backups/forex-autopilot
     read_only: true
     tmpfs:
