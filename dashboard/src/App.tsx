@@ -50,6 +50,8 @@ export default function App() {
   const [researchSearch, setResearchSearch] = useState("");
   const [researchTimeframe, setResearchTimeframe] = useState("all");
   const [researchReadiness, setResearchReadiness] = useState("all");
+  const [researchSignal, setResearchSignal] = useState("all");
+  const [researchSort, setResearchSort] = useState("symbol");
   const notificationCloseRef = useRef<HTMLButtonElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -171,7 +173,14 @@ export default function App() {
     const matchesSearch = !query || [item.symbol, item.timeframe, item.signal, item.reason, item.data_quality, item.readiness_status].some(value => String(value ?? "").toLowerCase().includes(query));
     const matchesTimeframe = researchTimeframe === "all" || item.timeframe === researchTimeframe;
     const matchesReadiness = researchReadiness === "all" || (researchReadiness === "ready" ? item.readiness_status === "ready_for_research" : item.readiness_status !== "ready_for_research");
-    return matchesSearch && matchesTimeframe && matchesReadiness;
+    const matchesSignal = researchSignal === "all" || item.signal.toLowerCase() === researchSignal;
+    return matchesSearch && matchesTimeframe && matchesReadiness && matchesSignal;
+  });
+  const sortedResearch = [...filteredResearch].sort((a, b) => {
+    if (researchSort === "coverage") return (b.coverage_pct ?? -1) - (a.coverage_pct ?? -1);
+    if (researchSort === "candles") return b.candles - a.candles;
+    if (researchSort === "gaps") return a.gap_count - b.gap_count;
+    return a.symbol.localeCompare(b.symbol) || a.timeframe.localeCompare(b.timeframe);
   });
   const filteredEvents = events.filter(event => {
     const query = eventSearch.trim().toLowerCase();
@@ -267,11 +276,13 @@ export default function App() {
         <label className="market-search"><span>SEARCH RESEARCH</span><input type="search" value={researchSearch} onChange={event => setResearchSearch(event.target.value)} placeholder="Symbol, signal, reason or quality"/></label>
         <label className="market-filter"><span>TIMEFRAME</span><select value={researchTimeframe} onChange={event => setResearchTimeframe(event.target.value)}><option value="all">All timeframes</option>{Array.from(new Set(research.map(item => item.timeframe))).sort().map(timeframe => <option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
         <label className="market-filter"><span>READINESS</span><select value={researchReadiness} onChange={event => setResearchReadiness(event.target.value)}><option value="all">All readiness</option><option value="ready">Ready for research</option><option value="not-ready">Not ready / unknown</option></select></label>
+        <label className="market-filter"><span>SIGNAL</span><select value={researchSignal} onChange={event => setResearchSignal(event.target.value)}><option value="all">All signals</option>{Array.from(new Set(research.map(item => item.signal.toLowerCase()))).sort().map(signal => <option key={signal} value={signal}>{signal.toUpperCase()}</option>)}</select></label>
+        <label className="market-filter"><span>SORT BY</span><select value={researchSort} onChange={event => setResearchSort(event.target.value)}><option value="symbol">Instrument</option><option value="coverage">Coverage · highest</option><option value="candles">Candles · most</option><option value="gaps">Gaps · fewest</option></select></label>
         <span className="market-count" aria-live="polite">{filteredResearch.length} of {research.length} candidates</span>
-        {(researchSearch || researchTimeframe !== "all" || researchReadiness !== "all") && <button className="event-reset" type="button" onClick={() => {setResearchSearch("");setResearchTimeframe("all");setResearchReadiness("all");}}>Clear</button>}
+        {(researchSearch || researchTimeframe !== "all" || researchReadiness !== "all" || researchSignal !== "all") && <button className="event-reset" type="button" onClick={() => {setResearchSearch("");setResearchTimeframe("all");setResearchReadiness("all");setResearchSignal("all");}}>Clear</button>}
       </div>
       <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>SIGNAL</th><th>CANDLES</th><th>DATA QUALITY</th><th>READINESS</th><th>COVERAGE</th><th>GAPS</th></tr></thead><tbody>
-        {filteredResearch.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
+        {sortedResearch.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
         {!research.length && <tr><td colSpan={8} className="empty">Research data will appear when candle history is available.</td></tr>}
         {Boolean(research.length) && !filteredResearch.length && <tr><td colSpan={8} className="empty">No research candidates match these filters. Clear the search or adjust the selections.</td></tr>}
       </tbody></table></div>
