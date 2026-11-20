@@ -157,11 +157,22 @@ bool WasAttempted(string command_id)
    return GlobalVariableCheck("FA.Attempt." + command_id);
 }
 
-void MarkAttempted(string command_id)
+bool MarkAttempted(string command_id)
 {
    if(command_id == "" || StringLen(command_id) > 48)
-      return;
-   GlobalVariableSet("FA.Attempt." + command_id, (double)TimeLocal());
+      return false;
+
+   string key = "FA.Attempt." + command_id;
+   ResetLastError();
+   datetime stored = GlobalVariableSet(key, (double)TimeLocal());
+   if(stored == 0 || !GlobalVariableCheck(key))
+   {
+      Print("FOREX AUTOPILOT EXECUTION: cannot persist attempt marker; refusing order. command=",
+            command_id, " error=", GetLastError());
+      return false;
+   }
+   GlobalVariablesFlush();
+   return true;
 }
 
 int CountOpenPositions()
@@ -180,6 +191,66 @@ bool ValidVolume(string symbol, double volume)
       return false;
    double steps = (volume - minimum) / step;
    return MathAbs(steps - MathRound(steps)) < 0.000001;
+}
+
+bool CheckBrokerOrder(string symbol, string side, double volume,
+                      double stop_loss, double take_profit,
+                      string broker_tag, string &reason)
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick) || tick.bid <= 0 || tick.ask < tick.bid)
+   {
+      reason = "order_check_no_valid_quote";
+      return false;
+   }
+
+   if(!g_trade.SetTypeFillingBySymbol(symbol))
+   {
+      reason = "broker_filling_policy_unavailable";
+      return false;
+   }
+
+   long filling_mode = SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+   long execution_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_EXEMODE);
+   ENUM_ORDER_TYPE_FILLING filling;
+   if((filling_mode & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK)
+      filling = ORDER_FILLING_FOK;
+   else if((filling_mode & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC)
+      filling = ORDER_FILLING_IOC;
+   else if(execution_mode != SYMBOL_TRADE_EXECUTION_MARKET)
+      filling = ORDER_FILLING_RETURN;
+   else
+   {
+      reason = "broker_has_no_supported_market_filling_policy";
+      return false;
+   }
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   MqlTradeRequest request = {};
+   request.action = TRADE_ACTION_DEAL;
+   request.symbol = symbol;
+   request.volume = volume;
+   request.type = (side == "buy") ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   request.price = (side == "buy") ? tick.ask : tick.bid;
+   request.sl = NormalizeDouble(stop_loss, digits);
+   request.tp = NormalizeDouble(take_profit, digits);
+   request.deviation = InpMaxDeviationPoints;
+   request.magic = InpMagicNumber;
+   request.type_filling = filling;
+   request.type_time = ORDER_TIME_GTC;
+   request.comment = "FA:" + broker_tag;
+
+   MqlTradeCheckResult check = {};
+   ResetLastError();
+   bool checked = OrderCheck(request, check);
+   if(!checked || (check.retcode != 0 && check.retcode != TRADE_RETCODE_DONE))
+   {
+      reason = "broker_order_check_failed_retcode_" + IntegerToString((int)check.retcode);
+      Print("FOREX AUTOPILOT EXECUTION: OrderCheck failed; retcode=", check.retcode,
+            " comment=", check.comment, " terminal_error=", GetLastError());
+      return false;
+   }
+   return true;
 }
 
 bool ValidateOrder(string symbol, string side, double volume,
@@ -310,19 +381,34 @@ void ProcessCommand(string response)
    string reason = "";
    if(!ValidateOrder(symbol, side, volume, stop_loss, take_profit, reason))
    {
-      MarkAttempted(command_id);
+      if(!MarkAttempted(command_id))
+         return;
       string result = "{\"reason\":\"" + reason + "\",\"intent_id\":\"" + intent_id + "\"}";
       SendResult(command_id, "rejected", result);
       Print("FOREX AUTOPILOT EXECUTION: order rejected by local safety validation: ", reason);
       return;
    }
 
+   int symbol_digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   stop_loss = NormalizeDouble(stop_loss, symbol_digits);
+   take_profit = NormalizeDouble(take_profit, symbol_digits);
+
+   if(!CheckBrokerOrder(symbol, side, volume, stop_loss, take_profit, broker_tag, reason))
+   {
+      if(!MarkAttempted(command_id))
+         return;
+      string result = "{\"reason\":\"" + reason + "\",\"intent_id\":\"" + intent_id + "\"}";
+      SendResult(command_id, "rejected", result);
+      Print("FOREX AUTOPILOT EXECUTION: broker pre-trade check rejected order: ", reason);
+      return;
+   }
+
    // Persist the attempt marker BEFORE calling the broker. A crash or uncertain
    // network result must be reconciled, never blindly retried.
-   MarkAttempted(command_id);
+   if(!MarkAttempted(command_id))
+      return;
    g_trade.SetExpertMagicNumber(InpMagicNumber);
    g_trade.SetDeviationInPoints(InpMaxDeviationPoints);
-   g_trade.SetTypeFillingBySymbol(symbol);
    g_trade.SetAsyncMode(false);
 
    bool sent = false;
@@ -361,12 +447,21 @@ void ProcessCommand(string response)
    StringReplace(safe_comment, ShortToString(13), " ");
    StringReplace(safe_comment, ShortToString(10), " ");
    StringReplace(safe_comment, ShortToString(9), " ");
+   string execution_state = "unknown";
+   if(retcode == TRADE_RETCODE_DONE)
+      execution_state = "filled";
+   else if(retcode == TRADE_RETCODE_DONE_PARTIAL)
+      execution_state = "partially_filled";
+   else if(retcode == TRADE_RETCODE_PLACED)
+      execution_state = "accepted_pending";
+
    string result = StringFormat(
       "{\"intent_id\":\"%s\",\"broker_order_id\":\"%I64u\","
       "\"broker_deal_id\":\"%I64u\",\"retcode\":%u,"
-      "\"filled_volume\":%.4f,\"fill_price\":%.10f,\"comment\":\"%s\"}",
+      "\"execution_state\":\"%s\",\"filled_volume\":%.4f,"
+      "\"fill_price\":%.10f,\"comment\":\"%s\"}",
       intent_id, order_ticket, deal_ticket, retcode,
-      filled_volume, fill_price, safe_comment
+      execution_state, filled_volume, fill_price, safe_comment
    );
    SendResult(command_id, outcome, result);
    Print("FOREX AUTOPILOT EXECUTION: command ", command_id,
@@ -390,8 +485,8 @@ int OnInit()
 {
    if(!InpEnableDemoExecution)
    {
-      Print("FOREX AUTOPILOT EXECUTION: disabled. Set InpEnableDemoExecution=true only on a DEMO terminal after backend configuration.");
-      return INIT_PARAMETERS_INCORRECT;
+      Print("FOREX AUTOPILOT EXECUTION: adapter attached in SAFE DISABLED mode. No command polling or orders. Enable only on a DEMO terminal after backend configuration.");
+      return INIT_SUCCEEDED;
    }
    string terminal_id_check = TrimValue(InpTerminalId);
    bool terminal_id_safe = (StringLen(terminal_id_check) >= 3);
