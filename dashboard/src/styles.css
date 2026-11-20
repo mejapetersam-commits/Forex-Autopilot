@@ -493,3 +493,26 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .strategy-workflow small,.shell.theme-dark .strategy-summary-copy>small{color:#a0b2ac}
 .shell.theme-dark .strategy-accordion>summary>em{background:#263c43;color:#b9c9c2}
 @media(max-width:560px){.strategy-workflow{gap:8px;padding:12px}.strategy-workflow>i{display:none}.strategy-workflow>div{flex:1 1 calc(50% - 8px)}.strategy-accordion>summary{gap:9px;padding:12px 10px}.strategy-accordion>summary>em{display:none}.strategy-summary-copy>small{font-size:9px}}
+
+
+/* Risk and safety posture overview */
+.risk-posture-banner{display:flex;align-items:center;gap:13px;padding:15px 17px;margin:0 0 13px;border:1px solid #c9e7d6;border-radius:14px;background:linear-gradient(105deg,#edf8f0,#f1f4ff)}
+.risk-posture-icon{display:grid;place-items:center;flex:0 0 39px;height:39px;border-radius:12px;background:#d8f0e1;color:#32845e}
+.risk-posture-banner>div:nth-child(2){display:grid;gap:4px;min-width:0;flex:1}
+.risk-posture-banner b{font-size:11px;color:#263a43;letter-spacing:.04em}
+.risk-posture-banner span{font-size:10px;color:#697d78;line-height:1.5}
+.risk-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 14px}
+.risk-status-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:14px;border:1px solid var(--fa-line);border-radius:13px;background:var(--fa-surface)}
+.risk-status-card>span{color:var(--fa-muted);font-size:9px;font-weight:800;letter-spacing:.065em}
+.risk-status-card>b{font-size:12px;line-height:1.35;color:var(--fa-ink);overflow-wrap:anywhere}
+.risk-status-card>small{color:var(--fa-muted);font-size:10px;line-height:1.5}
+.risk-status-card.pass{border-top:3px solid #6cbd91}
+.risk-status-card.attention{border-top:3px solid #e5a36c}
+.risk-workspace>.dashboard-accordion>summary{min-height:58px}
+.risk-workspace>.dashboard-accordion[open]{margin-top:12px}
+.shell.theme-dark .risk-posture-banner{background:linear-gradient(105deg,#203a34,#283247);border-color:#355b4a}
+.shell.theme-dark .risk-posture-icon{background:#315443;color:#bdebd5}
+.shell.theme-dark .risk-posture-banner b{color:#edf3ef}
+.shell.theme-dark .risk-posture-banner span{color:#a9bbb4}
+@media(max-width:900px){.risk-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.risk-status-grid{grid-template-columns:1fr}.risk-posture-banner{align-items:flex-start;flex-wrap:wrap}.risk-posture-banner>.status{margin-left:51px}}
