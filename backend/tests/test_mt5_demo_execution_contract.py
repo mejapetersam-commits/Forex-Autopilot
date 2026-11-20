@@ -45,5 +45,7 @@ def test_demo_execution_ea_marks_attempt_before_broker_submission():
 
 def test_demo_execution_ea_sanitizes_external_broker_comment_control_characters():
     source = EA_SOURCE.read_text(encoding="utf-8")
-
+    assert 'StringReplace(safe_comment, ShortToString(13), " ");' in source
+    assert 'StringReplace(safe_comment, ShortToString(10), " ");' in source
+    assert 'StringReplace(safe_comment, ShortToString(9), " ");' in source
     assert r'StringReplace(safe_comment, "\"", "\\\"");' in source
