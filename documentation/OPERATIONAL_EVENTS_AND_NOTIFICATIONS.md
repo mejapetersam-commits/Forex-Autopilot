@@ -49,11 +49,15 @@ configuration and controls.
 ## Periodic health-event publishing
 
 The `telemetry-health-monitor` Compose service checks broker heartbeat,
-account snapshots and quotes every 30 seconds by default. It records each
-distinct alert code/symbol once per UTC day in the durable event journal, using
-an idempotency key to avoid repeated dashboard refreshes or polling cycles
-creating duplicate events. The dashboard then displays those events and their
-outbox status.
+account snapshots and quotes every 30 seconds by default. A durable health-state
+table tracks each alert code/symbol as active or resolved. The first observation
+of an alert creates one operator event; repeated cycles update its last-seen
+time without creating duplicate notifications. When a later healthy assessment
+no longer contains that alert, the monitor emits a `HEALTH_RECOVERED` event.
+If the same alert returns after recovery, a new alert event is created. These
+transitions are committed atomically with the event journal and outbox. The
+dashboard can therefore distinguish historical alert events from the monitor's
+current active-alert count.
 
 The outbox currently persists and leases notification work only. No email,
 SMS, Telegram or other external delivery is configured or claimed. Add a
