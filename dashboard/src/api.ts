@@ -145,6 +145,8 @@ export interface CandleIngestionResponse {
   recent_batches: CandleIngestionBatch[];
   series: CandleIngestionSeries[];
   batch_count: number;
+  recent_batch_count: number;
+  candles_received_total: number;
   series_count: number;
   read_only: true;
   trading_enabled: false;

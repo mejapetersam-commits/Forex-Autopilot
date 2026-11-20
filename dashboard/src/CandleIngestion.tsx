@@ -33,15 +33,16 @@ export default function CandleIngestion() {
   return <section className="panel">
     <div className="section-head">
       <div><div className="eyebrow">MARKET DATA PIPELINE</div><h2>Historical ingestion ledger</h2>
-        <p className="subhead">Durable receipts for single and bulk MT5 uploads, including received volume and the stored history range.</p>
+        <p className="subhead">Durable single and bulk MT5 receipts, lifetime upload totals and the stored history range.</p>
         {data && <small className="data-snapshot-time">Ledger response updated {time(data.updated_at)}</small>}
       </div>
       <button className="refresh" onClick={() => void refresh()} disabled={loading}>{loading ? <RefreshCw size={14} className="spin"/> : <Database size={14}/>} Refresh</button>
     </div>
     {error && <div className="alert-row"><AlertTriangle size={16}/><span>Ingestion ledger refresh failed: {error}. {data ? "The last successful receipt snapshot remains visible and may be out of date." : "No ingestion snapshot is currently available."}</span></div>}
     <div className="metrics">
-      <article className="metric"><span>RECENT UPLOAD BATCHES</span><strong>{data ? data.batch_count : "—"}</strong><small>{data ? "Latest 100 receipts" : "Awaiting ledger response"}</small></article>
+      <article className="metric"><span>TOTAL UPLOAD BATCHES</span><strong>{data ? data.batch_count.toLocaleString() : "—"}</strong><small>{data ? `Showing latest ${data.recent_batch_count.toLocaleString()} receipts` : "Awaiting ledger response"}</small></article>
       <article className="metric"><span>SYMBOL / TIMEFRAME PAIRS</span><strong>{data ? data.series_count : "—"}</strong><small>{data ? "Series with recorded uploads" : "Not yet assessed"}</small></article>
+      <article className="metric"><span>CANDLES RECEIVED (LIFETIME)</span><strong>{data ? data.candles_received_total.toLocaleString() : "—"}</strong><small>{data ? "Includes repeat and overlapping uploads" : "Not yet assessed"}</small></article>
       <article className="metric"><span>UNIQUE STORED CANDLES</span><strong>{data ? candleTotal.toLocaleString() : "—"}</strong><small>{data ? "Distinct rows currently in history" : "Not yet assessed"}</small></article>
       <article className="metric"><span>PIPELINE MODE</span><strong>{data ? "RECEIPTS" : "UNKNOWN"}</strong><small>Storage audit only · no execution</small></article>
     </div>

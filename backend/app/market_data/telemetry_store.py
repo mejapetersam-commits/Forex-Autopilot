@@ -419,6 +419,11 @@ class TelemetryStore:
                    ORDER BY ingested_at DESC, rowid DESC LIMIT ?""",
                 (safe_limit,),
             ).fetchall()
+            lifetime = connection.execute(
+                """SELECT COUNT(*) AS batch_count,
+                          COALESCE(SUM(received_count), 0) AS candles_received_total
+                   FROM candle_ingestion_batches"""
+            ).fetchone()
             totals = connection.execute(
                 """SELECT batches.symbol, batches.timeframe,
                           COUNT(*) AS batch_count,
@@ -444,7 +449,9 @@ class TelemetryStore:
         return {
             "recent_batches": [dict(row) for row in rows],
             "series": [dict(row) for row in totals],
-            "batch_count": len(rows),
+            "batch_count": int(lifetime["batch_count"]),
+            "recent_batch_count": len(rows),
+            "candles_received_total": int(lifetime["candles_received_total"]),
             "series_count": len(totals),
             "read_only": True,
             "trading_enabled": False,
