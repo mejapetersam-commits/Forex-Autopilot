@@ -39,6 +39,7 @@ export default function StrategyComparison() {
           <td className={(item.return_pct ?? 0) >= 0 ? "positive" : "negative"}>{metric(item.return_pct,"%")}</td>
           <td>{metric(item.profit_factor,"",3)}</td><td>{metric(item.win_rate_pct,"%")}</td><td className="negative">{metric(item.max_drawdown_pct,"%")}</td><td>{item.total_trades ?? "—"}</td>
           <td><span className={`comparison-status ${statusClass(item.status)}`}>{item.status.replaceAll("_"," ")}</span>{item.gap_count > 0 && <small className="gap-note">{item.gap_count} gaps</small>}</td>
+          <td><button className="qualify-button" disabled={!!qualifying || item.candles_available < 400} onClick={() => void qualify(item)}>{qualifying === item.symbol + item.timeframe ? "Checking…" : "Qualify"}</button></td>
         </tr>)}
       </tbody></table></div>
       {qualification && <div className="qualification-result">
