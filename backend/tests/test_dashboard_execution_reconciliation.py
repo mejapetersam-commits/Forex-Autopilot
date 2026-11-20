@@ -91,3 +91,37 @@ def test_dashboard_does_not_label_terminal_rejection_as_missing_history(tmp_path
     ).json()
     assert body["intents"][0]["result"] == "terminal_outcome_recorded"
     assert body["counts"]["awaiting_history_count"] == 0
+
+def test_dashboard_exposes_sanitized_broker_order_snapshots(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from app.broker.bridge import MT5ExecutionOrder, MT5ExecutionOrderHistory
+    from app.market_data.telemetry_store import TelemetryStore
+
+    path = str(tmp_path / "orders.sqlite3")
+    ledger = ExecutionLedger(path)
+    outbox = EventOutbox(path)
+    store = TelemetryStore(path)
+    now = datetime.now(timezone.utc)
+    order = MT5ExecutionOrder(
+        order_ticket="778899", symbol="EURUSDm", order_type="buy",
+        state="partial", initial_volume=0.01, current_volume=0.006,
+        price=1.1, stop_loss=1.099, take_profit=1.102,
+        magic=61119001, comment="private broker comment",
+        setup_at=now - timedelta(minutes=1),
+    )
+    store.save_execution_order_history(MT5ExecutionOrderHistory(
+        terminal_id="demo-terminal", environment="demo",
+        server="Exness-MT5Trial", history_from=now - timedelta(days=1),
+        history_to=now, observed_at=now, orders=[order],
+    ))
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    monkeypatch.setattr(main, "EventOutbox", lambda: outbox)
+
+    body = TestClient(main.app).get(
+        "/api/v1/dashboard/execution-reconciliation"
+    ).json()
+    assert body["order_counts"] == {"total": 1, "pending": 1, "terminal": 0}
+    assert body["broker_orders"][0]["order_ticket"] == "778899"
+    assert body["broker_orders"][0]["current_volume"] == 0.006
+    assert "comment" not in body["broker_orders"][0]
