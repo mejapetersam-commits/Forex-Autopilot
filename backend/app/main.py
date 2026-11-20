@@ -20,6 +20,7 @@ from app.strategy.registry import list_strategies
 from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
 from app.execution.reconciliation import reconcile_broker_history
+from app.execution.position_reconciliation import reconcile_open_positions
 from app.execution.coordinator import ExecutionCoordinator
 from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_with_runtime_controls
 from app.execution.command_queue import ExecutionCommandQueue
@@ -1161,6 +1162,52 @@ def record_reconciliation_events(result: dict) -> int:
         if event:
             recorded += 1
     return recorded
+
+
+@app.get(
+    "/api/v1/monitoring/positions/reconciliation",
+    dependencies=[Depends(require_admin_token)],
+)
+def open_position_reconciliation():
+    """Flag managed broker positions that cannot be tied to a known intent."""
+    store = telemetry_store()
+    terminal = store.latest_execution_state()
+    if terminal is None:
+        return {"status": "waiting_for_terminal_snapshot",
+                "managed_positions_checked": 0, "orphaned_positions": [],
+                "trading_enabled": False}
+    observed = datetime.fromisoformat(terminal["observed_at"].replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - observed).total_seconds()
+    if terminal["environment"] != "demo" or age < -5 or age > 30:
+        return {"status": "terminal_snapshot_stale_or_not_demo",
+                "managed_positions_checked": 0, "orphaned_positions": [],
+                "trading_enabled": False}
+    expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
+    result = reconcile_open_positions(
+        terminal["positions"], execution_ledger().list_intents(),
+        expected_magic=expected_magic,
+    )
+    outbox = EventOutbox()
+    recorded = 0
+    for position in result["orphaned_positions"]:
+        ticket = position["ticket"]
+        event = outbox.record(
+            event_key=f"orphan-position:{hashlib.sha256(ticket.encode('utf-8')).hexdigest()[:32]}",
+            event_type="orphan_broker_position",
+            severity="critical",
+            message="A managed MT5 position has no matching execution intent.",
+            payload={
+                "ticket": ticket, "position_id": position["position_id"],
+                "symbol": position["symbol"], "side": position["side"],
+                "volume_lots": position["volume_lots"],
+                "reason": position["reason"],
+                "source": "open_position_reconciliation",
+            },
+        )
+        if event:
+            recorded += 1
+    result["operational_events_recorded"] = recorded
+    return result
 
 
 @app.get(
