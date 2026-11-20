@@ -504,6 +504,93 @@ def dashboard_portfolio():
     )
 
 
+@app.get("/api/v1/dashboard/execution-reconciliation", include_in_schema=False)
+def dashboard_execution_reconciliation(
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """Expose sanitized, read-only broker fill evidence for the local dashboard."""
+    ledger = execution_ledger()
+    intents = ledger.list_intents(limit=limit)
+    evidence_events = {
+        "broker_history_partial_fill",
+        "broker_history_full_fill_confirmed",
+        "broker_history_reconciled",
+        "broker_order_history_reconciled",
+    }
+    rows = []
+    for intent in intents:
+        audit = ledger.audit_events(intent["idempotency_key"], limit=100)
+        broker_events = [event for event in audit if event["event_type"] in evidence_events]
+        latest = broker_events[-1] if broker_events else None
+        details = latest["details"] if latest else {}
+        payload = intent.get("payload", {})
+        rows.append({
+            "intent_id": intent["idempotency_key"],
+            "status": intent["status"],
+            "symbol": str(payload.get("symbol") or ""),
+            "side": str(payload.get("side") or ""),
+            "requested_volume_lots": payload.get("volume_lots"),
+            "broker_order_id": intent.get("broker_order_id") or details.get("broker_order_id"),
+            "result": (
+                "partial_fill_confirmed" if latest and latest["event_type"] == "broker_history_partial_fill"
+                else "full_fill_reconciled" if latest and latest["event_type"] in {
+                    "broker_history_full_fill_confirmed", "broker_history_reconciled",
+                    "broker_order_history_reconciled",
+                }
+                else "awaiting_broker_history"
+            ),
+            "filled_volume_lots": details.get("filled_volume_lots", 0.0),
+            "average_fill_price": details.get("average_fill_price"),
+            "fill_details": (details.get("fill_details") or [])[:20],
+            "deal_tickets": (details.get("deal_tickets") or [])[:20],
+            "position_ids": (details.get("position_ids") or [])[:20],
+            "last_broker_evidence_at": latest["occurred_at"] if latest else None,
+        })
+
+    review_events = []
+    for event in EventOutbox().list_events(limit=200):
+        if event["event_type"] != "execution_reconciliation_review":
+            continue
+        try:
+            payload = json.loads(event.get("payload_json") or "{}")
+        except (TypeError, ValueError):
+            payload = {}
+        review_events.append({
+            "event_id": event["event_id"],
+            "occurred_at": event["occurred_at"],
+            "severity": event["severity"],
+            "intent_id": payload.get("intent_id"),
+            "outcome": payload.get("outcome"),
+            "reasons": payload.get("reasons") or [],
+            "broker_order_id": payload.get("broker_order_id"),
+            "filled_volume_lots": payload.get("filled_volume_lots"),
+            "requested_volume_lots": payload.get("requested_volume_lots"),
+        })
+        if len(review_events) >= 20:
+            break
+
+    counts = {
+        "partial_fill_count": sum(row["result"] == "partial_fill_confirmed" for row in rows),
+        "reconciled_count": sum(row["status"] == "reconciled" for row in rows),
+        "awaiting_history_count": sum(row["result"] == "awaiting_broker_history" for row in rows),
+        "unknown_count": sum(row["status"] == "unknown" for row in rows),
+        "manual_review_count": len(review_events),
+    }
+    return {
+        "status": "review_required" if review_events else (
+            "observing" if rows else "awaiting_demo_activity"
+        ),
+        "intents_checked": len(rows),
+        "counts": counts,
+        "intents": rows,
+        "manual_review_events": review_events,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/operations", include_in_schema=False)
 def dashboard_operations():
     """Safe read-only operations summary for the local dashboard; no admin secrets or mutations."""
