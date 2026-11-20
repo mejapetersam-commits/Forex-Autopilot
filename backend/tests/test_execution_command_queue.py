@@ -153,3 +153,42 @@ def test_operational_summary_counts_and_redacts_command_payload(tmp_path):
     assert item["command_id"] == "summary-command"
     assert "payload_json" not in item
     assert "private_note" not in str(item)
+
+def test_conflicting_duplicate_terminal_result_is_rejected(tmp_path):
+    queue = make_queue(tmp_path)
+    queue.enqueue_approved_intent(
+        command_id="c-conflict", intent_id="i-conflict", payload=command_payload(),
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-a")
+    accepted = {"intent_id": "i-conflict", "broker_order_id": "123"}
+    queue.record_result(
+        "c-conflict", terminal_id="terminal-a", outcome="acknowledged",
+        result=accepted, expected_intent_id="i-conflict",
+    )
+    with pytest.raises(ValueError, match="Conflicting duplicate"):
+        queue.record_result(
+            "c-conflict", terminal_id="terminal-a", outcome="rejected",
+            result={"intent_id": "i-conflict", "reason": "late contradictory callback"},
+            expected_intent_id="i-conflict",
+        )
+
+
+def test_duplicate_terminal_result_must_match_immutable_intent(tmp_path):
+    queue = make_queue(tmp_path)
+    queue.enqueue_approved_intent(
+        command_id="c-intent-bind", intent_id="i-original", payload=command_payload(),
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-a")
+    accepted = {"intent_id": "i-original", "broker_order_id": "456"}
+    queue.record_result(
+        "c-intent-bind", terminal_id="terminal-a", outcome="acknowledged",
+        result=accepted, expected_intent_id="i-original",
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        queue.record_result(
+            "c-intent-bind", terminal_id="terminal-a", outcome="acknowledged",
+            result={"intent_id": "i-forged", "broker_order_id": "456"},
+            expected_intent_id="i-forged",
+        )
