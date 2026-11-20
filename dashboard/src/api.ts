@@ -390,6 +390,25 @@ export interface ExecutionReconciliationResponse {
     unknown_count: number;
     manual_review_count: number;
   };
+  order_counts: { total: number; pending: number; terminal: number };
+  broker_orders: Array<{
+    order_ticket: string;
+    terminal_id: string;
+    environment: string;
+    server: string;
+    symbol: string;
+    order_type: string;
+    state: string;
+    initial_volume: number;
+    current_volume: number;
+    price: number;
+    stop_loss: number;
+    take_profit: number;
+    magic: number;
+    setup_at: string;
+    done_at: string | null;
+    observed_at: string;
+  }>;
   intents: Array<{
     intent_id: string;
     status: string;
