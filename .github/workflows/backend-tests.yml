@@ -53,6 +53,12 @@ jobs:
         working-directory: .
         run: docker build -f backend/Dockerfile -t forex-autopilot-api:test backend
 
+      - name: Validate Docker Compose configuration
+        working-directory: .
+        env:
+          FOREX_AUTOPILOT_BRIDGE_TOKEN: ci-placeholder-token-that-is-not-used-for-trading
+        run: docker compose config --quiet
+
   dashboard:
     name: Dashboard production build
     runs-on: ubuntu-latest
