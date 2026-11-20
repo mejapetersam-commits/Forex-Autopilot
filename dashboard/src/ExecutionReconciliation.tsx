@@ -20,7 +20,7 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
   return <section className="panel">
     <div className="section-head">
       <div><div className="eyebrow">EXECUTION HISTORY</div><h2>Broker fills & reconciliation</h2><p className="subhead">Read-only evidence from durable intent audits and authenticated demo broker history.</p></div>
-      <Status good={data?.status !== "review_required"}>{data?.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status>
+      <Status good={Boolean(data && data.status !== "review_required")}>{data?.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status>
     </div>
     <div className="metrics">
       <Metric label="PARTIAL FILLS" value={String(data?.counts.partial_fill_count ?? "—")} detail="Awaiting additional fill evidence or completion"/>
