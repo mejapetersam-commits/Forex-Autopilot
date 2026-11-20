@@ -48,7 +48,7 @@ export default function NotificationHealth() {
     <div className="connection-row">
       <div className="connection-icon"><Clock3/></div>
       <div className="connection-copy"><b>Oldest due notification</b><span>{relativeAge(delivery?.oldest_due_age_seconds ?? null)} waiting · {delivery?.total ?? 0} total outbox record(s)</span></div>
-      <span className={delivery?.dead ? "signal sell" : "signal buy"}>{delivery?.dead ? "REVIEW REQUIRED" : "NO DEAD LETTERS"}</span>
+      <span className={`signal ${!data ? "neutral" : delivery?.dead ? "sell" : "buy"}`}>{!data ? "STATE UNKNOWN" : delivery?.dead ? "REVIEW REQUIRED" : "NO DEAD LETTERS"}</span>
     </div>
     <h3 className="subsection-title">Active health alerts</h3>
     {(data?.active_alerts ?? []).map(alert => <div className="alert-row" key={alert.alert_key}>
