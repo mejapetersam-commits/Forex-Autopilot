@@ -32,6 +32,7 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       <Metric label="BROKER ORDERS" value={String(data?.order_counts.total ?? "—")} detail="Recent broker-reported demo orders"/>
       <Metric label="PENDING ORDERS" value={String(data?.order_counts.pending ?? "—")} detail="Includes placed and partial order states"/>
       <Metric label="TERMINAL ORDERS" value={String(data?.order_counts.terminal ?? "—")} detail="Filled, cancelled, rejected or expired"/>
+      <Metric label="MANUAL REVIEW" value={String(data?.counts.manual_review_count ?? "—")} detail="Broker evidence exceptions requiring review"/>
     </div>
     {Boolean(data?.manual_review_events.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{data?.manual_review_events.length} broker reconciliation exception(s) require manual review. Check broker order/deal history before any separate operator action.</span><b>REVIEW</b></div>}
     <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
