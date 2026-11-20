@@ -20,7 +20,12 @@ export default function StrategyComparison() {
     catch (err) { setError(err instanceof Error ? err.message : "Comparison request failed"); }
     finally { setLoading(false); }
   }
-  async function qualify(item: {symbol:string; timeframe:string}) {\n    setQualifying(item.symbol + item.timeframe); setError(""); setQualification(null);\n    try { setQualification(await getStrategyQualification(item.symbol, item.timeframe)); }\n    catch (err) { setError(err instanceof Error ? err.message : "Qualification request failed"); }\n    finally { setQualifying(null); }\n  }\n  const ranked = [...(data?.items ?? [])].sort((a,b) =>
+  async function qualify(item: {symbol:string; timeframe:string}) {
+    setQualifying(item.symbol + item.timeframe); setError(""); setQualification(null);
+    try { setQualification(await getStrategyQualification(item.symbol, item.timeframe)); }
+    catch (err) { setError(err instanceof Error ? err.message : "Qualification request failed"); }
+    finally { setQualifying(null); }
+  }
     (a.research_rank ?? 999) - (b.research_rank ?? 999)
   );
   return <section className="panel strategy-comparison">
@@ -39,6 +44,7 @@ export default function StrategyComparison() {
           <td className={(item.return_pct ?? 0) >= 0 ? "positive" : "negative"}>{metric(item.return_pct,"%")}</td>
           <td>{metric(item.profit_factor,"",3)}</td><td>{metric(item.win_rate_pct,"%")}</td><td className="negative">{metric(item.max_drawdown_pct,"%")}</td><td>{item.total_trades ?? "—"}</td>
           <td><span className={`comparison-status ${statusClass(item.status)}`}>{item.status.replaceAll("_"," ")}</span>{item.gap_count > 0 && <small className="gap-note">{item.gap_count} gaps</small>}</td>
+          <td><button className="qualify-button" disabled={!!qualifying || item.candles_available < 400} onClick={() => void qualify(item)}>{qualifying === item.symbol + item.timeframe ? "Checking…" : "Qualify"}</button></td>
           <td><button className="qualify-button" disabled={!!qualifying || item.candles_available < 400} onClick={() => void qualify(item)}>{qualifying === item.symbol + item.timeframe ? "Checking…" : "Qualify"}</button></td>
         </tr>)}
       </tbody></table></div>
