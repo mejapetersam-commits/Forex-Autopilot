@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -164,6 +166,18 @@ class TelemetryStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_candles_lookup
                     ON candles(symbol, timeframe, opened_at DESC);
+
+                CREATE TABLE IF NOT EXISTS candle_ingestion_batches (
+                    batch_id TEXT PRIMARY KEY,
+                    symbol TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    received_count INTEGER NOT NULL,
+                    first_candle_at TEXT NOT NULL,
+                    last_candle_at TEXT NOT NULL,
+                    ingested_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_candle_ingestion_recent
+                    ON candle_ingestion_batches(symbol, timeframe, ingested_at DESC);
                 """
             )
             execution_columns = {
@@ -405,7 +419,48 @@ class TelemetryStore:
                     tick_volume=excluded.tick_volume""",
                 rows,
             )
+            ingested_at = datetime.now(timezone.utc).isoformat()
+            for payload in batches:
+                opened = sorted(candle.opened_at for candle in payload.candles)
+                connection.execute(
+                    """INSERT INTO candle_ingestion_batches(
+                        batch_id, symbol, timeframe, received_count,
+                        first_candle_at, last_candle_at, ingested_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (str(uuid.uuid4()), payload.symbol, payload.timeframe,
+                     len(payload.candles), opened[0].isoformat(),
+                     opened[-1].isoformat(), ingested_at),
+                )
         return counts
+
+    def candle_ingestion_summary(self, *, limit: int = 100) -> dict[str, Any]:
+        """Return recent bulk-ingestion receipts and per-series upload aggregates."""
+        safe_limit = min(max(int(limit), 1), 500)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT batch_id, symbol, timeframe, received_count,
+                          first_candle_at, last_candle_at, ingested_at
+                   FROM candle_ingestion_batches
+                   ORDER BY ingested_at DESC, rowid DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+            totals = connection.execute(
+                """SELECT symbol, timeframe, COUNT(*) AS batch_count,
+                          SUM(received_count) AS candles_received,
+                          MAX(ingested_at) AS last_ingested_at,
+                          MAX(last_candle_at) AS latest_candle_at
+                   FROM candle_ingestion_batches
+                   GROUP BY symbol, timeframe
+                   ORDER BY symbol, timeframe"""
+            ).fetchall()
+        return {
+            "recent_batches": [dict(row) for row in rows],
+            "series": [dict(row) for row in totals],
+            "batch_count": len(rows),
+            "series_count": len(totals),
+            "read_only": True,
+            "trading_enabled": False,
+        }
 
     def candle_history(
         self, symbol: str, timeframe: str, limit: int = 500
