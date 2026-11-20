@@ -103,7 +103,14 @@ days. The snapshots live in the separate telemetry_backups Docker volume.
 ```bash
 docker compose logs --tail=100 telemetry-backup
 docker compose exec telemetry-backup python -m app.operations.backup verify --backup /var/backups/forex-autopilot/telemetry-YYYYMMDDTHHMMSSZ.sqlite3
+docker compose exec telemetry-backup python -m app.operations.backup inventory --directory /var/backups/forex-autopilot --max-age-hours 48
 ```
+
+A successful inventory reports the newest verified snapshot, its age, the
+number of verified and invalid snapshots, and whether a verified recovery point
+falls within the requested age window. A missing or stale recovery point requires
+operator attention. Corrupt snapshots are reported and are never removed by
+inventory. The inventory command is read-only; it does not restore a database.
 
 The named volume protects against ordinary application/container replacement,
 but it is not a substitute for encrypted off-device copies. Include this volume
