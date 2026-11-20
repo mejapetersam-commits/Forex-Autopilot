@@ -1,3 +1,4 @@
+import sqlite3
 import pytest
 
 from app.execution.command_queue import ExecutionCommandQueue
