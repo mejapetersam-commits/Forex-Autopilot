@@ -35,16 +35,51 @@ export default function App() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, r, e, p, ops] = await Promise.all([getOverview(), getResearch(), getOperationalEvents(), getPortfolio(), getDashboardOperations()]);
-      setOverview(o);
-      setResearch(r.items ?? []);
-      setEvents(e.items ?? []);
-      setPortfolio(p);
-      setOperations(ops);
-      setLastUpdated(new Date().toISOString());
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load dashboard data");
+      // Keep each dashboard panel independent: one unavailable endpoint must
+      // not hide otherwise healthy broker, research, or operations telemetry.
+      const results = await Promise.all([
+        getOverview().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getResearch().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getOperationalEvents().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getPortfolio().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getDashboardOperations().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+      ]);
+
+      const failures: string[] = [];
+      let successes = 0;
+      const describeFailure = (section: string, error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        failures.push(`${section}: ${detail}`);
+      };
+
+      const [overviewResult, researchResult, eventsResult, portfolioResult, operationsResult] = results;
+      if (overviewResult.ok) {
+        setOverview(overviewResult.value);
+        successes++;
+      } else describeFailure("Overview", overviewResult.error);
+
+      if (researchResult.ok) {
+        setResearch(researchResult.value.items ?? []);
+        successes++;
+      } else describeFailure("Research", researchResult.error);
+
+      if (eventsResult.ok) {
+        setEvents(eventsResult.value.items ?? []);
+        successes++;
+      } else describeFailure("Events", eventsResult.error);
+
+      if (portfolioResult.ok) {
+        setPortfolio(portfolioResult.value);
+        successes++;
+      } else describeFailure("Portfolio", portfolioResult.error);
+
+      if (operationsResult.ok) {
+        setOperations(operationsResult.value);
+        successes++;
+      } else describeFailure("Operations", operationsResult.error);
+
+      if (successes > 0) setLastUpdated(new Date().toISOString());
+      setError(failures.length ? `Some dashboard sections could not refresh — ${failures.join("; ")}` : "");
     } finally {
       setLoading(false);
     }
