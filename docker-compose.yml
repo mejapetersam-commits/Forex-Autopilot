@@ -23,6 +23,8 @@ services:
     user: "10001:10001"
     command: ["python", "-m", "app.operations.backup_scheduler"]
     depends_on:
+      api:
+        condition: service_healthy
       telemetry-volume-init:
         condition: service_completed_successfully
       backup-volume-init:
