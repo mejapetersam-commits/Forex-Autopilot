@@ -231,6 +231,48 @@ def run_backtest(
         equity_curve_points.append({"time": bar.get("opened_at"), "equity": round(equity, 2), "event": exit_reason})
         position = None
 
+    # Reconstruct a per-candle mark-to-market curve after the trade simulation.
+    # Unrealised exits are estimated at candle close with the same spread/slippage
+    # and round-turn commission assumptions; this remains OHLC research, not tick data.
+    mark_to_market_curve = [{
+        "time": rows[warmup - 1].get("opened_at"),
+        "equity": round(settings.initial_equity, 2),
+        "drawdown_pct": 0.0,
+    }]
+    mark_peak = settings.initial_equity
+    for candle_index in range(warmup, len(rows)):
+        candle = rows[candle_index]
+        close_price = float(candle["close"])
+        marked_equity = settings.initial_equity
+        for trade in trades:
+            if trade["exit_index"] <= candle_index:
+                marked_equity += float(trade["net_pnl"])
+            elif trade["entry_index"] <= candle_index < trade["exit_index"]:
+                side = trade["side"]
+                estimated_exit = (
+                    close_price - (spread / 2 + slippage)
+                    if side == "buy"
+                    else close_price + (spread / 2 + slippage)
+                )
+                delta = (
+                    estimated_exit - float(trade["entry_price"])
+                    if side == "buy"
+                    else float(trade["entry_price"]) - estimated_exit
+                )
+                gross = delta / settings.pip_size * settings.pip_value_per_lot * float(trade["lots"])
+                commission_cost = 2 * settings.commission_per_lot_per_side * float(trade["lots"])
+                marked_equity += gross - commission_cost
+        mark_peak = max(mark_peak, marked_equity)
+        mark_dd = (mark_peak - marked_equity) / mark_peak * 100 if mark_peak > 0 else 0.0
+        mark_to_market_curve.append({
+            "time": candle.get("opened_at"),
+            "equity": round(marked_equity, 2),
+            "drawdown_pct": round(mark_dd, 4),
+        })
+    mark_to_market_max_drawdown_pct = max(
+        (point["drawdown_pct"] for point in mark_to_market_curve), default=0.0
+    )
+
     pnls = [trade["net_pnl"] for trade in trades]
     wins = [pnl for pnl in pnls if pnl > 0]
     losses = [pnl for pnl in pnls if pnl < 0]
@@ -284,6 +326,8 @@ def run_backtest(
         },
         "trades": trades,
         "equity_curve": equity_curve_points,
+        "mark_to_market_equity_curve": mark_to_market_curve,
+        "mark_to_market_max_drawdown_pct": round(mark_to_market_max_drawdown_pct, 4),
         "execution_enabled": False,
         "research_status": "historical_simulation_not_a_profitability_guarantee",
     }
