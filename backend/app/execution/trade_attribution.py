@@ -149,7 +149,7 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
         state["volume"] -= close_volume
         state["last_at"] = deal["occurred_at"]
         if state["volume"] <= EPSILON:
-            finish(state, deal["occurred_at"])
+            finish(state, deal["occurred_at"], deal["deal_ticket"])
             positions.pop(key, None)
 
     open_positions = [
