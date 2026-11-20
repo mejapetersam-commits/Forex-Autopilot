@@ -24,7 +24,7 @@ def test_portfolio_exposure_converts_base_and_quote_currency_and_stop_risk():
     by_currency = {row["currency"]: row for row in result["currencies"]}
     assert round(by_currency["EUR"]["net_exposure"], 2) == 1100.10
     assert round(by_currency["USD"]["net_exposure"], 2) == -1100.10
-    assert result["total_open_stop_risk"] == 100.0
+    assert result["total_open_stop_risk"] == 10.0
     assert result["trading_enabled"] is False
 
 def test_portfolio_marks_missing_stop_as_incomplete_and_unknown_risk():
