@@ -418,6 +418,8 @@ export interface ExecutionReconciliationResponse {
     broker_order_id: string | null;
     result: string;
     filled_volume_lots: number;
+    remaining_volume_lots: number | null;
+    fill_progress_pct: number | null;
     average_fill_price: number | null;
     fill_details: Array<{
       deal_ticket: string;
