@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, getRecoveryStatus, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations, type RecoveryStatusResponse } from "./api";
+import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, getRecoveryStatus, getExecutionReconciliation, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations, type RecoveryStatusResponse, type ExecutionReconciliationResponse } from "./api";
 import StrategyPerformance from "./StrategyPerformance";
 import StrategyComparison from "./StrategyComparison";
 import DemoObservation from "./DemoObservation";
 import TradeAttribution from "./TradeAttribution";
+import ExecutionReconciliation from "./ExecutionReconciliation";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -29,6 +30,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [operations, setOperations] = useState<DashboardOperations | null>(null);
   const [recovery, setRecovery] = useState<RecoveryStatusResponse | null>(null);
+  const [executionReconciliation, setExecutionReconciliation] = useState<ExecutionReconciliationResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -45,6 +47,7 @@ export default function App() {
         getPortfolio().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
         getDashboardOperations().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
         getRecoveryStatus().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getExecutionReconciliation().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
       ]);
 
       const failures: string[] = [];
@@ -54,7 +57,7 @@ export default function App() {
         failures.push(`${section}: ${detail}`);
       };
 
-      const [overviewResult, researchResult, eventsResult, portfolioResult, operationsResult, recoveryResult] = results;
+      const [overviewResult, researchResult, eventsResult, portfolioResult, operationsResult, recoveryResult, executionReconciliationResult] = results;
       if (overviewResult.ok) {
         setOverview(overviewResult.value);
         successes++;
@@ -84,6 +87,11 @@ export default function App() {
         setRecovery(recoveryResult.value);
         successes++;
       } else describeFailure("Recovery", recoveryResult.error);
+
+      if (executionReconciliationResult.ok) {
+        setExecutionReconciliation(executionReconciliationResult.value);
+        successes++;
+      } else describeFailure("Execution reconciliation", executionReconciliationResult.error);
 
       if (successes > 0) setLastUpdated(new Date().toISOString());
       setError(failures.length ? `Some dashboard sections could not refresh — ${failures.join("; ")}` : "");
@@ -207,6 +215,8 @@ export default function App() {
       </tbody></table></div>
       <p className="subhead">A verified local backup is not an off-device backup. Quarantined commands require broker-history reconciliation and are never automatically redelivered.</p>
     </section>
+
+    <ExecutionReconciliation data={executionReconciliation} />
 
     <section className="panel">
       <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
