@@ -191,3 +191,31 @@ export interface StrategyPerformanceResponse {
 }
 export const getStrategyPerformance = (symbol: string, timeframe: string, walkForward = false) =>
   getJson<StrategyPerformanceResponse>(`/api/v1/dashboard/strategy-performance?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&include_walk_forward=${walkForward}`);
+
+export interface StrategyComparisonItem {
+  symbol: string;
+  timeframe: string;
+  candles_available: number;
+  data_quality: string;
+  gap_count: number;
+  status: string;
+  research_rank?: number;
+  return_pct?: number | null;
+  total_trades?: number | null;
+  win_rate_pct?: number | null;
+  profit_factor?: number | null;
+  max_drawdown_pct?: number | null;
+  expectancy_per_trade?: number | null;
+  reason?: string;
+}
+export interface StrategyComparisonResponse {
+  items: StrategyComparisonItem[];
+  ranked_count: number;
+  ranking_method: string;
+  warning: string;
+  trading_enabled: false;
+  execution_mode: string;
+  updated_at: string;
+}
+export const getStrategyComparison = () =>
+  getJson<StrategyComparisonResponse>("/api/v1/dashboard/strategy-comparison");
