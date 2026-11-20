@@ -349,6 +349,21 @@ def dashboard_strategy_qualification(
     }
 
 
+@app.get("/api/v1/dashboard/demo-observation", include_in_schema=False)
+def dashboard_demo_observation(limit: int = Query(default=100, ge=1, le=500)):
+    """Read-only broker-confirmed demo activity; never infers missing trade PnL."""
+    summary = telemetry_store().demo_observation_summary(limit)
+    latest = summary.get("latest_terminal")
+    return {
+        **summary,
+        "status": "observing" if summary["deal_totals"]["deal_count"] else "awaiting_demo_activity",
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/strategy-comparison", include_in_schema=False)
 def dashboard_strategy_comparison(
     limit: int = Query(default=1000, ge=61, le=5000),
