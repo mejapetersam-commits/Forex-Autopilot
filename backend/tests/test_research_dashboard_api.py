@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app import main as main_module
 
 client = TestClient(app)
 TOKEN = "test-only-market-quality-token-with-32chars"
@@ -128,6 +129,7 @@ def test_dashboard_cost_sensitivity_compares_cost_multipliers_read_only(monkeypa
     monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", TOKEN)
     monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "cost-sensitivity.sqlite3"))
     monkeypatch.setenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm")
+    monkeypatch.setattr(main_module, "resolve_backtest_pip_values", lambda *args: (0.0001, 10.0, "test_fixture"))
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     candles = []
     price = 1.10
