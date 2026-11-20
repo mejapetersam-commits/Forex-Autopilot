@@ -40,6 +40,26 @@ def test_symbol_specifications_are_persisted_and_normalized(tmp_path):
     assert result["tick_value_loss"] == 1.0
 
 
+def test_older_symbol_specification_snapshot_cannot_overwrite_newer_data(tmp_path):
+    from datetime import timedelta
+
+    store = TelemetryStore(tmp_path / "spec-order.sqlite3")
+    now = datetime.now(timezone.utc)
+    newer = spec_payload()
+    newer["observed_at"] = now.isoformat()
+    newer["tick_value_profit"] = 2.5
+    older = spec_payload()
+    older["observed_at"] = (now - timedelta(minutes=5)).isoformat()
+    older["tick_value_profit"] = 1.0
+
+    store.save_symbol_specification(MT5SymbolSpecification.model_validate(newer))
+    store.save_symbol_specification(MT5SymbolSpecification.model_validate(older))
+
+    result = store.latest_symbol_specification("EURUSDm")
+    assert result["tick_value_profit"] == pytest.approx(2.5)
+    assert result["observed_at"] == now.isoformat()
+
+
 def test_symbol_specification_endpoint_requires_auth_and_persists(monkeypatch, tmp_path):
     monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", TOKEN)
     monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "spec-api.sqlite3"))
