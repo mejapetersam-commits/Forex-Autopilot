@@ -324,6 +324,15 @@ def dashboard_data_readiness(
     }
 
 
+@app.get("/api/v1/dashboard/candle-ingestion", include_in_schema=False)
+def dashboard_candle_ingestion():
+    """Read-only receipt ledger for historical candle uploads."""
+    summary = telemetry_store().candle_ingestion_summary(limit=100)
+    summary["execution_mode"] = "disabled"
+    summary["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return summary
+
+
 @app.get("/api/v1/dashboard/strategy-performance", include_in_schema=False)
 def dashboard_strategy_performance(
     symbol: str = Query(default="EURUSDm", min_length=1, max_length=32),
