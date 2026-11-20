@@ -262,13 +262,7 @@ export default function App() {
     <ExecutionReconciliation data={executionReconciliation} />
     <ReleaseReadiness data={releaseReadiness} />
 
-    <section id="events" className="panel">
-      <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
-      <div className="table-wrap"><table><thead><tr><th>TIME</th><th>SEVERITY</th><th>EVENT</th><th>DETAIL</th><th>DELIVERY</th><th>ATTEMPTS</th></tr></thead><tbody>
-        {events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
-        {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
-      </tbody></table></div>
-    </section>
+
     </details>
 
     </div>}
