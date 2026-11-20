@@ -137,6 +137,9 @@ export interface CandleIngestionSeries {
   candles_received: number;
   last_ingested_at: string;
   latest_candle_at: string;
+  unique_candles_stored: number;
+  first_stored_candle_at: string | null;
+  latest_stored_candle_at: string | null;
 }
 export interface CandleIngestionResponse {
   recent_batches: CandleIngestionBatch[];
