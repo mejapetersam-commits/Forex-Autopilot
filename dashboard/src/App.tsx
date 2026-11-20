@@ -52,6 +52,11 @@ export default function App() {
   const [researchReadiness, setResearchReadiness] = useState("all");
   const [researchSignal, setResearchSignal] = useState("all");
   const [researchSort, setResearchSort] = useState("symbol");
+  const [positionSearch, setPositionSearch] = useState("");
+  const [positionSide, setPositionSide] = useState("all");
+  const [positionSort, setPositionSort] = useState("symbol");
+  const [currencySearch, setCurrencySearch] = useState("");
+  const [currencySort, setCurrencySort] = useState("gross");
   const notificationCloseRef = useRef<HTMLButtonElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -182,6 +187,25 @@ export default function App() {
     if (researchSort === "gaps") return a.gap_count - b.gap_count;
     return a.symbol.localeCompare(b.symbol) || a.timeframe.localeCompare(b.timeframe);
   });
+  const filteredPositions = (portfolio?.positions ?? []).filter(position => {
+    const query = positionSearch.trim().toLowerCase();
+    const matchesSearch = !query || [position.ticket, position.symbol, position.side].some(value => String(value ?? "").toLowerCase().includes(query));
+    const matchesSide = positionSide === "all" || position.side.toLowerCase() === positionSide;
+    return matchesSearch && matchesSide;
+  });
+  const sortedPositions = [...filteredPositions].sort((a, b) => {
+    if (positionSort === "volume") return b.volume_lots - a.volume_lots;
+    if (positionSort === "notional") return b.notional_account_currency - a.notional_account_currency;
+    if (positionSort === "risk") return (b.estimated_stop_risk ?? -1) - (a.estimated_stop_risk ?? -1);
+    return a.symbol.localeCompare(b.symbol) || a.ticket.localeCompare(b.ticket);
+  });
+  const filteredCurrencies = (portfolio?.currencies ?? []).filter(item => item.currency.toLowerCase().includes(currencySearch.trim().toLowerCase()));
+  const sortedCurrencies = [...filteredCurrencies].sort((a, b) => {
+    if (currencySort === "net") return Math.abs(b.net_exposure) - Math.abs(a.net_exposure);
+    if (currencySort === "ratio") return b.gross_exposure_pct_equity - a.gross_exposure_pct_equity;
+    if (currencySort === "currency") return a.currency.localeCompare(b.currency);
+    return b.gross_exposure - a.gross_exposure;
+  });
   const filteredEvents = events.filter(event => {
     const query = eventSearch.trim().toLowerCase();
     const matchesQuery = !query || [event.event_type, event.message, event.delivery_status, event.severity].some(value => String(value ?? "").toLowerCase().includes(query));
@@ -299,15 +323,31 @@ export default function App() {
         <Metric label="CURRENCY PAIRS" value={String(portfolio?.currencies.length ?? 0)} detail="Currencies with calculated exposure"/>
       </div>
       {Boolean(portfolio?.reasons?.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{portfolio?.reasons?.join(" · ")}</span></div>}
+      <div className="portfolio-block-head"><div><h3>Currency exposure</h3><p>Ranked using the broker-reported portfolio snapshot.</p></div><span className="market-count">{filteredCurrencies.length} of {portfolio?.currencies.length ?? 0} currencies</span></div>
+      <div className="market-tools" aria-label="Currency exposure filters">
+        <label className="market-search"><span>FIND CURRENCY</span><input type="search" value={currencySearch} onChange={event => setCurrencySearch(event.target.value)} placeholder="Search currency, e.g. USD"/></label>
+        <label className="market-filter"><span>SORT EXPOSURE</span><select value={currencySort} onChange={event => setCurrencySort(event.target.value)}><option value="gross">Highest gross</option><option value="net">Largest net</option><option value="ratio">Gross / equity</option><option value="currency">Currency A–Z</option></select></label>
+        {(currencySearch || currencySort !== "gross") && <button className="event-reset" type="button" onClick={() => {setCurrencySearch("");setCurrencySort("gross");}}>Clear</button>}
+      </div>
       <div className="table-wrap"><table><thead><tr><th>CURRENCY</th><th>NET EXPOSURE</th><th>GROSS EXPOSURE</th><th>GROSS / EQUITY</th></tr></thead><tbody>
-        {portfolio?.currencies.map(item => <tr key={item.currency}><td className="symbol">{item.currency}</td><td>{money(item.net_exposure, portfolio.account_currency ?? "USD")}</td><td>{money(item.gross_exposure, portfolio.account_currency ?? "USD")}</td><td>{item.gross_exposure_pct_equity.toFixed(2)}%</td></tr>)}
+        {sortedCurrencies.map(item => <tr key={item.currency}><td className="symbol">{item.currency}</td><td>{money(item.net_exposure, portfolio?.account_currency ?? "USD")}</td><td>{money(item.gross_exposure, portfolio?.account_currency ?? "USD")}</td><td>{Number.isFinite(item.gross_exposure_pct_equity) ? item.gross_exposure_pct_equity.toFixed(2) + "%" : "—"}</td></tr>)}
         {!portfolio?.currencies.length && <tr><td colSpan={4} className="empty">No current position exposure to report.</td></tr>}
+        {Boolean(portfolio?.currencies.length) && !sortedCurrencies.length && <tr><td colSpan={4} className="empty">No currencies match this search.</td></tr>}
       </tbody></table></div>
+      <div className="portfolio-block-head"><div><h3>Open positions</h3><p>Filter and sort the positions received from the broker.</p></div><span className="market-count">{filteredPositions.length} of {portfolio?.positions.length ?? 0} positions</span></div>
+      <div className="market-tools" aria-label="Open position filters">
+        <label className="market-search"><span>SEARCH POSITIONS</span><input type="search" value={positionSearch} onChange={event => setPositionSearch(event.target.value)} placeholder="Find symbol, ticket or side"/></label>
+        <label className="market-filter"><span>SIDE</span><select value={positionSide} onChange={event => setPositionSide(event.target.value)}><option value="all">All sides</option><option value="buy">Buy only</option><option value="sell">Sell only</option></select></label>
+        <label className="market-filter"><span>SORT BY</span><select value={positionSort} onChange={event => setPositionSort(event.target.value)}><option value="symbol">Instrument A–Z</option><option value="volume">Largest volume</option><option value="notional">Largest notional</option><option value="risk">Highest known stop risk</option></select></label>
+        {(positionSearch || positionSide !== "all" || positionSort !== "symbol") && <button className="event-reset" type="button" onClick={() => {setPositionSearch("");setPositionSide("all");setPositionSort("symbol");}}>Clear</button>}
+      </div>
       <div className="table-wrap"><table><thead><tr><th>TICKET</th><th>INSTRUMENT</th><th>SIDE</th><th>VOLUME</th><th>NOTIONAL</th><th>STOP RISK</th></tr></thead><tbody>
-        {portfolio?.positions.map(position => <tr key={position.ticket}><td>{position.ticket}</td><td className="symbol">{position.symbol}</td><td>{position.side.toUpperCase()}</td><td>{position.volume_lots.toFixed(2)}</td><td>{money(position.notional_account_currency, portfolio.account_currency ?? "USD")}</td><td>{position.estimated_stop_risk == null ? "UNKNOWN" : money(position.estimated_stop_risk, portfolio.account_currency ?? "USD")}</td></tr>)}
+        {sortedPositions.map(position => <tr key={position.ticket}><td>{position.ticket}</td><td className="symbol">{position.symbol}</td><td>{position.side.toUpperCase()}</td><td>{position.volume_lots.toFixed(2)}</td><td>{money(position.notional_account_currency, portfolio?.account_currency ?? "USD")}</td><td>{position.estimated_stop_risk == null ? "UNKNOWN" : money(position.estimated_stop_risk, portfolio?.account_currency ?? "USD")}</td></tr>)}
         {!portfolio?.positions.length && <tr><td colSpan={6} className="empty">No open positions reported.</td></tr>}
+        {Boolean(portfolio?.positions.length) && !sortedPositions.length && <tr><td colSpan={6} className="empty">No positions match these filters.</td></tr>}
       </tbody></table></div>
-      <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
+      <div className="portfolio-footnote"><span>Portfolio snapshot updated</span><b>{portfolio?.updated_at ? stamp(portfolio.updated_at) : "Not yet reported"}</b></div>
+      <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. Unknown stop risk remains unknown; this panel does not approve or place trades.</p>
     </section>}
 
     {page === "market" && <div id="data" className="dashboard-group">
