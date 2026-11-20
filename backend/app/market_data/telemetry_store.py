@@ -207,6 +207,29 @@ class TelemetryStore:
                  payload.observed_at.isoformat(), payload.daily_loss_pct, encoded),
             )
 
+    def recent_execution_states(self, limit: int = 2) -> list[dict[str, Any]]:
+        """Return newest execution snapshots, newest first, with linked deal evidence."""
+        safe_limit = min(max(int(limit), 1), 10)
+        import json
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT terminal_id, environment, server, observed_at,
+                          daily_loss_pct, payload_json
+                   FROM execution_state_snapshots
+                   ORDER BY observed_at DESC, id DESC LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+        snapshots = []
+        for row in rows:
+            item = dict(row)
+            item["positions"] = json.loads(item.pop("payload_json"))
+            for position in item["positions"]:
+                position["related_deals"] = self.execution_deals_for_position(
+                    position.get("position_id", "")
+                ) if position.get("position_id") else []
+            snapshots.append(item)
+        return snapshots
+
     def latest_execution_state(self) -> dict[str, Any] | None:
         import json
         with self._connect() as connection:
