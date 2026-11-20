@@ -43,7 +43,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-\n  api:
+
+  api:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -113,3 +114,4 @@ services:
 
 volumes:
   telemetry_data:
+  telemetry_backups:
