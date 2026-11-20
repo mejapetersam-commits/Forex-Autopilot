@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations } from "./api";
+import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, getRecoveryStatus, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations, type RecoveryStatusResponse } from "./api";
 import StrategyPerformance from "./StrategyPerformance";
 import StrategyComparison from "./StrategyComparison";
 import DemoObservation from "./DemoObservation";
@@ -28,6 +28,7 @@ export default function App() {
   const [events, setEvents] = useState<OperationalEvent[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [operations, setOperations] = useState<DashboardOperations | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryStatusResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -43,6 +44,7 @@ export default function App() {
         getOperationalEvents().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
         getPortfolio().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
         getDashboardOperations().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
+        getRecoveryStatus().then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error })),
       ]);
 
       const failures: string[] = [];
@@ -52,7 +54,7 @@ export default function App() {
         failures.push(`${section}: ${detail}`);
       };
 
-      const [overviewResult, researchResult, eventsResult, portfolioResult, operationsResult] = results;
+      const [overviewResult, researchResult, eventsResult, portfolioResult, operationsResult, recoveryResult] = results;
       if (overviewResult.ok) {
         setOverview(overviewResult.value);
         successes++;
@@ -77,6 +79,11 @@ export default function App() {
         setOperations(operationsResult.value);
         successes++;
       } else describeFailure("Operations", operationsResult.error);
+
+      if (recoveryResult.ok) {
+        setRecovery(recoveryResult.value);
+        successes++;
+      } else describeFailure("Recovery", recoveryResult.error);
 
       if (successes > 0) setLastUpdated(new Date().toISOString());
       setError(failures.length ? `Some dashboard sections could not refresh — ${failures.join("; ")}` : "");
@@ -180,6 +187,23 @@ export default function App() {
         {!operations?.lifecycle.events.length && <tr><td colSpan={3} className="empty">No new lifecycle transitions in the latest snapshot comparison.</td></tr>}
       </tbody></table></div>
       <p className="subhead">Unmatched managed positions are flagged for review, never automatically closed. A missing position is not called closed unless broker deal history confirms the full close.</p>
+    </section>
+
+    <section className="panel">
+      <div className="section-head"><div><div className="eyebrow">RECOVERY & CONTINUITY</div><h2>Backup health & command quarantine</h2><p className="subhead">Verified recovery points and commands held for broker reconciliation. This panel is read-only.</p></div><Status good={Boolean(recovery?.backups.fresh_verified_backup && recovery?.backups.invalid_count === 0)}>{recovery?.backups.status?.replaceAll("_", " ").toUpperCase() ?? "LOADING"}</Status></div>
+      <div className="metrics">
+        <Metric label="FRESH VERIFIED BACKUP" value={recovery?.backups.fresh_verified_backup ? "YES" : "NO"} detail={recovery?.backups.latest_backup_age_hours == null ? "No verified recovery point" : "Latest is " + recovery.backups.latest_backup_age_hours + " hours old"}/>
+        <Metric label="VERIFIED SNAPSHOTS" value={String(recovery?.backups.verified_count ?? "—")} detail={String(recovery?.backups.invalid_count ?? 0) + " invalid snapshots detected"}/>
+        <Metric label="QUARANTINED COMMANDS" value={String(recovery?.execution_commands.quarantined_total ?? "—")} detail="Expired or uncertain; never auto-resent"/>
+        <Metric label="QUEUED / LEASED" value={String((recovery?.execution_commands.counts.queued ?? 0) + " / " + (recovery?.execution_commands.counts.leased ?? 0))} detail="Transport queue state"/>
+      </div>
+      {recovery && !recovery.backups.fresh_verified_backup && <div className="alert-row"><AlertTriangle size={16}/><span>No recent verified backup is available. Check the backup worker, storage volume and latest backup logs.</span><b>ATTENTION</b></div>}
+      {Boolean(recovery?.backups.invalid_count) && <div className="alert-row"><AlertTriangle size={16}/><span>{recovery?.backups.invalid_count} invalid or future-dated backup snapshot(s) need operator review. They are not automatically deleted.</span><b>REVIEW</b></div>}
+      <div className="table-wrap"><table><thead><tr><th>COMMAND</th><th>INTENT</th><th>STATUS</th><th>ATTEMPTS</th><th>TERMINAL</th><th>CREATED</th></tr></thead><tbody>
+        {recovery?.execution_commands.quarantined.map(command => <tr key={command.command_id}><td className="symbol">{command.command_id}</td><td>{command.intent_id}</td><td><Status good={false}>{command.status.toUpperCase()}</Status></td><td>{command.attempts}</td><td>{command.terminal_id ?? "—"}</td><td>{stamp(command.created_at)}</td></tr>)}
+        {!recovery?.execution_commands.quarantined.length && <tr><td colSpan={6} className="empty">No expired or uncertain execution commands are currently quarantined.</td></tr>}
+      </tbody></table></div>
+      <p className="subhead">A verified local backup is not an off-device backup. Quarantined commands require broker-history reconciliation and are never automatically redelivered.</p>
     </section>
 
     <section className="panel">
