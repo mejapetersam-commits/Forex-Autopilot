@@ -533,7 +533,7 @@ def dashboard_execution_reconciliation(
         details = latest["details"] if latest else {}
         payload = intent.get("payload", {})
         requested_volume = payload.get("volume_lots")
-        filled_volume = details.get("filled_volume_lots", 0.0)
+        filled_volume = details.get("filled_volume_lots")
         try:
             requested_number = float(requested_volume)
             filled_number = float(filled_volume)
