@@ -285,6 +285,8 @@ export const getDemoObservation = () => getJson<DemoObservationResponse>("/api/v
 export interface TradeAttributionResponse {
   status: string;
   deal_count: number;
+  history_start: string | null;
+  history_end: string | null;
   closed_trade_count: number;
   pnl_complete_trade_count: number;
   pnl_incomplete_trade_count: number;
