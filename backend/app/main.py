@@ -211,6 +211,38 @@ def dashboard_overview():
     }
 
 
+@app.get("/api/v1/dashboard/broker-specifications", include_in_schema=False)
+def dashboard_broker_specifications():
+    """Expose sanitized, read-only broker contract metadata for operator review."""
+    store = telemetry_store()
+    now = datetime.now(timezone.utc)
+    items = []
+    for specification in store.latest_symbol_specifications():
+        observed_at = specification.get("observed_at")
+        age_seconds = None
+        if observed_at:
+            try:
+                observed = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
+                if observed.tzinfo is not None and observed.utcoffset() is not None:
+                    age = (now - observed.astimezone(timezone.utc)).total_seconds()
+                    if age >= -5:
+                        age_seconds = round(max(0.0, age), 1)
+            except (TypeError, ValueError):
+                pass
+        items.append({
+            **specification,
+            "age_seconds": age_seconds,
+            "fresh": age_seconds is not None and age_seconds <= 300,
+        })
+    return {
+        "items": items,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": now.isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/research", include_in_schema=False)
 def dashboard_research():
     """Local dashboard research summary; exposes no credentials or execution controls."""
