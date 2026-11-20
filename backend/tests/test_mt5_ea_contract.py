@@ -28,22 +28,29 @@ def test_mt5_ea_posts_all_backend_telemetry_routes():
 def test_mt5_ea_payload_fields_match_backend_contract():
     source = EA_SOURCE.read_text(encoding="utf-8")
     expected_fields = [
-        "\\\\"server\\\\"",
-        "\\\\"terminal_connected\\\\"",
-        "\\\\"observed_at\\\\"",
-        "\\\\"account_currency\\\\"",
-        "\\\\"balance\\\\"",
-        "\\\\"equity\\\\"",
-        "\\\\"margin\\\\"",
-        "\\\\"free_margin\\\\"",
-        "\\\\"leverage\\\\"",
-        "\\\\"symbol\\\\"",
-        "\\\\"bid\\\\"",
-        "\\\\"ask\\\\"",
-        "\\\\"timestamp\\\\"",
+        "server",
+        "terminal_connected",
+        "observed_at",
+        "account_currency",
+        "balance",
+        "equity",
+        "margin",
+        "free_margin",
+        "leverage",
+        "symbol",
+        "bid",
+        "ask",
+        "timestamp",
+        "position_id",
+        "profit",
+        "commission",
+        "swap",
+        "fee",
+        "stop_loss",
+        "take_profit",
     ]
     for field in expected_fields:
-        assert field in source
+        assert field in source, f"Missing telemetry payload field: {field}"
 
 
 def test_mt5_ea_source_contains_no_order_execution_calls():
