@@ -25,6 +25,7 @@ from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_wit
 from app.execution.command_queue import ExecutionCommandQueue
 from app.monitoring.health import assess_system_health
 from app.operations.event_outbox import EventOutbox
+from app.portfolio.telemetry import build_portfolio_exposure
 
 app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
 
@@ -245,6 +246,18 @@ def monitoring_health():
         store.latest_account(),
         store.latest_quotes(),
         stale_after_seconds=stale_after,
+    )
+
+
+@app.get("/api/v1/dashboard/portfolio", include_in_schema=False)
+def dashboard_portfolio():
+    """Read-only exposure and stop-risk estimate from fresh demo telemetry."""
+    store = telemetry_store()
+    return build_portfolio_exposure(
+        execution_state=store.latest_execution_state(),
+        account=store.latest_account(),
+        quotes=store.latest_quotes(),
+        specifications=store.latest_symbol_specifications(),
     )
 
 
