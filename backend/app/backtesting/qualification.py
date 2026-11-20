@@ -37,8 +37,13 @@ def evaluate_strategy_qualification(
         reasons.append(f"Mean out-of-sample profit factor must be at least {minimum_profit_factor:.2f}.")
     if worst_dd is None or float(worst_dd) > maximum_drawdown_pct:
         reasons.append(f"Worst out-of-sample drawdown must not exceed {maximum_drawdown_pct:.2f}%.")
-    if data_quality.get("status") != "healthy" or data_quality.get("issue_count", 0):
+    issue_count = data_quality.get("issue_count")
+    if issue_count is None:
+        issue_count = len(data_quality.get("issues") or [])
+    if data_quality.get("status") != "healthy" or issue_count:
         reasons.append("Candle quality must be healthy with no reported issues.")
+    if data_quality.get("ready_for_research") is False:
+        reasons.append("Historical candle coverage has not met the research minimum.")
 
     if walk_forward.get("status") == "insufficient_data" or len(valid_folds) < 2 or total_trades < minimum_oos_trades:
         status = "insufficient_evidence"
