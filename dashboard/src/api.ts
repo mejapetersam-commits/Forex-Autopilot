@@ -243,6 +243,7 @@ export interface DemoObservationResponse {
   status: string;
   deal_totals: {
     deal_count: number;
+    cash_complete_deal_count: number;
     terminal_count: number;
     strategy_magic_count: number;
     first_deal_at: string | null;
@@ -272,7 +273,7 @@ export interface DemoObservationResponse {
     reported_open_positions: number;
     daily_loss_pct_estimate: number;
   };
-  pnl_available: false;
+  pnl_available: boolean;
   limitations: string[];
   execution_mode: string;
   trading_enabled: false;
