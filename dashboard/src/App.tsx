@@ -358,10 +358,18 @@ export default function App() {
       </details>
     </div>}
 
-    {page === "system" && <div className="dashboard-group">
-      <div className="group-heading"><div className="eyebrow">SYSTEM CONFIGURATION</div><h2>Broker & notification services</h2><p>Reference specifications and delivery health from connected services.</p></div>
-      <BrokerSpecifications />
-      <NotificationHealth />
+    {page === "system" && <div className="dashboard-group system-workspace">
+      <div className="group-heading"><div className="eyebrow">SYSTEM CONFIGURATION</div><h2>Broker & notification services</h2><p>A live operational view of terminal connectivity, telemetry freshness, broker reference data and the event pipeline.</p></div>
+      <div className="system-status-grid">
+        <article className={overview?.bridge_connected ? "system-status-card pass" : "system-status-card attention"}><span>MT5 BRIDGE</span><b>{overview ? (overview.bridge_connected ? "CONNECTED" : "DISCONNECTED") : "LOADING"}</b><small>{overview?.environment ? "Environment: " + overview.environment : "Awaiting environment report"}</small></article>
+        <article className={overview?.heartbeat?.fresh ? "system-status-card pass" : "system-status-card attention"}><span>TERMINAL HEARTBEAT</span><b>{overview?.heartbeat ? (overview.heartbeat.fresh ? "FRESH" : "STALE") : "NOT REPORTED"}</b><small>{overview?.heartbeat?.age_seconds != null ? Math.round(overview.heartbeat.age_seconds) + " seconds since last heartbeat" : "No heartbeat age available"}</small></article>
+        <article className={overview?.account?.fresh ? "system-status-card pass" : "system-status-card attention"}><span>ACCOUNT TELEMETRY</span><b>{overview?.account ? (overview.account.fresh ? "FRESH" : "STALE") : "NOT REPORTED"}</b><small>{overview?.account?.observed_at ? "Observed " + stamp(overview.account.observed_at) : "No account snapshot timestamp"}</small></article>
+        <article className={(overview?.quotes?.length ?? 0) > 0 && (overview?.quotes ?? []).every(quote => quote.fresh) ? "system-status-card pass" : "system-status-card attention"}><span>MARKET QUOTES</span><b>{overview ? (overview.quotes.filter(quote => quote.fresh).length + " / " + overview.quotes.length + " FRESH") : "LOADING"}</b><small>Fresh quotes / reported symbols</small></article>
+      </div>
+      <div className="system-section-list">
+        <details className="dashboard-accordion" open><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Broker specifications</b><small>Contract sizes, tick values, volume constraints and symbol freshness</small></span><em>Reference data</em></summary><BrokerSpecifications /></details>
+        <details className="dashboard-accordion"><summary><span className="strategy-step">02</span><span className="strategy-summary-copy"><b>Notification pipeline</b><small>Outbox queue, delivery outcomes and active persisted alerts</small></span><em>Service health</em></summary><NotificationHealth /></details>
+      </div>
     </div>}
 
     {page === "strategies" && <div id="strategy" className="dashboard-group strategies-workspace">
@@ -449,7 +457,7 @@ export default function App() {
 
     </div>}
 
-    {page === "system" && <section id="events" className="panel">
+    {page === "system" && <details className="dashboard-accordion system-event-accordion"><summary><span className="strategy-step">03</span><span className="strategy-summary-copy"><b>Operations journal</b><small>Search durable events, severity and notification delivery history</small></span><em>{events.length} recent events</em></summary><section id="events" className="panel">
       <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
       <div className="event-tools">
         <label className="event-search"><span>Search events</span><input type="search" value={eventSearch} onChange={event => setEventSearch(event.target.value)} placeholder="Search message, type or delivery…" /></label>
@@ -462,7 +470,7 @@ export default function App() {
         {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
         {events.length > 0 && !filteredEvents.length && <tr><td colSpan={6} className="empty">No events match these filters. Try another search or clear the filters.</td></tr>}
       </tbody></table></div>
-    </section>}
+    </section></details>}
 
     {notificationsOpen && <div className="notification-backdrop" onClick={() => setNotificationsOpen(false)}>
       <aside className="notification-drawer" role="dialog" aria-modal="true" aria-label="System notifications" onClick={event => event.stopPropagation()}>
