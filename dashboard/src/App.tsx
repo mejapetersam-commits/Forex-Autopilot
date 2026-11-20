@@ -375,7 +375,7 @@ export default function App() {
             <p>{!recovery ? "Refresh recovery status to inspect the backup worker." : recovery.backup_worker.fresh ? "Worker heartbeat is within its reported freshness window." : "Worker heartbeat is stale or has not met its freshness threshold."}</p>
           </article>
           <article className="diagnostic-row">
-            <div><b>Verified backup</b><small>{recovery?.backups.latest_backup ? "Latest backup " + stamp(recovery.backups.latest_backup) : "No verified backup timestamp"}</small></div>
+            <div><b>Verified backup</b><small>{recovery?.backups.latest_backup ? "Latest backup " + stamp(recovery.backups.latest_backup ?? undefined) : "No verified backup timestamp"}</small></div>
             <Status good={recovery?.backups.fresh_verified_backup === true && recovery.backups.invalid_count === 0} unknown={!recovery}>{!recovery ? "UNKNOWN" : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? "VERIFIED" : "ATTENTION"}</Status>
             <p>{!recovery ? "Backup inventory has not been reported." : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? recovery.backups.verified_count + " verified snapshot(s); no invalid snapshots reported." : recovery.backups.invalid_count + " invalid snapshot(s); a fresh verified backup is not confirmed."}</p>
           </article>
