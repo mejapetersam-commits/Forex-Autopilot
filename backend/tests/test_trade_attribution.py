@@ -38,6 +38,7 @@ def test_same_second_deals_are_ordered_by_numeric_broker_ticket():
     assert result["closed_trade_count"] == 1
     assert result["pnl_complete_trade_count"] == 1
     assert result["net_realized_pnl"] == 1.0
+    assert result["closed_trades"][0]["closed_by_deal_ticket"] == "10"
 
 def test_partial_exit_does_not_finalize_remaining_position():
     rows = [
