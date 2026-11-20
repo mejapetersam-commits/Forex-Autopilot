@@ -130,3 +130,16 @@ html{scroll-behavior:smooth;scroll-padding-top:84px}
 .cost-baseline span{font:9px 'DM Mono';letter-spacing:.65px;color:#82949b}
 .cost-baseline b{font:700 20px Manrope;color:#e8edf0}
 @media(max-width:760px){.cost-baseline{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Compact dashboard groups: keep the overview visible and expand detail panels on demand */
+.dashboard-accordion{margin:0 0 18px;border:1px solid #304149;border-radius:9px;background:#142129;overflow:hidden}
+.dashboard-accordion>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 16px;color:#d3f36b;font:500 10px 'DM Mono';letter-spacing:.45px;cursor:pointer;list-style:none}
+.dashboard-accordion>summary::-webkit-details-marker{display:none}
+.dashboard-accordion>summary::after{content:'+';font:500 18px 'DM Sans';color:#d3f36b}
+.dashboard-accordion[open]>summary::after{content:'−'}
+.dashboard-accordion>summary:hover{background:#1c2c32}
+.dashboard-accordion>summary span{margin-left:auto;color:#82949b;font:10px 'DM Sans';letter-spacing:0;text-align:right}
+.dashboard-accordion[open]>summary{border-bottom:1px solid #304149}
+.dashboard-accordion>.panel{margin:14px}
+@media(max-width:600px){.dashboard-accordion>summary{align-items:flex-start;flex-wrap:wrap}.dashboard-accordion>summary span{width:100%;margin-left:0;text-align:left}}
