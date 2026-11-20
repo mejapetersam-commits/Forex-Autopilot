@@ -156,3 +156,37 @@ position; trading remains disabled.
 ## Aggregate portfolio stop-risk dispatch gate
 
 Immediately before an approved intent is queued, the API rebuilds the portfolio estimate from current MT5 execution state, account equity, quotes and symbol specifications. Dispatch is blocked unless the portfolio is healthy and complete, every open position has a valid protective stop with a supported fresh conversion, and aggregate estimated stop risk is at or below `FOREX_AUTOPILOT_MAX_PORTFOLIO_STOP_RISK_PCT` (default `0.50` percent of account equity). Unknown or stale risk is a hard denial, never treated as zero. The gate is read-only and does not change positions. This estimate uses current quotes and broker tick values; gaps, slippage, commissions, swaps and execution failures can increase realized losses. Trading remains disabled by default and live execution is prohibited.
+
+
+## Broker-reported realized P&L and trade attribution
+
+The read-only `GET /api/v1/dashboard/trade-attribution` endpoint reports
+closed demo position cycles reconstructed from broker deal history. The MT5
+telemetry EA sends each deal's `DEAL_PROFIT`, `DEAL_COMMISSION`,
+`DEAL_SWAP` and `DEAL_FEE`; these values are retained in account-currency
+units without conversion.
+
+A cycle is keyed by terminal identity plus MT5 `POSITION_IDENTIFIER`.
+Partial entry fills accumulate into the same cycle. Partial exits reduce the
+remaining volume and do not complete a cycle until the full observed exposure
+is closed. An `INOUT` reversal closes the prior direction and starts a new
+cycle for the residual reversed volume. Unmatched exits, missing position IDs,
+over-closes and inconsistent reversal volumes are surfaced as incomplete
+evidence, not silently repaired.
+
+Only closed cycles with all four cash fields present contribute to net realized
+P&L, win rate, profit factor, expectancy, average win/loss and realized
+drawdown. Open positions and cycles with legacy missing cash fields are
+excluded. The dashboard reports the number of missing cash fields, unmatched
+deals, ambiguous over-closes, open positions and incomplete cycles. Profit
+factor is left unavailable when there is no realized gross loss rather than
+presenting an infinite ratio.
+
+The latest account snapshot supplies the displayed account currency. Verify
+that snapshot belongs to the same account/server as the deal history before
+using figures for formal accounting. Magic number and symbol are grouping
+keys only; they do not independently prove strategy attribution. This
+dashboard is not an audited broker statement and does not calculate daily
+loss or unrealized P&L. Reconcile results against the Exness demo statement
+before using them for strategy decisions. No trading action is available from
+this endpoint.
