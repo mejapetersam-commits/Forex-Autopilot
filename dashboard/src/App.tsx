@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations } from "./api";
 import StrategyPerformance from "./StrategyPerformance";
+import StrategyComparison from "./StrategyComparison";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -117,6 +118,7 @@ export default function App() {
     </section>
 
     <StrategyPerformance />
+    <StrategyComparison />
 
     <section className="panel">
       <div className="section-head"><div><div className="eyebrow">EXECUTION CONTROL ROOM</div><h2>Position oversight & risk gate</h2><p className="subhead">Live demo-position reconciliation, lifecycle evidence and aggregate risk status. This view is read-only.</p></div><Status good={operations?.read_only === true && operations?.trading_enabled === false}>READ ONLY</Status></div>
