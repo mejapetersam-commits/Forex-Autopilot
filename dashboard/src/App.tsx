@@ -235,7 +235,7 @@ export default function App() {
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
       <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail="Broker-reported available margin"/>
-      <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : "No reported alerts"}/>
+      <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : overview ? "No alerts in latest health report" : "Awaiting health report"}/>
     </section>}
 
     {page === "overview" && <section className="overview-grid" aria-label="Live account and system snapshot">
@@ -273,7 +273,7 @@ export default function App() {
       <article className="panel overview-card overview-safety">
         <div className="section-head"><div><div className="eyebrow">SAFETY POSTURE</div><h2>Execution remains disabled</h2></div><ShieldCheck size={22}/></div>
         <p>This workspace is monitoring-only. It does not submit, modify, or close trades.</p>
-        <div className="safety-facts"><span>Trading enabled</span><b>No</b><span>Dashboard mode</span><b>Read only</b><span>Active alerts</span><b>{alerts.length}</b></div>
+        <div className="safety-facts"><span>Trading enabled</span><b>No</b><span>Dashboard mode</span><b>Read only</b><span>Active alerts</span><b>{overview ? alerts.length : "Unknown"}</b></div>
         <button className="text-action" type="button" onClick={() => setPage("risk")}>Review risk & safeguards →</button>
       </article>
     </section>}
@@ -474,8 +474,8 @@ export default function App() {
 
     {notificationsOpen && <div className="notification-backdrop" onClick={() => setNotificationsOpen(false)}>
       <aside className="notification-drawer" role="dialog" aria-modal="true" aria-label="System notifications" onClick={event => event.stopPropagation()}>
-        <div className="notification-head"><div><div className="eyebrow">LIVE SYSTEM MESSAGES</div><h2>Notifications</h2><p>{alerts.length} active alert{alerts.length === 1 ? "" : "s"} · refreshed with dashboard telemetry</p></div><button ref={notificationCloseRef} type="button" className="drawer-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button></div>
-        {alerts.length > 0 ? <div className="notification-list">{alerts.map((alert, index) => <article className="notification-item" key={index}><div className="notification-symbol"><AlertTriangle size={16}/></div><div><b>{alert.severity ?? "NOTICE"}</b><p>{alert.message ?? "System alert"}</p><small>Current system health report</small></div></article>)}</div> : <div className="notification-empty"><div className="notification-check"><ShieldCheck size={23}/></div><b>No active alerts reported</b><p>This means the latest health response contains no alerts. It does not replace the separate telemetry freshness checks.</p></div>}
+        <div className="notification-head"><div><div className="eyebrow">LIVE SYSTEM MESSAGES</div><h2>Notifications</h2><p>{overview ? `${alerts.length} active alert${alerts.length === 1 ? "" : "s"} · refreshed with dashboard telemetry` : "Health report not yet received"}</p></div><button ref={notificationCloseRef} type="button" className="drawer-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button></div>
+        {alerts.length > 0 ? <div className="notification-list">{alerts.map((alert, index) => <article className="notification-item" key={index}><div className="notification-symbol"><AlertTriangle size={16}/></div><div><b>{alert.severity ?? "NOTICE"}</b><p>{alert.message ?? "System alert"}</p><small>Current system health report</small></div></article>)}</div> : <div className="notification-empty"><div className="notification-check"><ShieldCheck size={23}/></div><b>{overview ? "No active alerts reported" : "Health state unknown"}</b><p>{overview ? "The latest health response contains no alerts. This does not replace the separate telemetry freshness checks." : "The dashboard has not received a health report yet. Do not treat this as a clear alert state."}</p></div>}
         <div className="notification-foot"><span>Critical alerts remain visible on the dashboard.</span><button type="button" onClick={() => { setNotificationsOpen(false); setPage("system"); }}>Open System Centre →</button></div>
       </aside>
     </div>}
