@@ -88,13 +88,22 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
             unmatched += 1
             continue
 
+        if deal["symbol"] != state["symbol"]:
+            incomplete += 1
+            state["cash_complete"] = False
+
         if deal["entry"] == "inout":
             if volume + EPSILON < state["volume"]:
                 incomplete += 1
                 state["cash_complete"] = False
             close_volume = min(state["volume"], volume)
             close_ratio = close_volume / volume
-            _add_cash(state["cash"], cash, close_ratio)
+            # Broker profit and accumulated swap belong to the exposure being
+            # closed. Deal commission/fee are split by executed volume.
+            state["cash"]["profit"] += cash["profit"]
+            state["cash"]["swap"] += cash["swap"]
+            state["cash"]["commission"] += cash["commission"] * close_ratio
+            state["cash"]["fee"] += cash["fee"] * close_ratio
             state["cash_complete"] = state["cash_complete"] and cash_complete
             state["deal_count"] += 1
             state["closed_volume"] += close_volume
@@ -106,7 +115,11 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
                 state["volume"] = remaining_old
             reverse_volume = volume - close_volume
             if reverse_volume > EPSILON:
-                reverse_cash = {name: amount * (1.0 - close_ratio) for name, amount in cash.items()}
+                reverse_cash = {
+                    "profit": 0.0, "swap": 0.0,
+                    "commission": cash["commission"] * (1.0 - close_ratio),
+                    "fee": cash["fee"] * (1.0 - close_ratio),
+                }
                 positions[key] = start(side_sign, reverse_volume, reverse_cash, cash_complete)
                 positions[key]["closed_volume"] = 0.0
             continue
@@ -168,5 +181,7 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
             "Open and partially closed positions are excluded from realized trade metrics.",
             "Account currency is supplied by the latest account snapshot; no currency conversion is applied.",
             "Magic number is a grouping key, not proof of strategy attribution.",
+            "The MT5 bridge uploads a bounded rolling history window; results are limited to deals actually ingested.",
+            "Standalone account-level commission, balance or correction records without a position link are not allocated to individual trades.",
         ],
     }
