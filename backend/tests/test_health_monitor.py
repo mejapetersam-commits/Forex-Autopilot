@@ -15,7 +15,7 @@ def test_health_monitor_persists_idempotent_operator_events(monkeypatch, tmp_pat
     assert second["alerts_detected"] == 4
     assert first["backup_worker"]["fresh"] is False
     assert len(events) == 4
-    assert {event["event_type"] for event in events} ==
+    assert {event["event_type"] for event in events} == {
         "HEARTBEAT_MISSING", "ACCOUNT_SNAPSHOT_MISSING", "QUOTES_MISSING",
         "BACKUP_WORKER_HEARTBEAT_MISSING",
     }
