@@ -144,7 +144,7 @@ def reconcile_broker_history(
                                 identity_reasons.append("illegal_terminal_order_state_transition")
                         else:
                             identity_reasons.append("terminal_order_state_after_partial_fill_requires_review")
-                    elif broker_state in {"placed", "started", "request_add", "request_modify", "request_cancel"}:
+                    elif broker_state in {"placed", "started", "partial", "request_add", "request_modify", "request_cancel"}:
                         reports.append({
                             "intent_id": intent_id, "broker_order_id": order_id,
                             "status": current, "result": "broker_order_pending",
