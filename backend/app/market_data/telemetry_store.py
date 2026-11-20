@@ -673,6 +673,8 @@ class TelemetryStore:
         result = build_trade_attribution(deals)
         result["account_currency"] = account["account_currency"] if account else None
         result["deal_count"] = len(deals)
+        result["history_start"] = min((d["occurred_at"] for d in deals), default=None)
+        result["history_end"] = max((d["occurred_at"] for d in deals), default=None)
         groups = []
         keys = sorted({(int(d["magic"]), d["symbol"]) for d in deals})
         for magic, symbol in keys:
