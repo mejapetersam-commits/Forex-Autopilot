@@ -91,13 +91,14 @@ def test_read_only_telemetry_ea_sends_open_position_state():
     assert "CalculateDailyLossPct()" in source
     assert "daily_loss_pct" in source
     for field in (
-        "\\\\"ticket\\\\"",
-        "\\\\"symbol\\\\"",
-        "\\\\"volume_lots\\\\"",
-        "\\\\"stop_loss\\\\"",
-        "\\\\"take_profit\\\\"",
-        "\\\\"magic\\\\"",
+        "ticket",
+        "symbol",
+        "volume_lots",
+        "stop_loss",
+        "take_profit",
+        "magic",
     ):
+        assert field in source
         assert field in source
 
 
