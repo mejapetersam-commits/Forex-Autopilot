@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from math import isfinite
 from typing import Any
 
 
@@ -14,9 +15,10 @@ def reconcile_open_positions(
 ) -> dict[str, Any]:
     """Match managed positions to intent tags and verify immutable trade identity.
 
-    This deliberately does not compare current volume to requested volume: a
-    legitimate partial close changes open volume. Volume/fill accounting belongs
-    to deal-history reconciliation. No position is ever modified or closed here.
+    Current volume is validated as positive and finite, but is not compared with
+    requested volume: legitimate partial closes change the open amount. Fill
+    accounting belongs to broker deal-history reconciliation. This function is
+    strictly read-only.
     """
     known_tags: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for intent in intents:
@@ -28,11 +30,21 @@ def reconcile_open_positions(
     checked: list[dict[str, Any]] = []
     orphaned: list[dict[str, Any]] = []
     mismatched: list[dict[str, Any]] = []
+    invalid_records: list[dict[str, Any]] = []
     identities: dict[str, list[str]] = defaultdict(list)
 
-    for position in positions:
-        if int(position.get("magic", -1)) != expected_magic:
+    for index, position in enumerate(positions):
+        try:
+            magic = int(position.get("magic", -1))
+        except (TypeError, ValueError, OverflowError):
+            invalid_records.append({
+                "position_index": index,
+                "reason": "broker_position_magic_invalid",
+            })
             continue
+        if magic != expected_magic:
+            continue
+
         ticket = str(position.get("ticket") or "")
         position_id = str(position.get("position_id") or "")
         identity = position_id or ticket
@@ -44,12 +56,18 @@ def reconcile_open_positions(
         matches = known_tags.get(tag, [])
         intent = matches[0] if len(matches) == 1 else None
         payload = intent.get("payload", {}) if intent else {}
+
+        try:
+            volume = float(position.get("volume_lots", 0))
+        except (TypeError, ValueError, OverflowError):
+            volume = float("nan")
+
         row = {
             "ticket": ticket,
             "position_id": position_id,
             "symbol": str(position.get("symbol") or "").upper(),
             "side": position.get("side"),
-            "volume_lots": float(position.get("volume_lots", 0)),
+            "volume_lots": volume if isfinite(volume) else None,
             "intent_id": intent.get("idempotency_key") if intent else None,
         }
         checked.append(row)
@@ -69,7 +87,7 @@ def reconcile_open_positions(
             reasons.append("broker_position_side_mismatch")
         if not ticket or not identity:
             reasons.append("broker_position_identity_missing")
-        if row["volume_lots"] <= 0:
+        if not isfinite(volume) or volume <= 0:
             reasons.append("broker_position_volume_invalid")
         if reasons:
             mismatched.append({**row, "reasons": reasons})
@@ -78,12 +96,14 @@ def reconcile_open_positions(
         {"position_identity": identity, "tickets": sorted(tickets)}
         for identity, tickets in identities.items() if len(tickets) > 1
     ]
+    review_required = bool(orphaned or mismatched or duplicates or invalid_records)
     return {
-        "status": "review_required" if orphaned or mismatched or duplicates else "complete",
+        "status": "review_required" if review_required else "complete",
         "managed_positions_checked": len(checked),
         "orphaned_positions": orphaned,
         "mismatched_positions": mismatched,
         "duplicate_position_identities": duplicates,
+        "invalid_position_records": invalid_records,
         "trading_enabled": False,
         "read_only": True,
     }
