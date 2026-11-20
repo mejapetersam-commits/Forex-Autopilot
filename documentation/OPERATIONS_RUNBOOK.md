@@ -106,6 +106,10 @@ docker compose exec telemetry-backup python -m app.operations.backup verify --ba
 docker compose exec telemetry-backup python -m app.operations.backup inventory --directory /var/backups/forex-autopilot --max-age-hours 48
 ```
 
+The periodic health monitor also checks this shared-volume heartbeat and records
+idempotent critical operator events when it is missing or stale. When the worker
+recovers, the event journal records a corresponding recovery transition.
+
 The backup worker atomically writes `backup-worker-heartbeat.json` only
 after a complete verified backup cycle. Docker healthchecks this timestamp
 against the configured backup interval; the service also uses
