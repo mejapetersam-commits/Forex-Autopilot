@@ -8,8 +8,8 @@ def test_position_with_known_intent_tag_is_matched():
     tag = hashlib.sha256(b"intent-123").hexdigest()[:12]
     result = reconcile_open_positions(
         [{"ticket": "10", "position_id": "20", "symbol": "EURUSDm",
-          "side": "buy", "volume_lots": 0.01, "magic": 61119001,
-          "comment": "FA:" + tag}],
+          "side": "buy", "volume_lots": 0.01, "stop_loss": 1.09, "take_profit": 1.12,
+          "magic": 61119001, "comment": "FA:" + tag}],
         [intent], expected_magic=61119001,
     )
     assert result["status"] == "complete"
@@ -88,8 +88,8 @@ def test_partial_close_volume_is_not_mistaken_for_identity_mismatch():
     tag = hashlib.sha256(key.encode()).hexdigest()[:12]
     result = reconcile_open_positions(
         [{"ticket": "50", "position_id": "60", "symbol": "EURUSDm",
-          "side": "buy", "volume_lots": 0.004, "magic": 61119001,
-          "comment": "FA:" + tag}],
+          "side": "buy", "volume_lots": 0.004, "stop_loss": 1.09, "take_profit": 1.12,
+          "magic": 61119001, "comment": "FA:" + tag}],
         [_intent(key)], expected_magic=61119001,
     )
     assert result["status"] == "complete"
@@ -123,3 +123,33 @@ def test_malformed_magic_record_is_reported_instead_of_crashing():
     assert result["invalid_position_records"] == [{
         "position_index": 0, "reason": "broker_position_magic_invalid"
     }]
+
+
+
+def test_missing_broker_protective_levels_require_review():
+    key = "intent-missing-protection"
+    tag = hashlib.sha256(key.encode()).hexdigest()[:12]
+    result = reconcile_open_positions(
+        [{"ticket": "99", "position_id": "100", "symbol": "EURUSDm",
+          "side": "buy", "volume_lots": 0.01, "stop_loss": 0,
+          "take_profit": 1.12, "magic": 61119001, "comment": "FA:" + tag}],
+        [_intent(key)], expected_magic=61119001,
+    )
+    assert result["status"] == "review_required"
+    assert result["protection_issues"][0]["reasons"] == [
+        "protective_stop_loss_missing"
+    ]
+    assert result["trading_enabled"] is False
+
+
+def test_valid_broker_protection_is_reported_as_clear():
+    key = "intent-valid-protection"
+    tag = hashlib.sha256(key.encode()).hexdigest()[:12]
+    result = reconcile_open_positions(
+        [{"ticket": "101", "position_id": "102", "symbol": "EURUSDm",
+          "side": "buy", "volume_lots": 0.01, "stop_loss": 1.09,
+          "take_profit": 1.12, "magic": 61119001, "comment": "FA:" + tag}],
+        [_intent(key)], expected_magic=61119001,
+    )
+    assert result["status"] == "complete"
+    assert result["protection_issues"] == []
