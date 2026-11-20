@@ -1,8 +1,6 @@
 """Conservative round-trip reconstruction from broker deal history."""
 from __future__ import annotations
 
-from collections import defaultdict
-from math import isclose
 from typing import Any
 
 CASH_FIELDS = ("profit", "commission", "swap", "fee")
