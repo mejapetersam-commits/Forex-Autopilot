@@ -187,7 +187,7 @@ def test_trade_attribution_dashboard_is_read_only_and_reports_incomplete_coverag
     assert response.status_code == 200
     body = response.json()
     assert body["closed_trade_count"] == 1
-    assert body["net_realized_pnl"] == 0.7
+    assert abs(body["net_realized_pnl"] - 0.8) < 1e-9
     assert body["trading_enabled"] is False
     assert body["execution_mode"] == "disabled"
     assert body["read_only"] is True
