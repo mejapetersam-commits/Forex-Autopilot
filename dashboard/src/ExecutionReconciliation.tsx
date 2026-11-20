@@ -46,15 +46,15 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       </tr>)}
       {!data?.intents.length && <tr><td colSpan={8} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
     </tbody></table></div>
-    <div className="table-wrap"><table><thead><tr><th>BROKER ORDER</th><th>SYMBOL</th><th>TYPE</th><th>STATE</th><th>EXECUTED / INITIAL</th><th>REMAINING</th><th>PRICE</th><th>SL / TP</th><th>LAST UPDATE</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>BROKER ORDER</th><th>SYMBOL</th><th>SERVER / TERMINAL</th><th>TYPE</th><th>STATE</th><th>EXECUTED / INITIAL</th><th>REMAINING</th><th>PRICE</th><th>SL / TP</th><th>LAST UPDATE</th></tr></thead><tbody>
       {data?.broker_orders.map(order => <tr key={order.order_ticket}>
-        <td className="symbol">{order.order_ticket}</td><td>{order.symbol}</td><td>{order.order_type.toUpperCase()}</td>
+        <td className="symbol">{order.order_ticket}</td><td>{order.symbol}</td><td>{order.server} / {order.terminal_id}</td><td>{order.order_type.toUpperCase()}</td>
         <td><Status good={order.state === "filled"}>{order.state.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{Math.max(0, order.initial_volume - order.current_volume).toFixed(3)} / {order.initial_volume.toFixed(3)}</td>
         <td>{order.current_volume.toFixed(3)}</td><td>{order.price.toFixed(5)}</td>
         <td>{order.stop_loss > 0 ? order.stop_loss.toFixed(5) : "MISSING"} / {order.take_profit > 0 ? order.take_profit.toFixed(5) : "MISSING"}</td><td>{stamp(order.observed_at)}</td>
       </tr>)}
-      {!data?.broker_orders.length && <tr><td colSpan={9} className="empty">No broker order snapshots have been received yet.</td></tr>}
+      {!data?.broker_orders.length && <tr><td colSpan={10} className="empty">No broker order snapshots have been received yet.</td></tr>}
     </tbody></table></div>
     {Boolean(data?.manual_review_events.length) && <div className="table-wrap"><table><thead><tr><th>REVIEW TIME</th><th>INTENT</th><th>SEVERITY</th><th>REASONS</th><th>ORDER</th></tr></thead><tbody>
       {data?.manual_review_events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td className="symbol">{event.intent_id ?? "—"}</td><td><Status good={false}>{event.severity.toUpperCase()}</Status></td><td>{event.reasons.join(", ") || event.outcome || "Review required"}</td><td>{event.broker_order_id ?? "—"}</td></tr>)}
