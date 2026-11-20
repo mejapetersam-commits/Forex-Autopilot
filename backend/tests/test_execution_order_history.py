@@ -128,3 +128,17 @@ def test_cancelled_order_with_partial_deal_fill_requires_manual_review(tmp_path)
     assert result["results"][0]["result"] == "manual_review_required"
     assert "broker_order_terminal_with_unfilled_remainder" in result["results"][0]["reasons"]
     assert ledger.get_intent(key)["status"] == "acknowledged"
+
+def test_broker_partial_order_state_waits_for_deal_history(tmp_path):
+    path = str(tmp_path / "shared.sqlite3")
+    ledger, store = ExecutionLedger(path), TelemetryStore(path)
+    key = make_intent(ledger)
+    store.save_execution_order_history(order_history("partial", current=0.006))
+    result = reconcile_broker_history(
+        ledger, store, expected_magic=61119001,
+        expected_terminal_id="demo-terminal", expected_server="Exness-MT5Trial",
+    )
+    assert result["results"][0]["result"] == "broker_order_pending"
+    assert result["results"][0]["broker_state"] == "partial"
+    assert result["results"][0]["remaining_volume_lots"] == pytest.approx(0.006)
+    assert ledger.get_intent(key)["status"] == "acknowledged"
