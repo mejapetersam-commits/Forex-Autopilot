@@ -28,6 +28,11 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
       <Metric label="AWAITING HISTORY" value={String(data?.counts.awaiting_history_count ?? "—")} detail="No matching broker deal evidence yet"/>
       <Metric label="UNKNOWN OUTCOMES" value={String(data?.counts.unknown_count ?? "—")} detail="Quarantined; never automatically resent"/>
     </div>
+    <div className="metrics">
+      <Metric label="BROKER ORDERS" value={String(data?.order_counts.total ?? "—")} detail="Recent broker-reported demo orders"/>
+      <Metric label="PENDING ORDERS" value={String(data?.order_counts.pending ?? "—")} detail="Includes placed and partial order states"/>
+      <Metric label="TERMINAL ORDERS" value={String(data?.order_counts.terminal ?? "—")} detail="Filled, cancelled, rejected or expired"/>
+    </div>
     {Boolean(data?.manual_review_events.length) && <div className="alert-row"><AlertTriangle size={16}/><span>{data?.manual_review_events.length} broker reconciliation exception(s) require manual review. Check broker order/deal history before any separate operator action.</span><b>REVIEW</b></div>}
     <div className="table-wrap"><table><thead><tr><th>INTENT</th><th>SYMBOL / SIDE</th><th>STATUS</th><th>FILLED / REQUESTED</th><th>AVG FILL</th><th>FILL DETAILS</th><th>ORDER / DEALS</th><th>LAST EVIDENCE</th></tr></thead><tbody>
       {data?.intents.map(intent => <tr key={intent.intent_id}>
@@ -40,6 +45,16 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
         <td>{stamp(intent.last_broker_evidence_at)}</td>
       </tr>)}
       {!data?.intents.length && <tr><td colSpan={8} className="empty">No submitted execution intents have been recorded for dashboard review.</td></tr>}
+    </tbody></table></div>
+    <div className="table-wrap"><table><thead><tr><th>BROKER ORDER</th><th>SYMBOL</th><th>TYPE</th><th>STATE</th><th>EXECUTED / INITIAL</th><th>REMAINING</th><th>PRICE</th><th>SL / TP</th><th>LAST UPDATE</th></tr></thead><tbody>
+      {data?.broker_orders.map(order => <tr key={order.order_ticket}>
+        <td className="symbol">{order.order_ticket}</td><td>{order.symbol}</td><td>{order.order_type.toUpperCase()}</td>
+        <td><Status good={order.state === "filled"}>{order.state.replaceAll("_", " ").toUpperCase()}</Status></td>
+        <td>{Math.max(0, order.initial_volume - order.current_volume).toFixed(3)} / {order.initial_volume.toFixed(3)}</td>
+        <td>{order.current_volume.toFixed(3)}</td><td>{order.price.toFixed(5)}</td>
+        <td>{order.stop_loss.toFixed(5)} / {order.take_profit.toFixed(5)}</td><td>{stamp(order.observed_at)}</td>
+      </tr>)}
+      {!data?.broker_orders.length && <tr><td colSpan={9} className="empty">No broker order snapshots have been received yet.</td></tr>}
     </tbody></table></div>
     {Boolean(data?.manual_review_events.length) && <div className="table-wrap"><table><thead><tr><th>REVIEW TIME</th><th>INTENT</th><th>SEVERITY</th><th>REASONS</th><th>ORDER</th></tr></thead><tbody>
       {data?.manual_review_events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td className="symbol">{event.intent_id ?? "—"}</td><td><Status good={false}>{event.severity.toUpperCase()}</Status></td><td>{event.reasons.join(", ") || event.outcome || "Review required"}</td><td>{event.broker_order_id ?? "—"}</td></tr>)}
