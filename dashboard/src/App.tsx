@@ -45,6 +45,11 @@ export default function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
   const [eventSeverity, setEventSeverity] = useState("all");
+  const [quoteSearch, setQuoteSearch] = useState("");
+  const [quoteFreshness, setQuoteFreshness] = useState("all");
+  const [researchSearch, setResearchSearch] = useState("");
+  const [researchTimeframe, setResearchTimeframe] = useState("all");
+  const [researchReadiness, setResearchReadiness] = useState("all");
   const notificationCloseRef = useRef<HTMLButtonElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -156,6 +161,18 @@ export default function App() {
   const account = overview?.account;
   const alerts = typeof overview?.system_health === "object" ? overview.system_health.alerts ?? [] : [];
   const health = typeof overview?.system_health === "object" ? overview.system_health.status : overview?.system_health;
+  const filteredQuotes = (overview?.quotes ?? []).filter(quote => {
+    const matchesSearch = quote.symbol.toLowerCase().includes(quoteSearch.trim().toLowerCase());
+    const matchesFreshness = quoteFreshness === "all" || (quoteFreshness === "fresh" ? quote.fresh : !quote.fresh);
+    return matchesSearch && matchesFreshness;
+  });
+  const filteredResearch = research.filter(item => {
+    const query = researchSearch.trim().toLowerCase();
+    const matchesSearch = !query || [item.symbol, item.timeframe, item.signal, item.reason, item.data_quality, item.readiness_status].some(value => String(value ?? "").toLowerCase().includes(query));
+    const matchesTimeframe = researchTimeframe === "all" || item.timeframe === researchTimeframe;
+    const matchesReadiness = researchReadiness === "all" || (researchReadiness === "ready" ? item.readiness_status === "ready_for_research" : item.readiness_status !== "ready_for_research");
+    return matchesSearch && matchesTimeframe && matchesReadiness;
+  });
   const filteredEvents = events.filter(event => {
     const query = eventSearch.trim().toLowerCase();
     const matchesQuery = !query || [event.event_type, event.message, event.delivery_status, event.severity].some(value => String(value ?? "").toLowerCase().includes(query));
@@ -231,17 +248,32 @@ export default function App() {
     {page === "market" && <section id="connectivity" className="panel">
       <div className="section-head"><div><div className="eyebrow">BROKER BRIDGE</div><h2>Connection & market quotes</h2></div><span className="muted">Auto-refresh · 15 seconds</span></div>
       <div className="connection-row"><div className="connection-icon">{overview?.bridge_connected ? <Wifi/> : <WifiOff/>}</div><div className="connection-copy"><b>{overview?.bridge_connected ? "Terminal heartbeat received" : "Waiting for terminal heartbeat"}</b><span>{overview?.heartbeat?.observed_at ? `Last heartbeat: ${stamp(overview.heartbeat.observed_at)}` : "Attach the read-only telemetry EA to begin reporting."}</span></div><Status good={Boolean(overview?.heartbeat?.fresh)}>{overview?.heartbeat?.fresh ? "Fresh" : "Stale / missing"}</Status></div>
+      <div className="market-tools" aria-label="Market quote filters">
+        <label className="market-search"><span>SEARCH INSTRUMENTS</span><input type="search" value={quoteSearch} onChange={event => setQuoteSearch(event.target.value)} placeholder="Find a symbol, e.g. EURUSD"/></label>
+        <label className="market-filter"><span>TELEMETRY</span><select value={quoteFreshness} onChange={event => setQuoteFreshness(event.target.value)}><option value="all">All quotes</option><option value="fresh">Fresh only</option><option value="stale">Stale only</option></select></label>
+        <span className="market-count" aria-live="polite">{filteredQuotes.length} of {overview?.quotes.length ?? 0} instruments</span>
+        {(quoteSearch || quoteFreshness !== "all") && <button className="event-reset" type="button" onClick={() => {setQuoteSearch("");setQuoteFreshness("all");}}>Clear</button>}
+      </div>
       <div className="table-wrap"><table><thead><tr><th>INSTRUMENT</th><th>BID</th><th>ASK</th><th>SPREAD</th><th>TELEMETRY</th></tr></thead><tbody>
-        {overview?.quotes.map(q => <tr key={q.symbol}><td className="symbol">{q.symbol}</td><td>{q.bid?.toFixed(5) ?? "—"}</td><td>{q.ask?.toFixed(5) ?? "—"}</td><td>{q.spread?.toFixed(5) ?? (q.ask - q.bid).toFixed(5)}</td><td><Status good={q.fresh}>{q.fresh ? "Fresh" : "Stale"}</Status></td></tr>)}
+        {filteredQuotes.map(q => <tr key={q.symbol}><td className="symbol">{q.symbol}</td><td>{q.bid?.toFixed(5) ?? "—"}</td><td>{q.ask?.toFixed(5) ?? "—"}</td><td>{q.spread?.toFixed(5) ?? (q.ask - q.bid).toFixed(5)}</td><td><Status good={q.fresh}>{q.fresh ? "Fresh" : "Stale"}</Status></td></tr>)}
         {!overview?.quotes.length && <tr><td colSpan={5} className="empty">No quote telemetry received yet.</td></tr>}
+        {Boolean(overview?.quotes.length) && !filteredQuotes.length && <tr><td colSpan={5} className="empty">No instruments match these filters. Clear the search or freshness filter.</td></tr>}
       </tbody></table></div>
     </section>}
 
     {page === "market" && <section id="research" className="panel">
       <div className="section-head"><div><div className="eyebrow">RESEARCH WORKSPACE</div><h2>Strategy candidates</h2><p className="subhead">Signals are informational research outputs, not trade instructions.</p></div><span className="research-tag"><CircleDot size={13}/> RESEARCH ONLY</span></div>
+      <div className="market-tools research-tools" aria-label="Research candidate filters">
+        <label className="market-search"><span>SEARCH RESEARCH</span><input type="search" value={researchSearch} onChange={event => setResearchSearch(event.target.value)} placeholder="Symbol, signal, reason or quality"/></label>
+        <label className="market-filter"><span>TIMEFRAME</span><select value={researchTimeframe} onChange={event => setResearchTimeframe(event.target.value)}><option value="all">All timeframes</option>{Array.from(new Set(research.map(item => item.timeframe))).sort().map(timeframe => <option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
+        <label className="market-filter"><span>READINESS</span><select value={researchReadiness} onChange={event => setResearchReadiness(event.target.value)}><option value="all">All readiness</option><option value="ready">Ready for research</option><option value="not-ready">Not ready / unknown</option></select></label>
+        <span className="market-count" aria-live="polite">{filteredResearch.length} of {research.length} candidates</span>
+        {(researchSearch || researchTimeframe !== "all" || researchReadiness !== "all") && <button className="event-reset" type="button" onClick={() => {setResearchSearch("");setResearchTimeframe("all");setResearchReadiness("all");}}>Clear</button>}
+      </div>
       <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>SIGNAL</th><th>CANDLES</th><th>DATA QUALITY</th><th>READINESS</th><th>COVERAGE</th><th>GAPS</th></tr></thead><tbody>
-        {research.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
+        {filteredResearch.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
         {!research.length && <tr><td colSpan={8} className="empty">Research data will appear when candle history is available.</td></tr>}
+        {Boolean(research.length) && !filteredResearch.length && <tr><td colSpan={8} className="empty">No research candidates match these filters. Clear the search or adjust the selections.</td></tr>}
       </tbody></table></div>
     </section>}
 
