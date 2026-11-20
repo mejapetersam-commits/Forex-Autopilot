@@ -54,6 +54,7 @@ def test_recovery_status_exposes_backup_freshness_and_quarantine_safely(monkeypa
     import sqlite3
     from datetime import datetime, timezone
     from app.execution.command_queue import ExecutionCommandQueue
+    from app.operations.backup_scheduler import write_worker_heartbeat
 
     database = str(tmp_path / "recovery.sqlite3")
     backup_dir = tmp_path / "backups"
@@ -79,12 +80,18 @@ def test_recovery_status_exposes_backup_freshness_and_quarantine_safely(monkeypa
             "UPDATE execution_commands SET status='expired', attempts=1 "
             "WHERE command_id='cmd-dashboard-expired'"
         )
+    write_worker_heartbeat(
+        backup_dir, telemetry_db=database,
+        backup_name=backup.name,
+    )
 
     response = client.get("/api/v1/dashboard/recovery-status")
     assert response.status_code == 200
     payload = response.json()
     assert payload["backups"]["fresh_verified_backup"] is True
     assert payload["backups"]["verified_count"] == 1
+    assert payload["backup_worker"]["fresh"] is True
+    assert payload["backup_worker"]["status"] == "healthy"
     assert payload["execution_commands"]["counts"]["expired"] == 1
     assert payload["execution_commands"]["quarantined_total"] == 1
     assert "payload" not in payload["execution_commands"]["quarantined"][0]
