@@ -54,13 +54,17 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     while not stopping:
+        succeeded = False
         try:
             result = run_backup_cycle(source, backup_dir, retention_days=retention)
             _LOG.info("Verified backup %s (%s bytes); pruned %s snapshots",
                       result["backup"]["path"], result["backup"]["size_bytes"], len(result["removed"]))
+            succeeded = True
         except Exception:
-            _LOG.exception("Scheduled backup failed; will retry next cycle.")
-        remaining = interval
+            _LOG.exception("Scheduled backup failed; retrying soon.")
+        # Retry failures promptly; never wait a full daily interval after startup
+        # races, temporary database unavailability or a transient I/O error.
+        remaining = interval if succeeded else min(300, interval)
         while remaining > 0 and not stopping:
             step = min(remaining, 30)
             time.sleep(step)
