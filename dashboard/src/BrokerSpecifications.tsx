@@ -46,6 +46,7 @@ export default function BrokerSpecifications() {
       <span className="research-tag"><ShieldCheck size={13}/> READ ONLY</span>
     </div>
     {error && <div className="alert-row"><AlertTriangle size={16}/><span>Specifications could not refresh: {error}</span></div>}
+    <div className="system-evidence-meta"><span>{items.length} symbol specification(s) received</span><span>{items.filter(item => item.fresh).length} fresh · {items.filter(item => !item.fresh).length} stale</span></div>
     <div className="table-wrap"><table><thead><tr>
       <th>SYMBOL</th><th>STATUS</th><th>VOLUME MIN / STEP / MAX</th><th>CONTRACT</th>
       <th>TICK SIZE</th><th>TICK VALUE LOSS</th><th>STOPS / FREEZE</th><th>CURRENCIES</th><th>OBSERVED</th>
@@ -61,7 +62,7 @@ export default function BrokerSpecifications() {
         <td>{item.base_currency}/{item.profit_currency} · margin {item.margin_currency}</td>
         <td>{age(item.age_seconds)}</td>
       </tr>)}
-      {!items.length && <tr><td colSpan={9} className="empty">No broker specifications received yet. The read-only MT5 telemetry EA must report symbol metadata first.</td></tr>}
+      {!items.length && <tr><td colSpan={9} className="empty">{error ? "Broker specifications could not be loaded. Check the service and refresh." : "No broker specifications received yet. The read-only MT5 telemetry EA must report symbol metadata first."}</td></tr>}
     </tbody></table></div>
     <p className="subhead">A stale or missing specification must not be treated as permission to trade. Broker rules can change; the execution preflight remains authoritative.</p>
   </section>;
