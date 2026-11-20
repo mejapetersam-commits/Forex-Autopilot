@@ -47,3 +47,58 @@ def test_dashboard_operations_waits_for_terminal_snapshot(monkeypatch, tmp_path)
     response = client.get("/api/v1/dashboard/operations")
     assert response.status_code == 200
     assert response.json()["reconciliation"]["status"] == "waiting_for_terminal_snapshot"
+
+
+
+def test_recovery_status_exposes_backup_freshness_and_quarantine_safely(monkeypatch, tmp_path):
+    import sqlite3
+    from datetime import datetime, timezone
+    from app.execution.command_queue import ExecutionCommandQueue
+
+    database = str(tmp_path / "recovery.sqlite3")
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup = backup_dir / (
+        "telemetry-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".sqlite3"
+    )
+    with sqlite3.connect(backup) as db:
+        db.execute("CREATE TABLE sample (value TEXT)")
+        db.execute("INSERT INTO sample VALUES ('verified')")
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", database)
+    monkeypatch.setenv("FOREX_AUTOPILOT_BACKUP_DIR", str(backup_dir))
+
+    queue = ExecutionCommandQueue(database)
+    queue.enqueue_approved_intent(
+        command_id="cmd-dashboard-expired", intent_id="intent-dashboard-expired",
+        payload={"symbol": "EURUSDm", "side": "buy", "volume_lots": 0.01,
+                 "stop_loss": 1.09, "take_profit": 1.12},
+        environment="demo", trading_enabled=True,
+    )
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "UPDATE execution_commands SET status='expired', attempts=1 "
+            "WHERE command_id='cmd-dashboard-expired'"
+        )
+
+    response = client.get("/api/v1/dashboard/recovery-status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["backups"]["fresh_verified_backup"] is True
+    assert payload["backups"]["verified_count"] == 1
+    assert payload["execution_commands"]["counts"]["expired"] == 1
+    assert payload["execution_commands"]["quarantined_total"] == 1
+    assert "payload" not in payload["execution_commands"]["quarantined"][0]
+    assert payload["trading_enabled"] is False
+    assert payload["execution_mode"] == "disabled"
+    assert payload["read_only"] is True
+
+
+def test_recovery_status_fails_closed_when_backup_directory_is_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "empty.sqlite3"))
+    monkeypatch.setenv("FOREX_AUTOPILOT_BACKUP_DIR", str(tmp_path / "missing"))
+    response = client.get("/api/v1/dashboard/recovery-status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["backups"]["fresh_verified_backup"] is False
+    assert payload["backups"]["status"] == "missing_directory"
+    assert payload["trading_enabled"] is False
