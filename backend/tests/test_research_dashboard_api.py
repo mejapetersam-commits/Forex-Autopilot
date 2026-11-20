@@ -112,3 +112,13 @@ def test_dashboard_data_readiness_exposes_integrity_and_gap_detail(monkeypatch, 
     assert m5["ready_for_research"] is True
     assert payload["trading_enabled"] is False
     assert payload["read_only"] is True
+
+    ledger_response = client.get("/api/v1/dashboard/candle-ingestion")
+    assert ledger_response.status_code == 200
+    ledger = ledger_response.json()
+    assert ledger["batch_count"] == 1
+    assert ledger["series_count"] == 1
+    assert ledger["recent_batches"][0]["received_count"] == 3
+    assert ledger["recent_batches"][0]["symbol"] == "EURUSDM"
+    assert ledger["trading_enabled"] is False
+    assert ledger["read_only"] is True
