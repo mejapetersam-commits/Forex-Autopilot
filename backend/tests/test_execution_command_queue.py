@@ -96,3 +96,35 @@ def test_expired_lease_is_quarantined_not_redelivered(tmp_path):
             "c-expire", terminal_id="terminal-a", outcome="acknowledged",
             result={"broker_order_id": "maybe-sent"},
         )
+
+
+
+def test_expired_command_quarantine_survives_queue_restart(tmp_path):
+    import sqlite3
+
+    database = tmp_path / "durable-queue.sqlite3"
+    first_process = ExecutionCommandQueue(str(database))
+    first_process.enqueue_approved_intent(
+        command_id="c-restart", intent_id="i-restart",
+        payload=command_payload(), environment="demo", trading_enabled=True,
+    )
+    first_process.lease_next(terminal_id="terminal-before-restart")
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "UPDATE execution_commands SET lease_until='2000-01-01T00:00:00+00:00' "
+            "WHERE command_id='c-restart'"
+        )
+
+    restarted_process = ExecutionCommandQueue(str(database))
+    expired = restarted_process.expire_leases()
+    assert len(expired) == 1
+    assert expired[0]["command_id"] == "c-restart"
+    assert restarted_process.expired_commands()[0]["attempts"] == 1
+    assert restarted_process.lease_next(terminal_id="terminal-after-restart") is None
+
+    with sqlite3.connect(database) as db:
+        status, attempts = db.execute(
+            "SELECT status, attempts FROM execution_commands WHERE command_id='c-restart'"
+        ).fetchone()
+    assert status == "expired"
+    assert attempts == 1
