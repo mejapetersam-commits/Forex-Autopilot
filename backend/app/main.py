@@ -21,6 +21,7 @@ from app.market_data.quality import assess_candle_quality
 from app.execution.ledger import ExecutionLedger
 from app.execution.reconciliation import reconcile_broker_history
 from app.execution.position_reconciliation import reconcile_open_positions
+from app.execution.position_lifecycle import compare_position_lifecycle
 from app.execution.coordinator import ExecutionCoordinator
 from app.execution.preflight import ExecutionSnapshot, TradeIntent, evaluate_with_runtime_controls
 from app.execution.command_queue import ExecutionCommandQueue
@@ -1203,6 +1204,58 @@ def open_position_reconciliation():
                 "reason": position["reason"],
                 "source": "open_position_reconciliation",
             },
+        )
+        if event:
+            recorded += 1
+    result["operational_events_recorded"] = recorded
+    return result
+
+
+@app.get(
+    "/api/v1/monitoring/positions/lifecycle",
+    dependencies=[Depends(require_admin_token)],
+)
+def position_lifecycle_monitoring():
+    """Compare fresh demo snapshots and deal history; never infer closure from absence alone."""
+    store = telemetry_store()
+    snapshots = store.recent_execution_states(limit=2)
+    if not snapshots:
+        return {"status": "waiting_for_terminal_snapshot", "events": [],
+                "trading_enabled": False, "read_only": True}
+    current = snapshots[0]
+    observed = datetime.fromisoformat(current["observed_at"].replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - observed).total_seconds()
+    if current["environment"] != "demo" or age < -5 or age > 30:
+        return {"status": "terminal_snapshot_stale_or_not_demo", "events": [],
+                "trading_enabled": False, "read_only": True}
+    previous = snapshots[1] if len(snapshots) > 1 else None
+    expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
+    deals_by_position = {}
+    if previous and previous.get("terminal_id") == current.get("terminal_id"):
+        for position in previous["positions"]:
+            if int(position.get("magic", -1)) != expected_magic:
+                continue
+            position_id = str(position.get("position_id") or "")
+            if position_id:
+                deals_by_position[position_id] = store.execution_deals_for_position(position_id)
+    result = compare_position_lifecycle(
+        previous, current, deals_by_position=deals_by_position,
+        expected_magic=expected_magic,
+    )
+    outbox = EventOutbox()
+    recorded = 0
+    for item in result["events"]:
+        identity = str(item.get("position_id") or item.get("ticket") or "unknown")
+        fingerprint = hashlib.sha256(
+            (str(item["event_type"]) + "|" + identity + "|" + current["observed_at"]).encode("utf-8")
+        ).hexdigest()[:32]
+        event = outbox.record(
+            event_key="position-lifecycle:" + fingerprint,
+            event_type=item["event_type"],
+            severity="warning" if item["event_type"] == "position_disappearance_unconfirmed" else "info",
+            message="MT5 position lifecycle change observed: " + item["event_type"],
+            payload={"source": "position_lifecycle_monitor", **item,
+                     "snapshot_at": current["observed_at"]},
         )
         if event:
             recorded += 1
