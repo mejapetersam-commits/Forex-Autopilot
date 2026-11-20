@@ -238,3 +238,45 @@ export interface StrategyQualificationResponse {
 }
 export const getStrategyQualification = (symbol: string, timeframe: string) =>
   getJson<StrategyQualificationResponse>(`/api/v1/dashboard/strategy-qualification?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+
+export interface DemoObservationResponse {
+  status: string;
+  deal_totals: {
+    deal_count: number;
+    terminal_count: number;
+    strategy_magic_count: number;
+    first_deal_at: string | null;
+    last_observed_at: string | null;
+  };
+  order_totals: {
+    order_count: number;
+    completed_orders: number | null;
+    failed_orders: number | null;
+    last_order_observed_at: string | null;
+  };
+  groups: Array<{
+    magic: number;
+    symbol: string;
+    entry_deals: number;
+    exit_deals: number;
+    deal_count: number;
+    gross_deal_volume_lots: number;
+    last_deal_at: string;
+    last_observed_at: string;
+  }>;
+  latest_terminal: null | {
+    terminal_id: string;
+    environment: string;
+    server: string;
+    observed_at: string;
+    reported_open_positions: number;
+    daily_loss_pct_estimate: number;
+  };
+  pnl_available: false;
+  limitations: string[];
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getDemoObservation = () => getJson<DemoObservationResponse>("/api/v1/dashboard/demo-observation");
