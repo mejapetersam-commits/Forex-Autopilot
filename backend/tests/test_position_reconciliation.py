@@ -4,7 +4,7 @@ from app.execution.position_reconciliation import reconcile_open_positions
 
 
 def test_position_with_known_intent_tag_is_matched():
-    intent = {"idempotency_key": "intent-123"}
+    intent = {"idempotency_key": "intent-123", "payload": {"symbol": "EURUSDm", "side": "buy"}}
     tag = hashlib.sha256(b"intent-123").hexdigest()[:12]
     result = reconcile_open_positions(
         [{"ticket": "10", "position_id": "20", "symbol": "EURUSDm",
