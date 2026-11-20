@@ -534,3 +534,22 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .reconciliation-search,.shell.theme-dark .reconciliation-tools select{background:#1d2c33;color:#edf3ef;border-color:#3a4b51}
 .shell.theme-dark .reconciliation-search input{color:#edf3ef}
 @media(max-width:560px){.reconciliation-tools label,.reconciliation-tools label:first-child{flex:1 1 100%;min-width:0}.reconciliation-count{padding-bottom:0}.readiness-meta{align-items:flex-start;flex-direction:column}}
+
+
+/* System Centre service overview and expandable workspaces */
+.system-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 14px}
+.system-status-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:14px;border:1px solid var(--fa-line);border-radius:13px;background:var(--fa-surface)}
+.system-status-card>span{color:var(--fa-muted);font-size:9px;font-weight:800;letter-spacing:.065em}
+.system-status-card>b{font-size:13px;line-height:1.35;color:var(--fa-ink);overflow-wrap:anywhere}
+.system-status-card>small{color:var(--fa-muted);font-size:10px;line-height:1.5}
+.system-status-card.pass{border-top:3px solid #6cbd91}
+.system-status-card.attention{border-top:3px solid #e5a36c}
+.system-section-list{display:grid;gap:10px}
+.system-section-list>.dashboard-accordion>summary,.system-event-accordion>summary{display:flex;align-items:center;gap:12px;min-height:68px;padding:12px 15px}
+.system-section-list>.dashboard-accordion[open]>summary,.system-event-accordion[open]>summary{border-bottom:1px solid var(--fa-line)}
+.system-section-list>.dashboard-accordion[open]>.panel,.system-event-accordion[open]>.panel{margin:12px;border-radius:12px}
+.system-event-accordion{margin-top:12px}
+.system-section-list .strategy-summary-copy,.system-event-accordion .strategy-summary-copy{flex:1;min-width:0}
+.shell.theme-dark .system-status-card>b{color:#edf3ef}
+@media(max-width:900px){.system-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.system-status-grid{grid-template-columns:1fr}.system-section-list>.dashboard-accordion>summary,.system-event-accordion>summary{gap:9px;padding:11px 10px}.system-section-list .strategy-accordion>summary>em,.system-section-list>.dashboard-accordion>summary>em,.system-event-accordion>summary>em{display:none}}
