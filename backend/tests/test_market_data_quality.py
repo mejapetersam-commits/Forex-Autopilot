@@ -35,6 +35,16 @@ def test_quality_classifies_common_weekend_closure_as_possible_not_confirmed():
     assert result["issue_count"] == 0
 
 
+def test_weekend_heuristic_normalizes_non_utc_broker_timestamps():
+    result = assess_candle_quality(rows(
+        "2026-11-20T23:55:00+03:00",  # Friday 20:55 UTC
+        "2026-11-23T00:05:00+03:00",  # Sunday 21:05 UTC
+    ), "M5")
+
+    assert result["possible_weekend_gap_count"] == 1
+    assert result["calendar_review_gap_count"] == 0
+
+
 def test_quality_flags_midweek_gap_for_broker_calendar_review():
     result = assess_candle_quality(rows(
         "2026-11-18T09:00:00+00:00",
