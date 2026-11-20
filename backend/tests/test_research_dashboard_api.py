@@ -79,3 +79,36 @@ def test_dashboard_research_exposes_history_readiness(monkeypatch, tmp_path):
     assert item["readiness_status"] == "insufficient_history"
     assert item["coverage_pct"] == 0
     assert item["valid_candles"] == 0
+
+
+def test_dashboard_data_readiness_exposes_integrity_and_gap_detail(monkeypatch, tmp_path):
+    monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", TOKEN)
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "readiness-detail.sqlite3"))
+    monkeypatch.setenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm")
+    start = datetime(2026, 11, 2, 9, 0, tzinfo=timezone.utc)
+    candles = []
+    for index, minutes in enumerate((0, 5, 25)):
+        price = 1.10 + index * 0.0001
+        candles.append({
+            "opened_at": (start + timedelta(minutes=minutes)).isoformat(),
+            "open": price, "high": price + 0.0002,
+            "low": price - 0.0002, "close": price + 0.0001,
+            "tick_volume": 100,
+        })
+    upload = client.post(
+        "/api/v1/mt5/candles/bulk",
+        headers={"X-Bridge-Token": TOKEN},
+        json={"batches": [{"symbol": "EURUSDm", "timeframe": "M5", "candles": candles}]},
+    )
+    assert upload.status_code == 200
+
+    response = client.get("/api/v1/dashboard/data-readiness?minimum_candles=3&limit=50")
+    assert response.status_code == 200
+    payload = response.json()
+    m5 = next(item for item in payload["items"] if item["timeframe"] == "M5")
+    assert m5["candles_available"] == 3
+    assert m5["quality"]["valid_ohlc_candles"] == 3
+    assert m5["quality"]["gap_count"] == 1
+    assert m5["ready_for_research"] is True
+    assert payload["trading_enabled"] is False
+    assert payload["read_only"] is True
