@@ -43,6 +43,8 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState("");
   const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "risk" | "system">("overview");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [eventSearch, setEventSearch] = useState("");
+  const [eventSeverity, setEventSeverity] = useState("all");
   const notificationCloseRef = useRef<HTMLButtonElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -154,6 +156,12 @@ export default function App() {
   const account = overview?.account;
   const alerts = typeof overview?.system_health === "object" ? overview.system_health.alerts ?? [] : [];
   const health = typeof overview?.system_health === "object" ? overview.system_health.status : overview?.system_health;
+  const filteredEvents = events.filter(event => {
+    const query = eventSearch.trim().toLowerCase();
+    const matchesQuery = !query || [event.event_type, event.message, event.delivery_status, event.severity].some(value => String(value ?? "").toLowerCase().includes(query));
+    const matchesSeverity = eventSeverity === "all" || event.severity.toLowerCase() === eventSeverity;
+    return matchesQuery && matchesSeverity;
+  });
 
   return <main className={`shell page-${page} theme-${theme}`}>
     <header className="topbar">
@@ -339,9 +347,16 @@ export default function App() {
 
     {page === "system" && <section id="events" className="panel">
       <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
+      <div className="event-tools">
+        <label className="event-search"><span>Search events</span><input type="search" value={eventSearch} onChange={event => setEventSearch(event.target.value)} placeholder="Search message, type or delivery…" /></label>
+        <label className="event-filter"><span>Severity</span><select value={eventSeverity} onChange={event => setEventSeverity(event.target.value)}><option value="all">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="error">Error</option><option value="info">Info</option></select></label>
+        <div className="event-result-count">{filteredEvents.length} of {events.length} events</div>
+        {(eventSearch || eventSeverity !== "all") && <button className="event-reset" type="button" onClick={() => { setEventSearch(""); setEventSeverity("all"); }}>Clear filters</button>}
+      </div>
       <div className="table-wrap"><table><thead><tr><th>TIME</th><th>SEVERITY</th><th>EVENT</th><th>DETAIL</th><th>DELIVERY</th><th>ATTEMPTS</th></tr></thead><tbody>
-        {events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
+        {filteredEvents.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
         {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
+        {events.length > 0 && !filteredEvents.length && <tr><td colSpan={6} className="empty">No events match these filters. Try another search or clear the filters.</td></tr>}
       </tbody></table></div>
     </section>}
 
