@@ -10,7 +10,7 @@ def test_health_monitor_persists_idempotent_operator_events(monkeypatch, tmp_pat
     first = run_health_monitor_cycle(now=now)
     second = run_health_monitor_cycle(now=now)
     events = EventOutbox(database).list_events(limit=20)
-    assert first["health_status"] == "healthy"
+    assert first["health_status"] == "critical"
     assert first["alerts_detected"] == 4
     assert second["alerts_detected"] == 4
     assert first["backup_worker"]["fresh"] is False
@@ -142,7 +142,7 @@ def test_health_monitor_persists_candle_upload_stale_alert_and_recovery(monkeypa
 
     events = EventOutbox(database).list_events(limit=20)
     assert first["candle_upload_alerts_detected"] == 1
-    assert first["health_status"] == "critical"
+    assert first["health_status"] == "degraded"
     assert first["events_recorded"] == 1
     assert recovered["candle_upload_alerts_detected"] == 0
     assert recovered["events_resolved"] == 1

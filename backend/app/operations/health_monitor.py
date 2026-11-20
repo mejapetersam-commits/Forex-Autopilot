@@ -104,8 +104,15 @@ def run_health_monitor_cycle(*, now=None) -> dict[str, object]:
     outbox = EventOutbox()
     transitions = outbox.reconcile_health_alerts(alerts, now=current)
     has_critical_alert = any(item.get("severity") == "critical" for item in alerts)
+    has_warning_alert = any(item.get("severity") == "warning" for item in alerts)
+    if has_critical_alert:
+        combined_health_status = "critical"
+    elif has_warning_alert and health["status"] == "healthy":
+        combined_health_status = "degraded"
+    else:
+        combined_health_status = health["status"]
     return {
-        "health_status": "critical" if has_critical_alert else health["status"],
+        "health_status": combined_health_status,
         "backup_worker": backup_worker,
         "candle_upload_alerts_detected": len(upload_alerts),
         "alerts_detected": len(alerts),
