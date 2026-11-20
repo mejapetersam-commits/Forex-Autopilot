@@ -1,3 +1,4 @@
+from pathlib import Path
 import sqlite3
 
 import pytest
@@ -64,8 +65,12 @@ def test_restore_is_atomic_and_preserves_pre_restore_backup(tmp_path):
     make_database(source, "restored")
     create_backup(source, backup)
     make_database(destination, "pre-restore")
+    Path(str(destination) + "-wal").write_bytes(b"stale wal")
+    Path(str(destination) + "-shm").write_bytes(b"stale shm")
 
     result = restore_backup(backup, destination, replace=True)
+    assert not Path(str(destination) + "-wal").exists()
+    assert not Path(str(destination) + "-shm").exists()
 
     assert result["status"] == "restored"
     assert result["integrity_check"] == "ok"
