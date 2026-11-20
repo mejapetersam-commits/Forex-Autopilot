@@ -188,23 +188,28 @@ export default function App() {
 
     <div id="data" className="dashboard-group">
       <div className="group-heading"><div className="eyebrow">DATA & INFRASTRUCTURE</div><h2>Market data quality and broker configuration</h2><p>Inspect incoming history, data integrity, contract metadata and notification delivery.</p></div>
+      <details className="dashboard-accordion"><summary>Open market data panels <span>4 panels · ingestion, readiness, broker specs, notifications</span></summary>
       <CandleIngestion />
       <DataReadiness />
       <BrokerSpecifications />
       <NotificationHealth />
+      </details>
     </div>
 
     <div id="strategy" className="dashboard-group">
       <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Review strategy results, comparisons, demo observations and trade attribution.</p></div>
+      <details className="dashboard-accordion"><summary>Open performance and research panels <span>5 panels · performance, cost stress, comparison, demo, attribution</span></summary>
       <StrategyPerformance />
       <CostSensitivity />
       <StrategyComparison />
       <DemoObservation />
       <TradeAttribution />
+      </details>
     </div>
 
     <div id="operations" className="dashboard-group">
     <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Read-only monitoring of risk gates, position reconciliation, recovery and release conditions.</p></div>
+    <details className="dashboard-accordion"><summary>Open operations and safety panels <span>4 panels · execution, recovery, reconciliation, release readiness</span></summary>
     <section id="execution" className="panel">
       <div className="section-head"><div><div className="eyebrow">EXECUTION CONTROL ROOM</div><h2>Position oversight & risk gate</h2><p className="subhead">Live demo-position reconciliation, lifecycle evidence and aggregate risk status. This view is read-only.</p></div><Status good={operations?.read_only === true && operations?.trading_enabled === false}>READ ONLY</Status></div>
       <div className="metrics ops-metrics">
@@ -257,6 +262,7 @@ export default function App() {
         {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
       </tbody></table></div>
     </section>
+    </details>
 
     </div>
 
