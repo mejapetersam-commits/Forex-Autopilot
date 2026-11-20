@@ -304,6 +304,75 @@ def dashboard_strategy_performance(
     }
 
 
+@app.get("/api/v1/dashboard/strategy-comparison", include_in_schema=False)
+def dashboard_strategy_comparison(
+    limit: int = Query(default=1000, ge=61, le=5000),
+):
+    """Compare fixed research configurations across the dashboard symbol/timeframe grid."""
+    store = telemetry_store()
+    rows = []
+    for symbol in sorted(dashboard_symbols()):
+        for timeframe in ("M15", "H1", "H4"):
+            candles = store.candle_history(symbol, timeframe, limit)
+            quality = assess_candle_quality(candles, timeframe)
+            row = {
+                "symbol": symbol, "timeframe": timeframe,
+                "candles_available": len(candles),
+                "data_quality": quality.get("status", "unknown"),
+                "gap_count": quality.get("gap_count", 0),
+                "status": "insufficient_data",
+                "execution_enabled": False,
+            }
+            if len(candles) < 61:
+                rows.append(row)
+                continue
+            try:
+                pip_size, pip_value, pip_source = resolve_backtest_pip_values(
+                    store, symbol, None, None
+                )
+                config = BacktestConfig(
+                    initial_equity=10000.0, risk_per_trade_pct=0.25,
+                    pip_size=pip_size, pip_value_per_lot=pip_value,
+                    spread_pips=1.0, slippage_pips_per_side=0.2,
+                    commission_per_lot_per_side=3.5,
+                )
+                result = run_backtest(candles, config)
+                row.update({
+                    "status": result.get("status", "unknown"),
+                    "return_pct": result.get("return_pct"),
+                    "total_trades": result.get("total_trades"),
+                    "win_rate_pct": result.get("win_rate_pct"),
+                    "profit_factor": result.get("profit_factor"),
+                    "max_drawdown_pct": result.get("mark_to_market_max_drawdown_pct",
+                                                   result.get("max_drawdown_pct")),
+                    "expectancy_per_trade": result.get("expectancy_per_trade"),
+                    "pip_value_source": pip_source,
+                })
+            except HTTPException as exc:
+                row.update({"status": "unavailable", "reason": str(exc.detail)})
+            rows.append(row)
+    ranked = sorted(
+        (row for row in rows if row.get("status") == "completed"),
+        key=lambda row: (
+            row.get("profit_factor") is not None,
+            row.get("profit_factor") or 0,
+            row.get("return_pct") or 0,
+        ),
+        reverse=True,
+    )
+    for index, row in enumerate(ranked, 1):
+        row["research_rank"] = index
+    return {
+        "items": rows,
+        "ranked_count": len(ranked),
+        "ranking_method": "profit factor then return; descriptive historical comparison only",
+        "warning": "Rankings are not out-of-sample validation and can be distorted by small samples, data quality and OHLC execution assumptions.",
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/portfolio", include_in_schema=False)
 def dashboard_portfolio():
     """Read-only exposure and stop-risk estimate from fresh demo telemetry."""
