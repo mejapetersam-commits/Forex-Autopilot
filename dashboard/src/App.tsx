@@ -164,6 +164,46 @@ export default function App() {
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : "No reported alerts"}/>
     </section>}
 
+    {page === "overview" && <section className="overview-grid" aria-label="Live account and system snapshot">
+      <article className="panel overview-card">
+        <div className="section-head"><div><div className="eyebrow">ACCOUNT & CONNECTION</div><h2>Broker snapshot</h2></div><Status good={Boolean(overview?.heartbeat?.fresh && account?.fresh)}>{overview?.heartbeat?.fresh && account?.fresh ? "TELEMETRY FRESH" : "TELEMETRY UNVERIFIED"}</Status></div>
+        <div className="snapshot-list">
+          <div><span>MT5 bridge</span><b>{overview?.bridge_connected ? "Connected" : "Disconnected"}</b></div>
+          <div><span>Terminal heartbeat</span><b>{overview?.heartbeat?.observed_at ? stamp(overview.heartbeat.observed_at) : "Not received"}</b></div>
+          <div><span>Account snapshot</span><b>{account?.observed_at ? stamp(account.observed_at) : "Not received"}</b></div>
+          <div><span>Account currency</span><b>{account?.account_currency ?? "Not reported"}</b></div>
+        </div>
+        <p className="overview-note">A connected bridge does not by itself confirm fresh account data. Stale or missing telemetry remains unverified.</p>
+      </article>
+      <article className="panel overview-card">
+        <div className="section-head"><div><div className="eyebrow">MARKET PULSE</div><h2>Latest quotes</h2></div><button className="text-action" type="button" onClick={() => setPage("market")}>Open Market Watch →</button></div>
+        <div className="quote-list">
+          {overview?.quotes.slice(0, 4).map(quote => <div className="quote-item" key={quote.symbol}>
+            <div><b>{quote.symbol}</b><span>{quote.fresh ? "Fresh quote" : "Stale quote"}</span></div>
+            <div className="quote-values"><b>{Number.isFinite(quote.bid) ? quote.bid.toFixed(5) : "—"}</b><span>Bid</span></div>
+            <div className="quote-values"><b>{Number.isFinite(quote.ask) ? quote.ask.toFixed(5) : "—"}</b><span>Ask</span></div>
+            <Status good={quote.fresh}>{quote.fresh ? "Fresh" : "Stale"}</Status>
+          </div>)}
+          {!overview?.quotes.length && <p className="empty">No market quotes have been received yet.</p>}
+        </div>
+      </article>
+      <article className="panel overview-card overview-activity">
+        <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent activity</h2></div><button className="text-action" type="button" onClick={() => setPage("system")}>View event log →</button></div>
+        {events.slice(0, 3).map(event => <div className="activity-item" key={event.event_id}>
+          <span className={`activity-dot ${event.severity}`} />
+          <div><b>{event.event_type.replaceAll("_", " ")}</b><span>{event.message}</span><small>{stamp(event.occurred_at)} · {event.delivery_status}</small></div>
+          <span className="activity-severity">{event.severity}</span>
+        </div>)}
+        {!events.length && <p className="empty">No operational events have been recorded yet.</p>}
+      </article>
+      <article className="panel overview-card overview-safety">
+        <div className="section-head"><div><div className="eyebrow">SAFETY POSTURE</div><h2>Execution remains disabled</h2></div><ShieldCheck size={22}/></div>
+        <p>This workspace is monitoring-only. It does not submit, modify, or close trades.</p>
+        <div className="safety-facts"><span>Trading enabled</span><b>No</b><span>Dashboard mode</span><b>Read only</b><span>Active alerts</span><b>{alerts.length}</b></div>
+        <button className="text-action" type="button" onClick={() => setPage("risk")}>Review risk & safeguards →</button>
+      </article>
+    </section>}
+
     {page === "market" && <section id="connectivity" className="panel">
       <div className="section-head"><div><div className="eyebrow">BROKER BRIDGE</div><h2>Connection & market quotes</h2></div><span className="muted">Auto-refresh · 15 seconds</span></div>
       <div className="connection-row"><div className="connection-icon">{overview?.bridge_connected ? <Wifi/> : <WifiOff/>}</div><div className="connection-copy"><b>{overview?.bridge_connected ? "Terminal heartbeat received" : "Waiting for terminal heartbeat"}</b><span>{overview?.heartbeat?.observed_at ? `Last heartbeat: ${stamp(overview.heartbeat.observed_at)}` : "Attach the read-only telemetry EA to begin reporting."}</span></div><Status good={Boolean(overview?.heartbeat?.fresh)}>{overview?.heartbeat?.fresh ? "Fresh" : "Stale / missing"}</Status></div>
