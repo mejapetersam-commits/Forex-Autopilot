@@ -42,7 +42,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
   const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "risk" | "system">("overview");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return window.localStorage.getItem("forex-autopilot-theme") === "dark" ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -121,6 +127,14 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("forex-autopilot-theme", theme);
+    } catch {
+      // Theme preference is optional; the dashboard remains usable if storage is unavailable.
+    }
+  }, [theme]);
+
   const account = overview?.account;
   const alerts = typeof overview?.system_health === "object" ? overview.system_health.alerts ?? [] : [];
   const health = typeof overview?.system_health === "object" ? overview.system_health.status : overview?.system_health;
@@ -137,7 +151,7 @@ export default function App() {
     </section>
 
     <nav className="dashboard-nav" aria-label="Main navigation">
-      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} type="button" className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{label}</button>)}
+      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} type="button" className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{label}{key === "system" && alerts.length > 0 && <span className="nav-count" aria-label={alerts.length + " active alerts"}>{alerts.length}</span>}</button>)}
     </nav>
     <div className="page-intro"><div className="eyebrow">YOUR TRADING WORKSPACE</div><h2>{({overview:"Welcome to your overview",market:"Market Watch",portfolio:"Portfolio",strategies:"Strategies & research",risk:"Risk & safety",system:"System centre"} as const)[page]}</h2><p>{({overview:"Your essential account and system snapshot, all in one place.",market:"Quotes, candidate signals and historical market data.",portfolio:"Exposure, positions and portfolio risk information.",strategies:"Research, backtesting and strategy comparisons.",risk:"Operational safeguards, recovery and release readiness.",system:"Broker connectivity, specifications, notifications and event history."} as const)[page]}</p></div>
 
