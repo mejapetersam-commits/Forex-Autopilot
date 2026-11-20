@@ -143,33 +143,33 @@ export default function App() {
 
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
 
-    <section id="overview" className="metrics">
+    {page === "overview" && <section id="overview" className="metrics">
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
       <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail="Broker-reported available margin"/>
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : "No reported alerts"}/>
-    </section>
+    </section>}
 
-    <section id="connectivity" className="panel">
+    {page === "market" && <section id="connectivity" className="panel">
       <div className="section-head"><div><div className="eyebrow">BROKER BRIDGE</div><h2>Connection & market quotes</h2></div><span className="muted">Auto-refresh · 15 seconds</span></div>
       <div className="connection-row"><div className="connection-icon">{overview?.bridge_connected ? <Wifi/> : <WifiOff/>}</div><div className="connection-copy"><b>{overview?.bridge_connected ? "Terminal heartbeat received" : "Waiting for terminal heartbeat"}</b><span>{overview?.heartbeat?.observed_at ? `Last heartbeat: ${stamp(overview.heartbeat.observed_at)}` : "Attach the read-only telemetry EA to begin reporting."}</span></div><Status good={Boolean(overview?.heartbeat?.fresh)}>{overview?.heartbeat?.fresh ? "Fresh" : "Stale / missing"}</Status></div>
       <div className="table-wrap"><table><thead><tr><th>INSTRUMENT</th><th>BID</th><th>ASK</th><th>SPREAD</th><th>TELEMETRY</th></tr></thead><tbody>
         {overview?.quotes.map(q => <tr key={q.symbol}><td className="symbol">{q.symbol}</td><td>{q.bid?.toFixed(5) ?? "—"}</td><td>{q.ask?.toFixed(5) ?? "—"}</td><td>{q.spread?.toFixed(5) ?? (q.ask - q.bid).toFixed(5)}</td><td><Status good={q.fresh}>{q.fresh ? "Fresh" : "Stale"}</Status></td></tr>)}
         {!overview?.quotes.length && <tr><td colSpan={5} className="empty">No quote telemetry received yet.</td></tr>}
       </tbody></table></div>
-    </section>
+    </section>}
 
-    <section id="research" className="panel">
+    {page === "market" && <section id="research" className="panel">
       <div className="section-head"><div><div className="eyebrow">RESEARCH WORKSPACE</div><h2>Strategy candidates</h2><p className="subhead">Signals are informational research outputs, not trade instructions.</p></div><span className="research-tag"><CircleDot size={13}/> RESEARCH ONLY</span></div>
       <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>SIGNAL</th><th>CANDLES</th><th>DATA QUALITY</th><th>READINESS</th><th>COVERAGE</th><th>GAPS</th></tr></thead><tbody>
         {research.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td><span className={`signal ${item.signal?.toLowerCase()}`}>{item.signal ?? "—"}</span><small className="reason">{item.reason}</small></td><td>{item.candles}</td><td><Status good={item.data_quality === "healthy"}>{item.data_quality}</Status></td><td><Status good={item.readiness_status === "ready_for_research"}>{(item.readiness_status ?? "unknown").replaceAll("_", " ")}</Status></td><td>{item.coverage_pct?.toFixed(1) ?? "—"}%</td><td>{item.gap_count}</td></tr>)}
         {!research.length && <tr><td colSpan={8} className="empty">Research data will appear when candle history is available.</td></tr>}
       </tbody></table></div>
-    </section>
+    </section>}
 
     {alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
 
-    <section id="portfolio" className="panel">
+    {page === "portfolio" && <section id="portfolio" className="panel">
       <div className="section-head"><div><div className="eyebrow">PORTFOLIO RISK & EXPOSURE</div><h2>Open-position concentration</h2><p className="subhead">Broker telemetry estimates converted into account currency. Missing or stale inputs are not guessed.</p></div><Status good={portfolio?.status === "healthy"}>{portfolio?.status?.toUpperCase() ?? "LOADING"}</Status></div>
       <div className="metrics">
         <Metric label="OPEN POSITIONS" value={String(portfolio?.open_position_count ?? "—")} detail="Broker-reported positions"/>
@@ -187,19 +187,23 @@ export default function App() {
         {!portfolio?.positions.length && <tr><td colSpan={6} className="empty">No open positions reported.</td></tr>}
       </tbody></table></div>
       <p className="subhead">Exposure is a notional estimate using the latest quote and broker contract size. Stop risk excludes slippage, commissions and gaps. This panel does not approve or place trades.</p>
-    </section>
+    </section>}
 
-    <div id="data" className="dashboard-group">
+    {page === "market" && <div id="data" className="dashboard-group">
       <div className="group-heading"><div className="eyebrow">DATA & INFRASTRUCTURE</div><h2>Market data quality and broker configuration</h2><p>Inspect incoming history, data integrity, contract metadata and notification delivery.</p></div>
       <details className="dashboard-accordion"><summary>Open market data panels <span>4 panels · ingestion, readiness, broker specs, notifications</span></summary>
       <CandleIngestion />
       <DataReadiness />
+      </details>
+    </div>}
+
+    {page === "system" && <div className="dashboard-group">
+      <div className="group-heading"><div className="eyebrow">SYSTEM CONFIGURATION</div><h2>Broker & notification services</h2><p>Reference specifications and delivery health from connected services.</p></div>
       <BrokerSpecifications />
       <NotificationHealth />
-      </details>
-    </div>
+    </div>}
 
-    <div id="strategy" className="dashboard-group">
+    {page === "strategies" && <div id="strategy" className="dashboard-group">
       <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Review strategy results, comparisons, demo observations and trade attribution.</p></div>
       <details className="dashboard-accordion"><summary>Open performance and research panels <span>5 panels · performance, cost stress, comparison, demo, attribution</span></summary>
       <StrategyPerformance />
@@ -208,9 +212,9 @@ export default function App() {
       <DemoObservation />
       <TradeAttribution />
       </details>
-    </div>
+    </div>}
 
-    <div id="operations" className="dashboard-group">
+    {page === "risk" && <div id="operations" className="dashboard-group">
     <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Read-only monitoring of risk gates, position reconciliation, recovery and release conditions.</p></div>
     <details className="dashboard-accordion"><summary>Open operations and safety panels <span>4 panels · execution, recovery, reconciliation, release readiness</span></summary>
     <section id="execution" className="panel">
@@ -267,7 +271,15 @@ export default function App() {
     </section>
     </details>
 
-    </div>
+    </div>}
+
+    {page === "system" && <section id="events" className="panel">
+      <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent system events</h2><p className="subhead">Durable event history and notification queue status. No external messages are sent by this view.</p></div><span className="research-tag">{events.length} RECENT</span></div>
+      <div className="table-wrap"><table><thead><tr><th>TIME</th><th>SEVERITY</th><th>EVENT</th><th>DETAIL</th><th>DELIVERY</th><th>ATTEMPTS</th></tr></thead><tbody>
+        {events.map(event => <tr key={event.event_id}><td>{stamp(event.occurred_at)}</td><td><Status good={event.severity === "info"}>{event.severity.toUpperCase()}</Status></td><td className="symbol">{event.event_type}</td><td>{event.message}</td><td>{event.delivery_status}</td><td>{event.attempts}</td></tr>)}
+        {!events.length && <tr><td colSpan={6} className="empty">No operational events have been recorded yet.</td></tr>}
+      </tbody></table></div>
+    </section>}
 
     <footer><span><ShieldCheck size={14}/> READ-ONLY DASHBOARD · EXECUTION DISABLED</span><span>Last refreshed: {stamp(lastUpdated)}</span></footer>
   </main>;
