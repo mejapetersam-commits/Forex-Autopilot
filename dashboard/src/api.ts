@@ -69,3 +69,35 @@ export interface OperationalEventsResponse {
   updated_at: string;
 }
 export const getOperationalEvents = () => getJson<OperationalEventsResponse>("/api/v1/dashboard/events?limit=50");
+
+export interface PortfolioCurrency {
+  currency: string;
+  net_exposure: number;
+  gross_exposure: number;
+  net_exposure_pct_equity: number;
+  gross_exposure_pct_equity: number;
+}
+export interface PortfolioPosition {
+  ticket: string;
+  symbol: string;
+  side: string;
+  volume_lots: number;
+  mark_price: number;
+  stop_loss: number | null;
+  notional_account_currency: number;
+  estimated_stop_risk: number | null;
+}
+export interface PortfolioResponse {
+  status: string;
+  reasons?: string[];
+  positions: PortfolioPosition[];
+  currencies: PortfolioCurrency[];
+  open_position_count: number;
+  total_open_stop_risk: number | null;
+  account_equity: number | null;
+  account_currency: string | null;
+  execution_mode: string;
+  trading_enabled: boolean;
+  updated_at: string;
+}
+export const getPortfolio = () => getJson<PortfolioResponse>("/api/v1/dashboard/portfolio");
