@@ -427,3 +427,17 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .notification-foot button{color:#bdebd5}
 @media(max-width:560px){.top-actions{gap:6px}.notification-trigger{padding:8px}.notification-trigger>span{display:none}.notification-drawer{padding:22px 18px}}
 @media(prefers-reduced-motion:reduce){.notification-drawer{animation:none}}
+
+
+/* Search and filtering controls for the system event journal */
+.event-tools{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:15px 0}
+.event-tools label{display:grid;gap:6px}
+.event-tools label>span{font-size:9px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--fa-muted)}
+.event-search{flex:1 1 260px;min-width:200px}
+.event-filter{flex:0 1 170px}
+.event-tools input,.event-tools select{width:100%;min-height:38px;padding:9px 11px;border:1px solid var(--fa-line);border-radius:9px;background:var(--fa-surface);color:var(--fa-ink);font:500 11px 'DM Sans',sans-serif;outline:none}
+.event-tools input:focus,.event-tools select:focus{border-color:#75b99a;box-shadow:0 0 0 3px rgba(117,185,154,.16)}
+.event-result-count{padding:0 0 10px;color:var(--fa-muted);font-size:10px;white-space:nowrap}
+.event-reset{min-height:34px;margin-bottom:2px;padding:0 10px;border:1px solid var(--fa-line);border-radius:8px;background:transparent;color:var(--fa-ink);font:700 10px 'DM Sans',sans-serif;cursor:pointer}
+.event-reset:hover{border-color:#75b99a;color:#398b6b}
+@media(max-width:560px){.event-search,.event-filter{flex:1 1 100%}.event-result-count{padding-bottom:0}}
