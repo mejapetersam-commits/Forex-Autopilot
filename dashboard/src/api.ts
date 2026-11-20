@@ -290,11 +290,11 @@ export interface DashboardOperations {
   reconciliation: {
     status: string;
     managed_positions_checked: number;
-    protection_issues: Array<{
+    protection_issues?: Array<{
       ticket: string; position_id: string; symbol: string; side: string;
       volume_lots: number; reasons: string[];
     }>;
-    mismatched_positions: Array<{
+    mismatched_positions?: Array<{
       ticket: string; position_id: string; symbol: string; side: string;
       volume_lots: number; reasons: string[];
     }>;
