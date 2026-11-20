@@ -8,6 +8,7 @@ import TradeAttribution from "./TradeAttribution";
 import ExecutionReconciliation from "./ExecutionReconciliation";
 import ReleaseReadiness from "./ReleaseReadiness";
 import BrokerSpecifications from "./BrokerSpecifications";
+import NotificationHealth from "./NotificationHealth";
 
 function money(value?: number, currency = "USD") {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -179,6 +180,7 @@ export default function App() {
     </section>
 
     <BrokerSpecifications />
+    <NotificationHealth />
     <StrategyPerformance />
     <StrategyComparison />
     <DemoObservation />
