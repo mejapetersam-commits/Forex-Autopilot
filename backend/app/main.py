@@ -1144,7 +1144,7 @@ def record_reconciliation_events(result: dict) -> int:
             else "Broker reported a partial fill; remaining volume requires reconciliation."
         )
         event = outbox.record(
-            event_key=f"execution-reconciliation:{intent_id}:{fingerprint}",
+            event_key=f"exec-recon:{hashlib.sha256(intent_id.encode(\"utf-8\")).hexdigest()[:32]}:{fingerprint}",
             event_type="execution_reconciliation_review",
             severity=severity,
             message=message,
