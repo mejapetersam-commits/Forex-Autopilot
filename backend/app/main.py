@@ -252,6 +252,58 @@ def monitoring_health():
     )
 
 
+@app.get("/api/v1/dashboard/strategy-performance", include_in_schema=False)
+def dashboard_strategy_performance(
+    symbol: str = Query(default="EURUSDm", min_length=1, max_length=32),
+    timeframe: str = Query(default="H1", pattern="^(M15|H1|H4)$"),
+    include_walk_forward: bool = Query(default=False),
+    limit: int = Query(default=1000, ge=61, le=5000),
+):
+    """Local read-only strategy research workspace; never authorizes execution."""
+    normalized_symbol = symbol.strip().upper()
+    if normalized_symbol not in dashboard_symbols():
+        raise HTTPException(status_code=403, detail="Symbol is not in the dashboard research allowlist.")
+    normalized_timeframe = timeframe.strip().upper()
+    store = telemetry_store()
+    candles = store.candle_history(normalized_symbol, normalized_timeframe, limit)
+    quality = assess_candle_quality(candles, normalized_timeframe)
+    pip_size, pip_value, pip_source = resolve_backtest_pip_values(
+        store, normalized_symbol, None, None
+    )
+    config = BacktestConfig(
+        initial_equity=10000.0,
+        risk_per_trade_pct=0.25,
+        pip_size=pip_size,
+        pip_value_per_lot=pip_value,
+        spread_pips=1.0,
+        slippage_pips_per_side=0.2,
+        commission_per_lot_per_side=3.5,
+    )
+    result = run_backtest(candles, config)
+    analytics = analyse_backtest(result) if result.get("status") == "completed" else None
+    walk_forward = None
+    if include_walk_forward:
+        walk_forward = optimize_walk_forward(candles, config) if len(candles) >= 400 else {
+            "status": "insufficient_data", "candles_available": len(candles),
+            "minimum_required": 400, "execution_enabled": False,
+        }
+    return {
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "candles_available": len(candles),
+        "data_quality": quality,
+        "pip_size_used": pip_size,
+        "pip_value_per_lot_used": pip_value,
+        "pip_value_source": pip_source,
+        "backtest": result,
+        "analytics": analytics,
+        "walk_forward": walk_forward,
+        "trading_enabled": False,
+        "execution_mode": "disabled",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/portfolio", include_in_schema=False)
 def dashboard_portfolio():
     """Read-only exposure and stop-risk estimate from fresh demo telemetry."""
