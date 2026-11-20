@@ -127,3 +127,24 @@ def test_dashboard_exposes_sanitized_broker_order_snapshots(tmp_path, monkeypatc
     assert body["broker_orders"][0]["order_ticket"] == "778899"
     assert body["broker_orders"][0]["current_volume"] == 0.006
     assert "comment" not in body["broker_orders"][0]
+
+def test_dashboard_keeps_fill_progress_unknown_without_broker_evidence(tmp_path, monkeypatch):
+    path = str(tmp_path / "awaiting.sqlite3")
+    ledger = ExecutionLedger(path)
+    outbox = EventOutbox(path)
+    key = "dashboard-awaiting"
+    ledger.create_intent(key, {
+        "symbol": "EURUSDm", "side": "buy", "volume_lots": 0.01,
+        "stop_loss": 1.099, "take_profit": 1.102,
+    })
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    ledger.transition(key, "submitted", event_type="broker_submit")
+    ledger.transition(key, "acknowledged", event_type="broker_ack", broker_order_id="12346")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "EventOutbox", lambda: outbox)
+
+    body = TestClient(main.app).get("/api/v1/dashboard/execution-reconciliation").json()
+    intent = body["intents"][0]
+    assert intent["result"] == "awaiting_broker_history"
+    assert intent["remaining_volume_lots"] is None
+    assert intent["fill_progress_pct"] is None
