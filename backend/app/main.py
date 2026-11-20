@@ -540,6 +540,8 @@ def dashboard_execution_reconciliation(
                     "broker_history_full_fill_confirmed", "broker_history_reconciled",
                     "broker_order_history_reconciled",
                 }
+                else "terminal_outcome_recorded" if intent["status"] in {"cancelled", "rejected"}
+                else "reconciled" if intent["status"] == "reconciled"
                 else "awaiting_broker_history"
             ),
             "filled_volume_lots": details.get("filled_volume_lots", 0.0),
@@ -575,7 +577,11 @@ def dashboard_execution_reconciliation(
     counts = {
         "partial_fill_count": sum(row["result"] == "partial_fill_confirmed" for row in rows),
         "reconciled_count": sum(row["status"] == "reconciled" for row in rows),
-        "awaiting_history_count": sum(row["result"] == "awaiting_broker_history" for row in rows),
+        "awaiting_history_count": sum(
+            row["result"] == "awaiting_broker_history"
+            and row["status"] in {"submitted", "acknowledged", "partially_filled", "filled", "unknown"}
+            for row in rows
+        ),
         "unknown_count": sum(row["status"] == "unknown" for row in rows),
         "manual_review_count": len(review_events),
     }
