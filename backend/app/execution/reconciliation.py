@@ -282,6 +282,7 @@ def reconcile_broker_history(
             })
             continue
 
+        remaining = max(0.0, requested - filled)
         reports.append({
             "intent_id": intent_id, "broker_order_id": order_id,
             "status": current,
@@ -290,6 +291,8 @@ def reconcile_broker_history(
             ),
             "filled_volume_lots": round(filled, 8),
             "requested_volume_lots": requested,
+            "remaining_volume_lots": round(remaining, 8),
+            "fill_progress_pct": round(min(100.0, filled / requested * 100.0), 4),
             "deal_count": len(entries),
             "average_fill_price": average_fill_price,
             "fill_details": fill_details,
