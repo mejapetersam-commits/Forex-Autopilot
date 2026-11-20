@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, CircleDot, RefreshCw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { getOverview, getResearch, getOperationalEvents, getPortfolio, getDashboardOperations, getRecoveryStatus, getExecutionReconciliation, getReleaseReadiness, type ReleaseReadinessResponse, type DashboardOverview, type ResearchItem, type OperationalEvent, type PortfolioResponse, type DashboardOperations, type RecoveryStatusResponse, type ExecutionReconciliationResponse } from "./api";
 import StrategyPerformance from "./StrategyPerformance";
 import CostSensitivity from "./CostSensitivity";
@@ -42,6 +42,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
   const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "risk" | "system">("overview");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return window.localStorage.getItem("forex-autopilot-theme") === "dark" ? "dark" : "light";
@@ -142,7 +143,7 @@ export default function App() {
   return <main className={`shell page-${page} theme-${theme}`}>
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Activity size={21}/></div><div><b>FOREX AUTOPILOT</b><span>MARKET INTELLIGENCE · DEMO MONITORING</span></div></div>
-      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)}>{overview?.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
+      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)}>{overview?.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="notification-trigger" type="button" aria-label={`Open notifications, ${alerts.length} active alerts`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(value => !value)}><Bell size={16}/><span>Alerts</span>{alerts.length > 0 && <i>{alerts.length}</i>}</button><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
     </header>
 
     <section className="hero">
@@ -329,6 +330,13 @@ export default function App() {
       </tbody></table></div>
     </section>}
 
+    {notificationsOpen && <div className="notification-backdrop" onClick={() => setNotificationsOpen(false)}>
+      <aside className="notification-drawer" role="dialog" aria-modal="true" aria-label="System notifications" onClick={event => event.stopPropagation()}>
+        <div className="notification-head"><div><div className="eyebrow">LIVE SYSTEM MESSAGES</div><h2>Notifications</h2><p>{alerts.length} active alert{alerts.length === 1 ? "" : "s"} · refreshed with dashboard telemetry</p></div><button type="button" className="drawer-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button></div>
+        {alerts.length > 0 ? <div className="notification-list">{alerts.map((alert, index) => <article className="notification-item" key={index}><div className="notification-symbol"><AlertTriangle size={16}/></div><div><b>{alert.severity ?? "NOTICE"}</b><p>{alert.message ?? "System alert"}</p><small>Current system health report</small></div></article>)}</div> : <div className="notification-empty"><div className="notification-check"><ShieldCheck size={23}/></div><b>No active alerts reported</b><p>This means the latest health response contains no alerts. It does not replace the separate telemetry freshness checks.</p></div>}
+        <div className="notification-foot"><span>Critical alerts remain visible on the dashboard.</span><button type="button" onClick={() => { setNotificationsOpen(false); setPage("system"); }}>Open System Centre →</button></div>
+      </aside>
+    </div>}
     <footer><span><ShieldCheck size={14}/> READ-ONLY DASHBOARD · EXECUTION DISABLED</span><span>Last refreshed: {stamp(lastUpdated)}</span></footer>
   </main>;
 }
