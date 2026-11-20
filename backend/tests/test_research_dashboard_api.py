@@ -122,3 +122,40 @@ def test_dashboard_data_readiness_exposes_integrity_and_gap_detail(monkeypatch, 
     assert ledger["recent_batches"][0]["symbol"] == "EURUSDM"
     assert ledger["trading_enabled"] is False
     assert ledger["read_only"] is True
+
+
+def test_dashboard_cost_sensitivity_compares_cost_multipliers_read_only(monkeypatch, tmp_path):
+    monkeypatch.setenv("FOREX_AUTOPILOT_BRIDGE_TOKEN", TOKEN)
+    monkeypatch.setenv("FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "cost-sensitivity.sqlite3"))
+    monkeypatch.setenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm")
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    candles = []
+    price = 1.10
+    for index in range(180):
+        next_price = price + 0.0002 + index * 0.000002
+        candles.append({
+            "opened_at": (start + timedelta(hours=index)).isoformat(),
+            "open": price,
+            "high": max(price, next_price) + 0.00015,
+            "low": min(price, next_price) - 0.00015,
+            "close": next_price,
+            "tick_volume": 100,
+        })
+        price = next_price
+    upload = client.post(
+        "/api/v1/mt5/candles",
+        headers={"X-Bridge-Token": TOKEN},
+        json={"symbol": "EURUSDm", "timeframe": "H1", "candles": candles},
+    )
+    assert upload.status_code == 200
+
+    response = client.get("/api/v1/dashboard/cost-sensitivity?symbol=EURUSDm&timeframe=H1")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["candles_available"] == 180
+    assert [item["cost_multiplier"] for item in payload["scenarios"]] == [1.0, 1.5, 2.0, 3.0]
+    assert payload["scenarios"][0]["assumptions"]["spread_pips"] == 1.0
+    assert payload["scenarios"][-1]["assumptions"]["spread_pips"] == 3.0
+    assert payload["trading_enabled"] is False
+    assert payload["execution_mode"] == "disabled"
+    assert payload["read_only"] is True
