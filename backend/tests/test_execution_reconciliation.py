@@ -172,3 +172,20 @@ def test_partial_fill_report_exposes_weighted_price_and_fill_breakdown(tmp_path)
     assert report["average_fill_price"] == pytest.approx((0.004*1.1+0.003*1.101)/0.007)
     assert [item["deal_ticket"] for item in report["fill_details"]] == ["51","52"]
     assert report["fill_details"][0]["position_id"] == "555"
+
+def test_fill_progress_reports_remaining_volume_for_partial_and_full_fills(tmp_path):
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    key=approved_intent(ledger, volume=0.01)
+    store.save_execution_history(history(deal(61,12345,0.004)))
+    partial=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    report=partial["results"][0]
+    assert report["filled_volume_lots"] == pytest.approx(0.004)
+    assert report["remaining_volume_lots"] == pytest.approx(0.006)
+    assert report["fill_progress_pct"] == pytest.approx(40.0)
+
+    store.save_execution_history(history(deal(61,12345,0.004),deal(62,12345,0.006)))
+    full=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    report=full["results"][0]
+    assert report["remaining_volume_lots"] == 0.0
+    assert report["fill_progress_pct"] == 100.0
