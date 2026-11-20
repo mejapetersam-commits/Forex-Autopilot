@@ -156,10 +156,12 @@ class MT5CandleBatch(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_unique_candle_times(self):
+    def validate_candle_time_order(self):
         times = [candle.opened_at for candle in self.candles]
-        if len(times) != len(set(times)):
-            raise ValueError("Candle timestamps must be unique within a batch.")
+        if any(current <= previous for previous, current in zip(times, times[1:])):
+            raise ValueError(
+                "Candle timestamps must be strictly increasing within a batch."
+            )
         return self
 
 
