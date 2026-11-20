@@ -33,7 +33,7 @@ export default function CandleIngestion() {
   return <section className="panel">
     <div className="section-head">
       <div><div className="eyebrow">MARKET DATA PIPELINE</div><h2>Historical ingestion ledger</h2>
-        <p className="subhead">Durable receipts for each MT5 bulk upload, including received volume and candle time range.</p>
+        <p className="subhead">Durable receipts for single and bulk MT5 uploads, including received volume and the stored history range.</p>
         {data && <small className="data-snapshot-time">Ledger response updated {time(data.updated_at)}</small>}
       </div>
       <button className="refresh" onClick={() => void refresh()} disabled={loading}>{loading ? <RefreshCw size={14} className="spin"/> : <Database size={14}/>} Refresh</button>
@@ -46,10 +46,10 @@ export default function CandleIngestion() {
       <article className="metric"><span>PIPELINE MODE</span><strong>{data ? "RECEIPTS" : "UNKNOWN"}</strong><small>Storage audit only · no execution</small></article>
     </div>
     <h3 className="subsection-title">Per-series ingestion totals</h3>
-    <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>BATCHES</th><th>RECEIVED (ALL UPLOADS)</th><th>UNIQUE STORED</th><th>LAST UPLOAD</th><th>LATEST STORED CANDLE</th></tr></thead><tbody>
-      {series.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td>{item.batch_count}</td><td>{item.candles_received.toLocaleString()}</td><td>{item.unique_candles_stored.toLocaleString()}</td><td>{time(item.last_ingested_at)}</td><td>{time(item.latest_stored_candle_at ?? undefined)}</td></tr>)}
-      {!data && <tr><td colSpan={7} className="empty">{loading ? "Loading ingestion ledger…" : "Ingestion ledger is unavailable. Refresh to retry."}</td></tr>}
-      {data && !series.length && <tr><td colSpan={7} className="empty">The ledger responded successfully but contains no series upload receipts yet.</td></tr>}
+    <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>BATCHES</th><th>RECEIVED (ALL UPLOADS)</th><th>UNIQUE STORED</th><th>FIRST STORED CANDLE</th><th>LATEST STORED CANDLE</th><th>LAST UPLOAD</th></tr></thead><tbody>
+      {series.map(item => <tr key={item.symbol + item.timeframe}><td className="symbol">{item.symbol}</td><td>{item.timeframe}</td><td>{item.batch_count}</td><td>{item.candles_received.toLocaleString()}</td><td>{item.unique_candles_stored.toLocaleString()}</td><td>{time(item.first_stored_candle_at ?? undefined)}</td><td>{time(item.latest_stored_candle_at ?? undefined)}</td><td>{time(item.last_ingested_at)}</td></tr>)}
+      {!data && <tr><td colSpan={8} className="empty">{loading ? "Loading ingestion ledger…" : "Ingestion ledger is unavailable. Refresh to retry."}</td></tr>}
+      {data && !series.length && <tr><td colSpan={8} className="empty">The ledger responded successfully but contains no series upload receipts yet.</td></tr>}
     </tbody></table></div>
     <h3 className="subsection-title">Latest upload receipts</h3>
     <div className="table-wrap"><table><thead><tr><th>SYMBOL</th><th>TIMEFRAME</th><th>RECEIVED</th><th>FIRST CANDLE</th><th>LAST CANDLE</th><th>INGESTED</th></tr></thead><tbody>

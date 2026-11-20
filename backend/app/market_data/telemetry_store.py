@@ -355,34 +355,9 @@ class TelemetryStore:
 
 
     def save_candle_batch(self, payload: MT5CandleBatch) -> int:
-        """Insert or refresh candles idempotently by symbol, timeframe and open time."""
-        rows = [
-            (
-                payload.symbol,
-                payload.timeframe,
-                candle.opened_at.isoformat(),
-                candle.open,
-                candle.high,
-                candle.low,
-                candle.close,
-                candle.tick_volume,
-            )
-            for candle in payload.candles
-        ]
-        with self._connect() as connection:
-            connection.executemany(
-                """INSERT INTO candles(
-                    symbol, timeframe, opened_at, open, high, low, close, tick_volume
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(symbol, timeframe, opened_at) DO UPDATE SET
-                    open=excluded.open,
-                    high=excluded.high,
-                    low=excluded.low,
-                    close=excluded.close,
-                    tick_volume=excluded.tick_volume""",
-                rows,
-            )
-        return len(rows)
+        """Upsert one candle series and record its ingestion receipt atomically."""
+        counts = self.save_candle_batches([payload])
+        return counts[f"{payload.symbol}:{payload.timeframe}"]
 
 
     def save_candle_batches(self, batches: list[MT5CandleBatch]) -> dict[str, int]:

@@ -31,3 +31,20 @@ def test_ingestion_summary_separates_receipts_from_unique_stored_candles(tmp_pat
     assert series["unique_candles_stored"] == 1
     assert series["first_stored_candle_at"] == "2026-11-20T09:00:00+00:00"
     assert series["latest_stored_candle_at"] == "2026-11-20T09:00:00+00:00"
+
+
+
+def test_single_batch_saves_are_recorded_in_the_ingestion_ledger(tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+
+    assert store.save_candle_batch(batch()) == 1
+    assert store.save_candle_batch(batch()) == 1
+
+    summary = store.candle_ingestion_summary()
+    assert summary["batch_count"] == 2
+    assert summary["series_count"] == 1
+    series = summary["series"][0]
+    assert series["candles_received"] == 2
+    assert series["unique_candles_stored"] == 1
+    assert series["first_stored_candle_at"] == "2026-11-20T09:00:00+00:00"
+    assert series["latest_stored_candle_at"] == "2026-11-20T09:00:00+00:00"
