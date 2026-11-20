@@ -31,6 +31,7 @@ def reconcile_open_positions(
     orphaned: list[dict[str, Any]] = []
     mismatched: list[dict[str, Any]] = []
     invalid_records: list[dict[str, Any]] = []
+    protection_issues: list[dict[str, Any]] = []
     identities: dict[str, list[str]] = defaultdict(list)
 
     for index, position in enumerate(positions):
@@ -68,6 +69,8 @@ def reconcile_open_positions(
             "symbol": str(position.get("symbol") or "").upper(),
             "side": position.get("side"),
             "volume_lots": volume if isfinite(volume) else None,
+            "stop_loss": position.get("stop_loss"),
+            "take_profit": position.get("take_profit"),
             "intent_id": intent.get("idempotency_key") if intent else None,
         }
         checked.append(row)
@@ -92,16 +95,30 @@ def reconcile_open_positions(
         if reasons:
             mismatched.append({**row, "reasons": reasons})
 
+        try:
+            stop_loss = float(position.get("stop_loss", 0))
+            take_profit = float(position.get("take_profit", 0))
+        except (TypeError, ValueError, OverflowError):
+            stop_loss = take_profit = 0.0
+        missing = []
+        if not isfinite(stop_loss) or stop_loss <= 0:
+            missing.append("protective_stop_loss_missing")
+        if not isfinite(take_profit) or take_profit <= 0:
+            missing.append("protective_take_profit_missing")
+        if missing:
+            protection_issues.append({**row, "reasons": missing})
+
     duplicates = [
         {"position_identity": identity, "tickets": sorted(tickets)}
         for identity, tickets in identities.items() if len(tickets) > 1
     ]
-    review_required = bool(orphaned or mismatched or duplicates or invalid_records)
+    review_required = bool(orphaned or mismatched or duplicates or invalid_records or protection_issues)
     return {
         "status": "review_required" if review_required else "complete",
         "managed_positions_checked": len(checked),
         "orphaned_positions": orphaned,
         "mismatched_positions": mismatched,
+        "protection_issues": protection_issues,
         "duplicate_position_identities": duplicates,
         "invalid_position_records": invalid_records,
         "trading_enabled": False,
