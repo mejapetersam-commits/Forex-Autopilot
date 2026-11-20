@@ -52,7 +52,7 @@ export default function ExecutionReconciliation({ data }: { data: ExecutionRecon
         <td><Status good={order.state === "filled"}>{order.state.replaceAll("_", " ").toUpperCase()}</Status></td>
         <td>{Math.max(0, order.initial_volume - order.current_volume).toFixed(3)} / {order.initial_volume.toFixed(3)}</td>
         <td>{order.current_volume.toFixed(3)}</td><td>{order.price.toFixed(5)}</td>
-        <td>{order.stop_loss.toFixed(5)} / {order.take_profit.toFixed(5)}</td><td>{stamp(order.observed_at)}</td>
+        <td>{order.stop_loss > 0 ? order.stop_loss.toFixed(5) : "MISSING"} / {order.take_profit > 0 ? order.take_profit.toFixed(5) : "MISSING"}</td><td>{stamp(order.observed_at)}</td>
       </tr>)}
       {!data?.broker_orders.length && <tr><td colSpan={9} className="empty">No broker order snapshots have been received yet.</td></tr>}
     </tbody></table></div>
