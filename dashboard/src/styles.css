@@ -441,3 +441,16 @@ footer span:first-child{font-size:9px}
 .event-reset{min-height:34px;margin-bottom:2px;padding:0 10px;border:1px solid var(--fa-line);border-radius:8px;background:transparent;color:var(--fa-ink);font:700 10px 'DM Sans',sans-serif;cursor:pointer}
 .event-reset:hover{border-color:#75b99a;color:#398b6b}
 @media(max-width:560px){.event-search,.event-filter{flex:1 1 100%}.event-result-count{padding-bottom:0}}
+
+
+/* Market Watch search and data-quality filters */
+.market-tools{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:15px 0}
+.market-tools label{display:grid;gap:6px}
+.market-tools label>span{font-size:9px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--fa-muted)}
+.market-search{flex:1 1 250px;min-width:190px}
+.market-filter{flex:0 1 165px;min-width:145px}
+.market-tools input,.market-tools select{width:100%;min-height:38px;padding:9px 11px;border:1px solid var(--fa-line);border-radius:9px;background:var(--fa-surface);color:var(--fa-ink);font:500 11px 'DM Sans',sans-serif;outline:none}
+.market-tools input:focus,.market-tools select:focus{border-color:#75b99a;box-shadow:0 0 0 3px rgba(117,185,154,.16)}
+.market-count{padding:0 0 10px;color:var(--fa-muted);font-size:10px;white-space:nowrap}
+.market-tools .event-reset{margin-bottom:2px}
+@media(max-width:560px){.market-search,.market-filter{flex:1 1 100%;min-width:0}.market-count{padding-bottom:0}}
