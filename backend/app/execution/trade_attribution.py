@@ -29,7 +29,16 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
     incomplete = 0
     missing_cash_deals = 0
 
-    ordered = sorted(deals, key=lambda d: (d["occurred_at"], str(d["deal_ticket"])))
+    def deal_order(deal: dict[str, Any]) -> tuple[str, int, int | str]:
+        ticket = str(deal.get("deal_ticket") or "")
+        try:
+            return (deal["occurred_at"], 0, int(ticket))
+        except (TypeError, ValueError):
+            return (deal["occurred_at"], 1, ticket)
+
+    # MT5 bridge timestamps have second resolution; numeric tickets preserve
+    # broker sequence when several deals share the same second.
+    ordered = sorted(deals, key=deal_order)
     for deal in ordered:
         position_id = str(deal.get("position_id") or "")
         if not position_id:
