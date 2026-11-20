@@ -87,6 +87,41 @@ export const getBrokerSpecifications = () =>
 
 export const getOverview = () => getJson<DashboardOverview>("/api/v1/dashboard/overview");
 export const getResearch = () => getJson<ResearchResponse>("/api/v1/dashboard/research");
+export interface DataReadinessItem {
+  symbol: string;
+  timeframe: string;
+  status: string;
+  ready_for_research: boolean;
+  candles_available: number;
+  valid_candles: number;
+  minimum_candles: number;
+  coverage_pct: number;
+  quality: {
+    status: string;
+    issue_count: number;
+    gap_count: number;
+    valid_ohlc_pct: number;
+    gaps: Array<{ from: string; to: string; missing_interval_estimate: number }>;
+    issues: Array<{ index: number; type: string; detail: string }>;
+  };
+  reasons: string[];
+  execution_enabled: false;
+  trading_enabled: false;
+}
+export interface DataReadinessResponse {
+  status: string;
+  items: DataReadinessItem[];
+  ready_series: number;
+  series_checked: number;
+  minimum_candles: number;
+  execution_mode: string;
+  trading_enabled: false;
+  read_only: true;
+  updated_at: string;
+}
+export const getDataReadiness = (minimumCandles = 500, limit = 5000) =>
+  getJson<DataReadinessResponse>(`/api/v1/dashboard/data-readiness?minimum_candles=${minimumCandles}&limit=${limit}`);
+
 
 export interface OperationalEvent {
   event_id: string;
