@@ -1,6 +1,6 @@
 """Scheduled local SQLite backups with bounded retention."""
 from __future__ import annotations
-import logging, os, re, signal, time
+import json, logging, os, re, signal, time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from app.operations.backup import create_backup, verify_backup
@@ -39,6 +39,24 @@ def run_backup_cycle(source, backup_dir, *, retention_days=30, now=None):
         removed.append(candidate.name)
     return {"backup": manifest, "retention_days": retention_days, "removed": removed}
 
+def write_worker_heartbeat(backup_dir, *, now=None, backup_name=None):
+    """Atomically publish the last successful backup-cycle timestamp."""
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ValueError("Worker heartbeat timestamp must be timezone-aware.")
+    directory = Path(backup_dir).expanduser()
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / "backup-worker-heartbeat.json"
+    temporary = target.with_suffix(".json.tmp")
+    payload = {
+        "status": "ok",
+        "observed_at": current.astimezone(timezone.utc).isoformat(),
+        "backup": backup_name,
+    }
+    temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    os.replace(temporary, target)
+    return payload
+
 def main():
     logging.basicConfig(level=os.getenv("BACKUP_LOG_LEVEL", "INFO"))
     source = Path(os.getenv("FOREX_AUTOPILOT_TELEMETRY_DB", "/var/lib/forex-autopilot/telemetry.sqlite3"))
@@ -57,6 +75,9 @@ def main():
         succeeded = False
         try:
             result = run_backup_cycle(source, backup_dir, retention_days=retention)
+            write_worker_heartbeat(
+                backup_dir, backup_name=Path(result["backup"]["path"]).name
+            )
             _LOG.info("Verified backup %s (%s bytes); pruned %s snapshots",
                       result["backup"]["path"], result["backup"]["size_bytes"], len(result["removed"]))
             succeeded = True
