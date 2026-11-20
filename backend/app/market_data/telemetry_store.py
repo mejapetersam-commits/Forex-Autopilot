@@ -646,6 +646,35 @@ class TelemetryStore:
         return [dict(row) for row in rows]
 
 
+    def demo_trade_attribution(self) -> dict[str, Any]:
+        """Reconstruct closed round trips from persisted demo broker deal evidence."""
+        from app.execution.trade_attribution import build_trade_attribution
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT deal_ticket, order_ticket, position_id, terminal_id, environment,
+                          server, symbol, side, entry, volume_lots, price, magic, comment,
+                          occurred_at, profit, commission, swap, fee
+                   FROM execution_deals WHERE environment='demo'
+                   ORDER BY occurred_at, deal_ticket"""
+            ).fetchall()
+            account = connection.execute(
+                """SELECT account_currency FROM account_snapshots
+                   ORDER BY observed_at DESC, id DESC LIMIT 1"""
+            ).fetchone()
+        deals = [dict(row) for row in rows]
+        result = build_trade_attribution(deals)
+        result["account_currency"] = account["account_currency"] if account else None
+        result["deal_count"] = len(deals)
+        groups = []
+        keys = sorted({(int(d["magic"]), d["symbol"]) for d in deals})
+        for magic, symbol in keys:
+            group = build_trade_attribution(
+                [d for d in deals if int(d["magic"]) == magic and d["symbol"] == symbol]
+            )
+            groups.append({"magic": magic, "symbol": symbol, **group})
+        result["groups"] = groups
+        return result
+
     def demo_observation_summary(self, limit: int = 100) -> dict[str, Any]:
         """Read-only rollup of broker-confirmed demo deals; no inferred PnL."""
         safe_limit = min(max(int(limit), 1), 500)
