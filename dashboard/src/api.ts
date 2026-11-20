@@ -142,6 +142,9 @@ export interface CandleIngestionSeries {
   unique_candles_stored: number;
   first_stored_candle_at: string | null;
   latest_stored_candle_at: string | null;
+  upload_age_seconds: number | null;
+  upload_freshness: "recent" | "aging" | "stale" | "no_upload" | "unknown";
+  stale_after_seconds: number;
 }
 export interface CandleIngestionResponse {
   recent_batches: CandleIngestionBatch[];
@@ -150,6 +153,14 @@ export interface CandleIngestionResponse {
   recent_batch_count: number;
   candles_received_total: number;
   series_count: number;
+  last_successful_upload_at: string | null;
+  last_successful_upload_age_seconds: number | null;
+  stale_after_seconds: number;
+  stale_series_count: number;
+  aging_series_count: number;
+  series_without_upload_count: number;
+  freshness_status: "recent" | "aging" | "stale" | "no_data" | "unknown";
+  freshness_policy: string;
   read_only: true;
   trading_enabled: false;
   execution_mode: string;

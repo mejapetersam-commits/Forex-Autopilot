@@ -1,4 +1,6 @@
 from app.broker.bridge import MT5CandleBatch
+from datetime import datetime, timedelta, timezone
+
 from app.market_data.telemetry_store import TelemetryStore
 
 
@@ -90,3 +92,42 @@ def test_candle_rows_roll_back_when_ingestion_receipt_cannot_be_written(tmp_path
     summary = store.candle_ingestion_summary()
     assert summary["batch_count"] == 0
     assert summary["series_count"] == 0
+
+
+
+def test_ingestion_summary_classifies_upload_inactivity_with_injected_clock(tmp_path):
+    store = TelemetryStore(tmp_path / "telemetry.sqlite3")
+    store.save_candle_batch(batch())
+
+    first = store.candle_ingestion_summary(stale_after_seconds=900)
+    series = first["series"][0]
+    assert series["upload_freshness"] == "recent"
+    assert first["freshness_status"] == "recent"
+    assert first["stale_series_count"] == 0
+    assert first["last_successful_upload_at"] == series["last_ingested_at"]
+    assert first["last_successful_upload_age_seconds"] is not None
+
+    ingested_at = datetime.fromisoformat(series["last_ingested_at"])
+    aging = store.candle_ingestion_summary(
+        stale_after_seconds=900,
+        now=ingested_at + timedelta(seconds=600),
+    )
+    assert aging["series"][0]["upload_freshness"] == "aging"
+    assert aging["aging_series_count"] == 1
+    assert aging["stale_series_count"] == 0
+
+    stale = store.candle_ingestion_summary(
+        stale_after_seconds=900,
+        now=ingested_at + timedelta(seconds=901),
+    )
+    assert stale["series"][0]["upload_freshness"] == "stale"
+    assert stale["freshness_status"] == "stale"
+    assert stale["stale_series_count"] == 1
+
+
+def test_empty_ingestion_summary_reports_no_data_not_healthy(tmp_path):
+    summary = TelemetryStore(tmp_path / "telemetry.sqlite3").candle_ingestion_summary()
+    assert summary["freshness_status"] == "no_data"
+    assert summary["last_successful_upload_at"] is None
+    assert summary["last_successful_upload_age_seconds"] is None
+    assert summary["stale_series_count"] == 0

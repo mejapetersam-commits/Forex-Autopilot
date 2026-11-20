@@ -408,9 +408,20 @@ class TelemetryStore:
                 )
         return counts
 
-    def candle_ingestion_summary(self, *, limit: int = 100) -> dict[str, Any]:
+    def candle_ingestion_summary(
+        self,
+        *,
+        limit: int = 100,
+        stale_after_seconds: int = 900,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         """Return recent bulk-ingestion receipts and per-series upload aggregates."""
         safe_limit = min(max(int(limit), 1), 500)
+        freshness_threshold = max(1, int(stale_after_seconds))
+        observed_now = now or datetime.now(timezone.utc)
+        if observed_now.tzinfo is None or observed_now.utcoffset() is None:
+            raise ValueError("Freshness assessment time must include a timezone.")
+        observed_now = observed_now.astimezone(timezone.utc)
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT batch_id, symbol, timeframe, received_count,
@@ -446,13 +457,74 @@ class TelemetryStore:
                    GROUP BY batches.symbol, batches.timeframe
                    ORDER BY batches.symbol, batches.timeframe"""
             ).fetchall()
+        series_items: list[dict[str, Any]] = []
+        for row in totals:
+            item = dict(row)
+            upload_age: float | None = None
+            last_upload = item.get("last_ingested_at")
+            if last_upload:
+                try:
+                    parsed = datetime.fromisoformat(str(last_upload).replace("Z", "+00:00"))
+                    if parsed.tzinfo is not None and parsed.utcoffset() is not None:
+                        elapsed = (observed_now - parsed.astimezone(timezone.utc)).total_seconds()
+                        if elapsed >= -5:
+                            upload_age = round(max(0.0, elapsed), 1)
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            if not last_upload:
+                freshness = "no_upload"
+            elif upload_age is None:
+                freshness = "unknown"
+            elif upload_age > freshness_threshold:
+                freshness = "stale"
+            elif upload_age > freshness_threshold / 2:
+                freshness = "aging"
+            else:
+                freshness = "recent"
+            item["upload_age_seconds"] = upload_age
+            item["upload_freshness"] = freshness
+            item["stale_after_seconds"] = freshness_threshold
+            series_items.append(item)
+
+        valid_uploads = [
+            item for item in series_items
+            if item["upload_age_seconds"] is not None
+        ]
+        stale_count = sum(item["upload_freshness"] == "stale" for item in series_items)
+        aging_count = sum(item["upload_freshness"] == "aging" for item in series_items)
+        no_upload_count = sum(item["upload_freshness"] == "no_upload" for item in series_items)
+        latest_upload_item = min(
+            valid_uploads, key=lambda item: item["upload_age_seconds"], default=None
+        )
+        if not series_items:
+            overall_freshness = "no_data"
+        elif stale_count:
+            overall_freshness = "stale"
+        elif aging_count:
+            overall_freshness = "aging"
+        elif valid_uploads:
+            overall_freshness = "recent"
+        else:
+            overall_freshness = "unknown"
+
         return {
             "recent_batches": [dict(row) for row in rows],
-            "series": [dict(row) for row in totals],
+            "series": series_items,
             "batch_count": int(lifetime["batch_count"]),
             "recent_batch_count": len(rows),
             "candles_received_total": int(lifetime["candles_received_total"]),
             "series_count": len(totals),
+            "last_successful_upload_at": (
+                latest_upload_item["last_ingested_at"] if latest_upload_item else None
+            ),
+            "last_successful_upload_age_seconds": (
+                latest_upload_item["upload_age_seconds"] if latest_upload_item else None
+            ),
+            "stale_after_seconds": freshness_threshold,
+            "stale_series_count": stale_count,
+            "aging_series_count": aging_count,
+            "series_without_upload_count": no_upload_count,
+            "freshness_status": overall_freshness,
             "read_only": True,
             "trading_enabled": False,
         }

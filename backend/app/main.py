@@ -327,8 +327,18 @@ def dashboard_data_readiness(
 
 @app.get("/api/v1/dashboard/candle-ingestion", include_in_schema=False)
 def dashboard_candle_ingestion():
-    """Read-only receipt ledger for historical candle uploads."""
-    summary = telemetry_store().candle_ingestion_summary(limit=100)
+    """Read-only receipt ledger and upload-inactivity monitor for candle feeds."""
+    stale_after = max(
+        60,
+        int(os.getenv("FOREX_AUTOPILOT_CANDLE_UPLOAD_STALE_AFTER_SECONDS", "900")),
+    )
+    summary = telemetry_store().candle_ingestion_summary(
+        limit=100, stale_after_seconds=stale_after,
+    )
+    summary["freshness_policy"] = (
+        "Upload inactivity only. A stale status means no successful receipt was stored "
+        "within the configured threshold; it is not broker-session or market-open confirmation."
+    )
     summary["execution_mode"] = "disabled"
     summary["updated_at"] = datetime.now(timezone.utc).isoformat()
     return summary
