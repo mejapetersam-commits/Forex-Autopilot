@@ -11,6 +11,33 @@ TIMEFRAME_SECONDS = {
 }
 
 
+def _possible_weekend_closure(previous: datetime, current: datetime, interval_seconds: int) -> bool:
+    """Heuristic only: identify gaps mostly contained in the common UTC FX weekend pause.
+
+    Broker sessions and daylight-saving schedules differ. Gaps outside this
+    broad Friday/Sunday window remain unclassified and require calendar review.
+    """
+    from datetime import timedelta, time as clock_time
+
+    if current <= previous:
+        return False
+    total_seconds = (current - previous).total_seconds()
+    overlap_seconds = 0.0
+    day = previous.date() - timedelta(days=previous.weekday() + 1)
+    final_day = current.date()
+    while day <= final_day:
+        if day.weekday() == 4:  # Friday
+            start = datetime.combine(day, clock_time(21, 0), tzinfo=previous.tzinfo)
+            end = start + timedelta(days=2)
+            overlap_start = max(previous, start)
+            overlap_end = min(current, end)
+            if overlap_end > overlap_start:
+                overlap_seconds += (overlap_end - overlap_start).total_seconds()
+        day += timedelta(days=1)
+    outside_seconds = max(0.0, total_seconds - overlap_seconds)
+    return overlap_seconds > 0 and outside_seconds <= max(4 * 3600, interval_seconds * 2)
+
+
 def assess_candle_quality(candles: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
     interval = TIMEFRAME_SECONDS.get(timeframe.strip().upper())
     if interval is None:
@@ -50,11 +77,18 @@ def assess_candle_quality(candles: list[dict[str, Any]], timeframe: str) -> dict
                 "previous": previous.isoformat(), "current": current.isoformat(),
             })
         elif delta > interval * 1.5:
+            possible_weekend = _possible_weekend_closure(previous, current, interval)
             gaps.append({
                 "from": previous.isoformat(), "to": current.isoformat(),
                 "elapsed_seconds": int(delta),
                 "missing_interval_estimate": max(0, int(delta // interval) - 1),
                 "expected_interval_seconds": interval,
+                "classification": "possible_weekend_closure" if possible_weekend else "calendar_review_required",
+                "classification_note": (
+                    "Likely overlaps the common Friday-to-Sunday FX weekend closure; verify against this broker's session and daylight-saving schedule."
+                    if possible_weekend else
+                    "Not explained by the weekend heuristic. Review broker trading hours, holidays, maintenance and feed completeness."
+                ),
                 "previous_index": previous_index, "current_index": current_index,
             })
 
@@ -68,9 +102,11 @@ def assess_candle_quality(candles: list[dict[str, Any]], timeframe: str) -> dict
         "timestamp_count": len(valid_timestamps),
         "issue_count": issue_count,
         "gap_count": len(gaps),
+        "possible_weekend_gap_count": sum(gap["classification"] == "possible_weekend_closure" for gap in gaps),
+        "calendar_review_gap_count": sum(gap["classification"] == "calendar_review_required" for gap in gaps),
         "gaps": gaps[:100],
         "issues": issues[:100],
-        "note": "Gaps are diagnostic, not automatically classified as missing data: weekends, holidays and broker-session closures can be legitimate. Review gap timestamps against the broker's trading calendar.",
+        "note": "Gap classifications are heuristic only. The weekend label is not broker-calendar confirmation; review unclassified gaps against broker hours, holidays, maintenance and daylight-saving changes.",
     }
 
 

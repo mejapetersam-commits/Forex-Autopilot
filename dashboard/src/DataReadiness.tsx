@@ -50,7 +50,7 @@ export default function DataReadiness() {
       <article className="metric"><span>READY SERIES</span><strong>{data ? data.ready_series : "—"}</strong><small>{data ? "Of " + data.series_checked + " monitored pairs" : "Awaiting readiness report"}</small></article>
       <article className="metric"><span>STORED CANDLES</span><strong>{data ? totalCandles.toLocaleString() : "—"}</strong><small>{data ? "Across monitored history" : "Not yet assessed"}</small></article>
       <article className="metric"><span>INTEGRITY ISSUES</span><strong>{data ? issueCount : "—"}</strong><small>{data ? "Invalid OHLC / timestamps" : "Not yet assessed"}</small></article>
-      <article className="metric"><span>TIME GAPS</span><strong>{data ? gapCount : "—"}</strong><small>{data ? "Require session-aware review" : "Not yet assessed"}</small></article>
+      <article className="metric"><span>TIME GAPS</span><strong>{data ? gapCount : "—"}</strong><small>{data ? items.reduce((sum, item) => sum + (item.quality?.possible_weekend_gap_count ?? 0), 0) + " possible weekend · " + items.reduce((sum, item) => sum + (item.quality?.calendar_review_gap_count ?? 0), 0) + " need calendar review" : "Not yet assessed"}</small></article>
     </div>
     <div className="connection-row">
       <div className="connection-icon">{data?.status === "ready" ? <CheckCircle2/> : <AlertTriangle/>}</div>
@@ -70,7 +70,7 @@ export default function DataReadiness() {
         <td><span className={`signal ${item.ready_for_research ? "buy" : "neutral"}`}>{item.status.replaceAll("_", " ")}</span>
           <details className="data-quality-detail"><summary>Inspect evidence</summary>
             {item.reasons.length > 0 && <div><b>Readiness reasons</b><ul>{item.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></div>}
-            {item.quality.gaps.length > 0 && <div><b>Reported gaps (up to 5)</b><ul>{item.quality.gaps.slice(0, 5).map((gap, index) => <li key={index}>{time(gap.from)} → {time(gap.to)} · estimated missing intervals: {gap.missing_interval_estimate}</li>)}</ul></div>}
+            {item.quality.gaps.length > 0 && <div><b>Reported gaps (up to 5)</b><ul>{item.quality.gaps.slice(0, 5).map((gap, index) => <li key={index}>{time(gap.from)} → {time(gap.to)} · estimated missing intervals: {gap.missing_interval_estimate} · {gap.classification === "possible_weekend_closure" ? "Possible weekend closure" : "Broker calendar review required"} — {gap.classification_note}</li>)}</ul></div>}
             {item.quality.issues.length > 0 && <div><b>Integrity findings (up to 5)</b><ul>{item.quality.issues.slice(0, 5).map((issue, index) => <li key={index}>Row {issue.index}: {issue.type} — {issue.detail}</li>)}</ul></div>}
             {!item.reasons.length && !item.quality.gaps.length && !item.quality.issues.length && <small>No specific blockers or sample findings were returned for this series.</small>}
           </details>

@@ -21,6 +21,42 @@ def test_quality_reports_valid_series_and_gap():
     assert result["issue_count"] == 0
 
 
+def test_quality_classifies_common_weekend_closure_as_possible_not_confirmed():
+    result = assess_candle_quality(rows(
+        "2026-11-20T20:55:00+00:00",  # Friday before common weekend pause
+        "2026-11-22T21:05:00+00:00",  # Sunday reopening
+    ), "M5")
+
+    assert result["gap_count"] == 1
+    assert result["possible_weekend_gap_count"] == 1
+    assert result["calendar_review_gap_count"] == 0
+    assert result["gaps"][0]["classification"] == "possible_weekend_closure"
+    assert "verify" in result["gaps"][0]["classification_note"].lower()
+    assert result["issue_count"] == 0
+
+
+def test_quality_flags_midweek_gap_for_broker_calendar_review():
+    result = assess_candle_quality(rows(
+        "2026-11-18T09:00:00+00:00",
+        "2026-11-18T09:20:00+00:00",
+    ), "M5")
+
+    assert result["gap_count"] == 1
+    assert result["possible_weekend_gap_count"] == 0
+    assert result["calendar_review_gap_count"] == 1
+    assert result["gaps"][0]["classification"] == "calendar_review_required"
+
+
+def test_quality_does_not_excuse_long_gaps_merely_because_they_cross_weekend():
+    result = assess_candle_quality(rows(
+        "2026-11-19T09:00:00+00:00",
+        "2026-11-23T09:00:00+00:00",
+    ), "H1")
+
+    assert result["calendar_review_gap_count"] == 1
+    assert result["gaps"][0]["classification"] == "calendar_review_required"
+
+
 def test_quality_detects_invalid_ohlc_and_timezone():
     result = assess_candle_quality([{
         "opened_at": "2026-11-02T09:00:00",

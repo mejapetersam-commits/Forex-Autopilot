@@ -100,8 +100,10 @@ export interface DataReadinessItem {
     status: string;
     issue_count: number;
     gap_count: number;
+    possible_weekend_gap_count: number;
+    calendar_review_gap_count: number;
     valid_ohlc_pct: number;
-    gaps: Array<{ from: string; to: string; missing_interval_estimate: number }>;
+    gaps: Array<{ from: string; to: string; missing_interval_estimate: number; classification: "possible_weekend_closure" | "calendar_review_required"; classification_note: string }>;
     issues: Array<{ index: number; type: string; detail: string }>;
   };
   reasons: string[];
