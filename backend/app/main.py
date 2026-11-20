@@ -644,7 +644,7 @@ def dashboard_release_readiness():
     source-code tests or dashboard telemetry.
     """
     overview = dashboard_overview()
-    data = dashboard_data_readiness(minimum_candles=500, limit=5000)
+    data = dashboard_data_readiness(minimum_candles=500, limit=500)
     operations = dashboard_operations()
     recovery = dashboard_recovery_status()
     execution = dashboard_execution_reconciliation(limit=50)
