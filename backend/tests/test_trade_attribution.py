@@ -153,3 +153,41 @@ def test_store_migrates_existing_execution_deals_table(tmp_path):
     columns = {row[1] for row in connection.execute("PRAGMA table_info(execution_deals)")}
     connection.close()
     assert {"profit", "commission", "swap", "fee"}.issubset(columns)
+
+
+def test_trade_attribution_dashboard_is_read_only_and_reports_incomplete_coverage(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as main
+    from app.market_data.telemetry_store import TelemetryStore
+
+    store = TelemetryStore(tmp_path / "dashboard.sqlite3")
+    insert = [
+        deal(1, "in", "buy", 0.01, commission=-0.1),
+        deal(2, "out", "sell", 0.01, profit=1.0, commission=-0.1),
+    ]
+    from datetime import datetime, timezone
+    from app.broker.bridge import MT5ExecutionDeal, MT5ExecutionHistory
+    stamp = datetime(2026, 11, 19, 10, 0, tzinfo=timezone.utc)
+    models = [
+        MT5ExecutionDeal(
+            deal_ticket=row["deal_ticket"], order_ticket=row["order_ticket"],
+            position_id=row["position_id"], symbol=row["symbol"], side=row["side"],
+            entry=row["entry"], volume_lots=row["volume_lots"], price=row["price"],
+            magic=row["magic"], comment="", occurred_at=stamp.replace(minute=i),
+            profit=row["profit"], commission=row["commission"], swap=row["swap"], fee=row["fee"],
+        ) for i, row in enumerate(insert)
+    ]
+    store.save_execution_history(MT5ExecutionHistory(
+        terminal_id="terminal-demo", environment="demo", server="Exness-MT5Trial",
+        history_from=stamp, history_to=stamp.replace(minute=2),
+        observed_at=stamp.replace(minute=2), deals=models,
+    ))
+    monkeypatch.setattr(main, "telemetry_store", lambda: store)
+    response = TestClient(main.app).get("/api/v1/dashboard/trade-attribution")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["closed_trade_count"] == 1
+    assert body["net_realized_pnl"] == 0.7
+    assert body["trading_enabled"] is False
+    assert body["execution_mode"] == "disabled"
+    assert body["read_only"] is True
