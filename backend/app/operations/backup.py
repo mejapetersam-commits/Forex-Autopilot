@@ -66,7 +66,7 @@ def verify_backup(path: str | Path) -> dict[str, Any]:
 
 
 
-_BACKUP_NAME = re.compile(r"^telemetry-(\\d{8}T\\d{6}Z)\\.sqlite3$")
+_BACKUP_NAME = re.compile(r"^telemetry-(\d{8}T\d{6}Z)\.sqlite3$")
 
 
 def inspect_backup_inventory(
