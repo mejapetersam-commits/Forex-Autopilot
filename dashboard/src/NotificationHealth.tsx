@@ -37,6 +37,7 @@ export default function NotificationHealth() {
       <span className="research-tag"><BellRing size={13}/> OBSERVE ONLY</span>
     </div>
     {error && <div className="alert-row"><AlertTriangle size={16}/><span>Outbox summary unavailable: {error}</span></div>}
+    <div className="system-evidence-meta"><span>Report updated {data ? new Date(data.updated_at).toLocaleString() : "Awaiting notification-health report"}</span><span>{data ? `${data.active_alert_count} active alert(s)` : "Alert state unknown until report arrives"}</span></div>
     <div className="metrics ops-metrics">
       <article className="metric"><span>PENDING</span><strong>{delivery?.pending ?? "—"}</strong><small>{delivery?.due_pending ?? 0} currently due</small></article>
       <article className="metric"><span>LEASED</span><strong>{delivery?.leased ?? "—"}</strong><small>Claimed by a worker</small></article>
@@ -53,7 +54,8 @@ export default function NotificationHealth() {
     {(data?.active_alerts ?? []).map(alert => <div className="alert-row" key={alert.alert_key}>
       <AlertTriangle size={16}/><span><b>{alert.event_type}</b> · {alert.message}</span><b>{alert.severity.toUpperCase()}</b>
     </div>)}
-    {!data?.active_alerts.length && <div className="connection-row"><CheckCircle2 size={18}/><span>No persisted health alerts are currently active.</span></div>}
+    {data && data.active_alerts.length === 0 && <div className="connection-row"><CheckCircle2 size={18}/><span>No persisted health alerts are currently active.</span></div>}
+    {!data && !error && <div className="connection-row"><Clock3 size={18}/><span>Waiting for the notification-health report. Alert state is not yet confirmed.</span></div>}
     <h3 className="subsection-title">Recent operational events</h3>
     <div className="table-wrap"><table><thead><tr><th>EVENT</th><th>SEVERITY</th><th>DELIVERY</th><th>ATTEMPTS</th><th>OCCURRED</th></tr></thead><tbody>
       {(data?.recent_events ?? []).map(event => <tr key={event.event_id}>
@@ -61,7 +63,8 @@ export default function NotificationHealth() {
         <td><span className={`signal ${event.severity === "critical" ? "sell" : event.severity === "warning" ? "neutral" : "buy"}`}>{event.severity.toUpperCase()}</span></td>
         <td>{event.delivery_status}</td><td>{event.attempts}</td><td>{new Date(event.occurred_at).toLocaleString()}</td>
       </tr>)}
-      {!data?.recent_events.length && <tr><td colSpan={5} className="empty">No operational events have been recorded yet.</td></tr>}
+      {data && data.recent_events.length === 0 && <tr><td colSpan={5} className="empty">No operational events have been recorded yet.</td></tr>}
+      {!data && <tr><td colSpan={5} className="empty">Waiting for notification event history.</td></tr>}
     </tbody></table></div>
     <p className="subhead">Delivery provider configuration and notification dispatch remain separate future work. Pending events are not proof of successful external delivery.</p>
   </section>;
