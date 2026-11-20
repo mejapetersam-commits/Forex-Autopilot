@@ -85,9 +85,7 @@ snapshots and unrelated files are retained for manual review.
 Snapshots use a separate Docker named volume, `telemetry_backups`. This is a
 local recovery layer, **not an encrypted or off-device disaster-recovery copy**.
 Use encrypted host storage and independent off-device replication before
-relying on it for disaster recovery. The backup process has read-only access to
-the telemetry volume, no broker credentials, no network ports and no execution
-permissions.
+relying on it for disaster recovery. The backup process opens the SQLite source database in read-only mode. Its volume mount permits SQLite to coordinate WAL shared-memory sidecars safely while the API is running. It has no broker credentials, no network ports and no execution permissions.
 
 Optional settings:
 - `FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS` (default 86400; allowed 3600-604800)
