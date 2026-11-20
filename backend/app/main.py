@@ -264,6 +264,80 @@ def dashboard_portfolio():
     )
 
 
+@app.get("/api/v1/dashboard/operations", include_in_schema=False)
+def dashboard_operations():
+    """Safe read-only operations summary for the local dashboard; no admin secrets or mutations."""
+    store = telemetry_store()
+    snapshots = store.recent_execution_states(limit=2)
+    now = datetime.now(timezone.utc)
+    expected_magic = int(os.getenv("FOREX_AUTOPILOT_EXECUTION_MAGIC", "61119001"))
+    reconciliation = {
+        "status": "waiting_for_terminal_snapshot",
+        "managed_positions_checked": 0,
+        "orphaned_positions": [],
+    }
+    lifecycle = {
+        "status": "waiting_for_terminal_snapshot",
+        "previous_snapshot_available": False,
+        "managed_positions_current": 0,
+        "events": [],
+    }
+    if snapshots:
+        current = snapshots[0]
+        observed = datetime.fromisoformat(current["observed_at"].replace("Z", "+00:00"))
+        age = (now - observed).total_seconds()
+        if current["environment"] == "demo" and -5 <= age <= 30:
+            reconciliation = reconcile_open_positions(
+                current["positions"], execution_ledger().list_intents(),
+                expected_magic=expected_magic,
+            )
+            previous = snapshots[1] if len(snapshots) > 1 else None
+            deals_by_position = {}
+            if previous and previous.get("terminal_id") == current.get("terminal_id"):
+                for position in previous["positions"]:
+                    if int(position.get("magic", -1)) != expected_magic:
+                        continue
+                    position_id = str(position.get("position_id") or "")
+                    if position_id:
+                        deals_by_position[position_id] = store.execution_deals_for_position(position_id)
+            lifecycle = compare_position_lifecycle(
+                previous, current, deals_by_position=deals_by_position,
+                expected_magic=expected_magic,
+            )
+        else:
+            reconciliation["status"] = "terminal_snapshot_stale_or_not_demo"
+            lifecycle["status"] = "terminal_snapshot_stale_or_not_demo"
+
+    portfolio = build_portfolio_exposure(
+        execution_state=store.latest_execution_state(),
+        account=store.latest_account(),
+        quotes=store.latest_quotes(),
+        specifications=store.latest_symbol_specifications(),
+    )
+    limit = float(os.getenv("FOREX_AUTOPILOT_MAX_PORTFOLIO_STOP_RISK_PCT", "0.50"))
+    portfolio_gate = evaluate_portfolio_risk(portfolio, max_stop_risk_pct=limit)
+    position_event_types = {
+        "orphan_broker_position", "position_opened_observed",
+        "position_ticket_replaced", "position_partially_closed_observed",
+        "position_protection_changed", "position_closed_confirmed",
+        "position_disappearance_unconfirmed",
+    }
+    recent_position_events = [
+        item for item in EventOutbox().list_events(limit=100)
+        if item["event_type"] in position_event_types
+    ][:20]
+    return {
+        "reconciliation": reconciliation,
+        "lifecycle": lifecycle,
+        "portfolio_risk_gate": portfolio_gate,
+        "recent_position_events": recent_position_events,
+        "execution_mode": "disabled",
+        "trading_enabled": False,
+        "read_only": True,
+        "updated_at": now.isoformat(),
+    }
+
+
 @app.get("/api/v1/dashboard/events", include_in_schema=False)
 def dashboard_operational_events(
     limit: int = Query(default=50, ge=1, le=200),
