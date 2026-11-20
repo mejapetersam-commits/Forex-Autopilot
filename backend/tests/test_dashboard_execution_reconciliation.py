@@ -71,3 +71,23 @@ def test_execution_reconciliation_dashboard_surfaces_manual_review_events(tmp_pa
     assert body["status"] == "review_required"
     assert body["counts"]["manual_review_count"] == 1
     assert body["manual_review_events"][0]["reasons"] == ["broker_magic_mismatch"]
+
+def test_dashboard_does_not_label_terminal_rejection_as_missing_history(tmp_path, monkeypatch):
+    path = str(tmp_path / "terminal.sqlite3")
+    ledger = ExecutionLedger(path)
+    outbox = EventOutbox(path)
+    key = "dashboard-rejected"
+    ledger.create_intent(key, {
+        "symbol": "EURUSDm", "side": "buy", "volume_lots": 0.01,
+        "stop_loss": 1.099, "take_profit": 1.102,
+    })
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    ledger.transition(key, "rejected", event_type="terminal_rejected")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "EventOutbox", lambda: outbox)
+
+    body = TestClient(main.app).get(
+        "/api/v1/dashboard/execution-reconciliation"
+    ).json()
+    assert body["intents"][0]["result"] == "terminal_outcome_recorded"
+    assert body["counts"]["awaiting_history_count"] == 0
