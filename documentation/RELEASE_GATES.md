@@ -23,7 +23,9 @@
 
 
 - On-demand strategy qualification with minimum out-of-sample sample size, two valid chronological folds, positive mean out-of-sample return, minimum mean profit factor, maximum drawdown and healthy candle-quality gates. "Eligible for demo observation" is a research label only; it is not strategy approval or execution authorization.
-- Read-only Demo Observation Centre summarises broker-confirmed demo deal/order counts, symbol/magic groupings and latest terminal position snapshots. It deliberately does not calculate profitability from the current deal schema because realised profit, commission and swap are not yet ingested.
+- Read-only Demo Observation Centre summarises broker-confirmed demo deal/order counts, symbol/magic groupings and latest terminal position snapshots.
+- Broker deal ingestion now captures profit, commission, swap and fee in account-currency units, with idempotent ticket storage, immutable cash-evidence conflict checks and nullable migrations that preserve unknown legacy values.
+- Read-only realized P&L and trade attribution reconstructs closed position cycles by terminal plus MT5 POSITION_IDENTIFIER, handles partial fills/exits and INOUT reversals, and excludes open, unmatched, ambiguous or cash-incomplete cycles from performance metrics. Dashboard reports cash coverage, account currency, unmatched counts, open positions, win rate, expectancy, profit factor and realized cash drawdown. Magic number remains a grouping key, not proof of strategy attribution.
 
 ## Still required before demo execution can be enabled
 
@@ -32,7 +34,7 @@
 - Validate the new broker-history reconciliation against actual Exness demo deal records, including multiple partial fills, no-fill/pending orders, order comments, ticket mapping, disconnects and terminal restarts. Expired or uncertain commands remain quarantined; never blindly retry them.
 - Validate broker-verified position/order state transitions, close/reversal deals and position-to-deal links against actual Exness demo history.
 - Protective-stop monitoring and fail-safe pause/kill-switch recovery are implemented; automated broker-side SL modification/flattening is intentionally not automatic and requires an independently reviewed recovery policy.
-- Daily P&L and realised/unrealised exposure sourced from broker records, not estimates.
+- Validate realized P&L aggregation against Exness demo statements, including broker cash rounding, fees, swap timing, close-by deals and reversals. Daily loss and unrealized exposure still require independent broker-record validation; the current daily-loss monitor remains an operational estimate.
 - Broker-verified restart/disconnect recovery and end-to-end duplicate-event testing; backend lease quarantine, terminal identity checks, persistent terminal attempt markers and intent-tag lookup are implemented but not yet proven against live broker demo history.
 - Authenticated local dashboard pause/resume and emergency-stop controls with a separate admin token and audit history are implemented; multi-user role separation remains required.
 - Operational alert delivery and an independently reachable kill switch.
