@@ -27,6 +27,15 @@ def test_backtest_runs_and_reports_costs_and_risk():
     assert result["assumptions"]["spread_pips"] == 1.0
     assert result["max_drawdown_pct"] >= 0
     assert all(trade["commission"] >= 0 for trade in result["trades"])
+    curve = result["equity_curve"]
+    assert curve[0]["event"] == "initial"
+    assert curve[0]["equity"] == result["initial_equity"]
+    assert all(point["time"] for point in curve)
+    assert all(
+        curve[index]["time"] < curve[index + 1]["time"]
+        for index in range(len(curve) - 1)
+    )
+    assert curve[-1]["equity"] == result["final_equity"]
 
 
 def test_backtest_insufficient_history_returns_no_trades():
