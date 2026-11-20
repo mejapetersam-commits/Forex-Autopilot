@@ -184,7 +184,7 @@ def build_trade_attribution(deals: list[dict[str, Any]]) -> dict[str, Any]:
         "max_drawdown_cash": max_drawdown if pnl_trades else None,
         "closed_trades": closed[-500:],
         "open_positions": open_positions[:500],
-        "coverage": "complete" if pnl_trades and not (len(closed) - len(pnl_trades)) else ("partial" if closed else "no_closed_trades"),
+        "coverage": ("partial" if (len(closed) != len(pnl_trades) or unmatched or incomplete or missing_cash_deals) else ("complete" if pnl_trades else "no_closed_trades")),
         "limitations": [
             "Only broker deals with a POSITION_IDENTIFIER can be attributed.",
             "Open and partially closed positions are excluded from realized trade metrics.",
