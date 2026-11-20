@@ -167,3 +167,21 @@ def test_inventory_does_not_accept_future_dated_snapshot_as_fresh(tmp_path):
     assert result["verified_count"] == 0
     assert result["invalid_count"] == 1
     assert result["snapshots"][0]["status"] == "future_dated"
+
+
+
+def test_isolated_restore_drill_verifies_recovery_without_touching_source(tmp_path):
+    live_database = tmp_path / "live.sqlite3"
+    recovery_point = tmp_path / "telemetry-backup.sqlite3"
+    isolated_drill = tmp_path / "drill" / "restored.sqlite3"
+    make_database(live_database, "known-good-recovery-point")
+    create_backup(live_database, recovery_point)
+    make_database(live_database, "newer-live-value")
+
+    result = restore_backup(recovery_point, isolated_drill)
+
+    assert result["status"] == "restored"
+    assert result["integrity_check"] == "ok"
+    assert read_value(isolated_drill) == "known-good-recovery-point"
+    assert read_value(live_database) == "newer-live-value"
+    assert verify_backup(isolated_drill)["integrity_check"] == "ok"
