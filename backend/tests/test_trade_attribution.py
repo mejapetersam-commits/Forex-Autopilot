@@ -37,7 +37,7 @@ def test_partial_exit_does_not_finalize_remaining_position():
     result = build_trade_attribution(rows)
     assert result["closed_trade_count"] == 0
     assert result["open_position_count"] == 1
-    assert result["open_positions"][0]["remaining_volume_lots"] == 0.02
+    assert abs(result["open_positions"][0]["remaining_volume_lots"] - 0.02) < 1e-9
     assert result["net_realized_pnl"] == 0
 
 
@@ -51,7 +51,7 @@ def test_inout_reversal_closes_old_cycle_and_starts_new_cycle():
     assert result["closed_trade_count"] == 2
     assert result["pnl_complete_trade_count"] == 2
     assert result["open_position_count"] == 0
-    assert result["net_realized_pnl"] == 2.2
+    assert abs(result["net_realized_pnl"] - 2.2) < 1e-9
 
 
 def test_legacy_missing_cash_fields_are_not_fabricated_as_zero():
