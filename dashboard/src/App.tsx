@@ -106,7 +106,7 @@ export default function App() {
       <div className="safety"><ShieldCheck size={19}/><div><b>PROTECTION ACTIVE</b><span>Execution disabled · Live trading unavailable</span></div></div>
     </section>
 
-    {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard data unavailable: {error}. Check that the local API is running.</span></div>}
+    {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
 
     <section className="metrics">
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
