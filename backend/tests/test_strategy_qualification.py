@@ -46,3 +46,12 @@ def test_qualification_requires_both_valid_folds():
     wf["folds"][1]["out_of_sample_metrics"]["status"] = "insufficient_data"
     result = evaluate_strategy_qualification(wf, {"status": "healthy", "issue_count": 0})
     assert result["status"] == "insufficient_evidence"
+
+
+
+def test_qualification_blocks_insufficient_history_even_with_strong_backtest_metrics():
+    quality = {"status": "healthy", "issue_count": 0, "ready_for_research": False}
+    result = evaluate_strategy_qualification(valid_walk_forward(), quality)
+    assert result["status"] == "under_review"
+    assert result["eligible_for_demo_observation"] is False
+    assert any("coverage" in reason for reason in result["reasons"])
