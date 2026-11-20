@@ -112,7 +112,17 @@ def inspect_backup_inventory(
         except ValueError:
             snapshots.append({"name": candidate.name, "status": "invalid_filename_timestamp"})
             continue
-        age_hours = round(max(0.0, (current - created).total_seconds()) / 3600, 2)
+        age_seconds = (current - created).total_seconds()
+        age_hours = round(max(0.0, age_seconds) / 3600, 2)
+        if age_seconds < -300:
+            snapshots.append({
+                "name": candidate.name,
+                "status": "future_dated",
+                "created_at": created.isoformat(),
+                "age_hours": round(age_seconds / 3600, 2),
+                "error": "Snapshot timestamp is more than five minutes ahead of the inventory clock.",
+            })
+            continue
         try:
             manifest = verify_backup(candidate)
             snapshots.append({
