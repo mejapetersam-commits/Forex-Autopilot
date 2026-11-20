@@ -43,7 +43,7 @@ writing to it is not supported. Confirm the selected backup and preserve a copy
 of the current database first.
 
 ```bash
-docker compose stop api
+docker compose stop api telemetry-backup
 ```
 
 Then run the restore utility in an environment that can access both the backup
@@ -77,7 +77,7 @@ provider are selected.
 ## Automated local backup service
 
 Compose includes a dedicated `telemetry-backup` process. It creates and verifies
-a SQLite online backup at startup, then repeats every 24 hours by default. The
+a SQLite online backup at startup, then repeats every 24 hours by default. If a backup attempt fails, it retries within five minutes rather than waiting for the next daily interval. The
 default retention window is 30 days. Only expired snapshots with the managed
 filename pattern and a passing SQLite integrity check are pruned; corrupt
 snapshots and unrelated files are retained for manual review.
