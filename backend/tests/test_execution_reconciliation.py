@@ -158,3 +158,17 @@ def test_unknown_intent_tag_recovery_preserves_position_identifiers(tmp_path):
     assert result["results"][0]["result"] == "reconciled_full_fill"
     assert result["results"][0]["position_ids"] == ["998812"]
     assert store.execution_deals_for_position("998812")[0]["deal_ticket"] == "41"
+
+def test_partial_fill_report_exposes_weighted_price_and_fill_breakdown(tmp_path):
+    ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3"))
+    store=TelemetryStore(str(tmp_path/"shared.sqlite3"))
+    approved_intent(ledger, volume=0.01)
+    first=deal(51,12345,0.004).model_copy(update={"price":1.1000})
+    second=deal(52,12345,0.003).model_copy(update={"price":1.1010})
+    store.save_execution_history(history(first,second))
+    result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    report=result["results"][0]
+    assert report["result"] == "reconciled_partial_fill"
+    assert report["average_fill_price"] == pytest.approx((0.004*1.1+0.003*1.101)/0.007)
+    assert [item["deal_ticket"] for item in report["fill_details"]] == ["51","52"]
+    assert report["fill_details"][0]["position_id"] == "555"
