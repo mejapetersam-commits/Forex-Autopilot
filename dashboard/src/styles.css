@@ -338,3 +338,12 @@ footer span:first-child{font-size:9px}
 .shell.theme-dark .dashboard-accordion>summary::after{background:#345849}
 .shell.theme-dark .alerts{background:#302b2a!important;border-color:#65483f!important}
 .shell.theme-dark footer{border-color:#31464d}
+
+
+/* Small, persistent attention cue for system alerts */
+.dashboard-nav button .nav-count{
+  display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:8px;padding:0 5px;
+  border-radius:999px;background:#ffe2d8;color:#9b4937;font-size:10px;font-weight:800;line-height:1;
+}
+.shell.theme-dark .dashboard-nav button .nav-count{background:#68443c;color:#ffe4dc}
+.dashboard-nav button.active .nav-count{box-shadow:0 0 0 2px #ffffffa8}
