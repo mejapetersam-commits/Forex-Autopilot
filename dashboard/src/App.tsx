@@ -22,8 +22,8 @@ function stamp(value?: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
-function Status({ good, children }: { good: boolean; children: ReactNode }) {
-  return <span className={`status ${good ? "good" : "bad"}`}><i />{children}</span>;
+function Status({ good, unknown = false, children }: { good: boolean; unknown?: boolean; children: ReactNode }) {
+  return <span className={`status ${good ? "good" : unknown ? "unknown" : "bad"}`}><i />{children}</span>;
 }
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return <article className="metric"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
@@ -216,7 +216,7 @@ export default function App() {
   return <main className={`shell page-${page} theme-${theme}`}>
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Activity size={21}/></div><div><b>FOREX AUTOPILOT</b><span>MARKET INTELLIGENCE · DEMO MONITORING</span></div></div>
-      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)}>{overview?.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="notification-trigger" type="button" aria-label={`Open notifications, ${alerts.length} active alerts`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(value => !value)}><Bell size={16}/><span>Alerts</span>{alerts.length > 0 && <i>{alerts.length}</i>}</button><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
+      <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)} unknown={!overview}>{!overview ? "MT5 status unknown" : overview.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="notification-trigger" type="button" aria-label={`Open notifications, ${alerts.length} active alerts`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(value => !value)}><Bell size={16}/><span>Alerts</span>{alerts.length > 0 && <i>{alerts.length}</i>}</button><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
     </header>
 
     <section className="hero">
@@ -235,14 +235,14 @@ export default function App() {
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
       <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail={account?.fresh ? "Broker-reported available margin" : "Awaiting account telemetry"}/>
-      <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : overview ? "No alerts in latest health report" : "Awaiting health report"}/>
+      <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : health ? "No alerts in latest health report" : "Health status unavailable"}/>
     </section>}
 
     {page === "overview" && <section className="overview-grid" aria-label="Live account and system snapshot">
       <article className="panel overview-card">
         <div className="section-head"><div><div className="eyebrow">ACCOUNT & CONNECTION</div><h2>Broker snapshot</h2></div><Status good={Boolean(overview?.heartbeat?.fresh && account?.fresh)}>{overview?.heartbeat?.fresh && account?.fresh ? "TELEMETRY FRESH" : "TELEMETRY UNVERIFIED"}</Status></div>
         <div className="snapshot-list">
-          <div><span>MT5 bridge</span><b>{overview?.bridge_connected ? "Connected" : "Disconnected"}</b></div>
+          <div><span>MT5 bridge</span><b>{!overview ? "Awaiting bridge report" : overview.bridge_connected ? "Connected" : "Disconnected"}</b></div>
           <div><span>Terminal heartbeat</span><b>{overview?.heartbeat?.observed_at ? stamp(overview.heartbeat.observed_at) : "Not received"}</b></div>
           <div><span>Account snapshot</span><b>{account?.observed_at ? stamp(account.observed_at) : "Not received"}</b></div>
           <div><span>Account currency</span><b>{account?.account_currency ?? "Not reported"}</b></div>
@@ -474,8 +474,8 @@ export default function App() {
 
     {notificationsOpen && <div className="notification-backdrop" onClick={() => setNotificationsOpen(false)}>
       <aside className="notification-drawer" role="dialog" aria-modal="true" aria-label="System notifications" onClick={event => event.stopPropagation()}>
-        <div className="notification-head"><div><div className="eyebrow">LIVE SYSTEM MESSAGES</div><h2>Notifications</h2><p>{overview ? `${alerts.length} active alert${alerts.length === 1 ? "" : "s"} · refreshed with dashboard telemetry` : "Health report not yet received"}</p></div><button ref={notificationCloseRef} type="button" className="drawer-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button></div>
-        {alerts.length > 0 ? <div className="notification-list">{alerts.map((alert, index) => <article className="notification-item" key={index}><div className="notification-symbol"><AlertTriangle size={16}/></div><div><b>{alert.severity ?? "NOTICE"}</b><p>{alert.message ?? "System alert"}</p><small>Current system health report</small></div></article>)}</div> : <div className="notification-empty"><div className="notification-check"><ShieldCheck size={23}/></div><b>{overview ? "No active alerts reported" : "Health state unknown"}</b><p>{overview ? "The latest health response contains no alerts. This does not replace the separate telemetry freshness checks." : "The dashboard has not received a health report yet. Do not treat this as a clear alert state."}</p></div>}
+        <div className="notification-head"><div><div className="eyebrow">LIVE SYSTEM MESSAGES</div><h2>Notifications</h2><p>{health ? `${alerts.length} active alert${alerts.length === 1 ? "" : "s"} · refreshed with dashboard telemetry` : "Health report not yet received"}</p></div><button ref={notificationCloseRef} type="button" className="drawer-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button></div>
+        {alerts.length > 0 ? <div className="notification-list">{alerts.map((alert, index) => <article className="notification-item" key={index}><div className="notification-symbol"><AlertTriangle size={16}/></div><div><b>{alert.severity ?? "NOTICE"}</b><p>{alert.message ?? "System alert"}</p><small>Current system health report</small></div></article>)}</div> : <div className="notification-empty"><div className="notification-check"><ShieldCheck size={23}/></div><b>{health ? "No active alerts reported" : "Health state unknown"}</b><p>{health ? "The latest health response contains no alerts. This does not replace the separate telemetry freshness checks." : "The dashboard has not received a usable health status. Do not treat this as a clear alert state."}</p></div>}
         <div className="notification-foot"><span>Critical alerts remain visible on the dashboard.</span><button type="button" onClick={() => { setNotificationsOpen(false); setPage("system"); }}>Open System Centre →</button></div>
       </aside>
     </div>}
