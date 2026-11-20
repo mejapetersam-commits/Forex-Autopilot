@@ -1,7 +1,7 @@
 """Market-data integrity and history-readiness checks for stored OHLC candles."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from math import isfinite
 from typing import Any
 
@@ -19,6 +19,8 @@ def _possible_weekend_closure(previous: datetime, current: datetime, interval_se
     """
     from datetime import timedelta, time as clock_time
 
+    previous = previous.astimezone(timezone.utc)
+    current = current.astimezone(timezone.utc)
     if current <= previous:
         return False
     total_seconds = (current - previous).total_seconds()
