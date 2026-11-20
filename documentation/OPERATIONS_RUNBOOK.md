@@ -25,10 +25,10 @@ From the repository root, ensure the deployment environment contains a long rand
 
 ```bash
 docker compose config -q
-docker compose up -d --build api telemetry-gateway telemetry-backup
+docker compose up -d --build api telemetry-gateway telemetry-backup telemetry-health-monitor
 docker compose ps
 curl -fsS http://127.0.0.1:8000/health
-docker compose logs --tail=100 api telemetry-gateway telemetry-backup
+docker compose logs --tail=100 api telemetry-gateway telemetry-backup telemetry-health-monitor
 ```
 
 The API and gateway are bound to loopback addresses. Do not expose the API directly to the public internet. Keep the SQLite volume persistent and backed up.
