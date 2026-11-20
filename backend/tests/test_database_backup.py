@@ -185,3 +185,39 @@ def test_isolated_restore_drill_verifies_recovery_without_touching_source(tmp_pa
     assert read_value(isolated_drill) == "known-good-recovery-point"
     assert read_value(live_database) == "newer-live-value"
     assert verify_backup(isolated_drill)["integrity_check"] == "ok"
+
+
+
+def test_isolated_restore_drill_reports_verified_recovery_and_cleans_up(tmp_path):
+    from app.operations.backup import run_restore_drill
+
+    live_database = tmp_path / "live.sqlite3"
+    recovery_point = tmp_path / "telemetry-verified.sqlite3"
+    drill_directory = tmp_path / "drills"
+    make_database(live_database, "known-good-recovery-point")
+    create_backup(live_database, recovery_point)
+    source_before = verify_backup(recovery_point)["sha256"]
+
+    result = run_restore_drill(recovery_point, drill_directory=drill_directory)
+
+    assert result["status"] == "passed"
+    assert result["integrity_check"] == "ok"
+    assert result["source_sha256"] == source_before
+    assert result["restored_sha256"] == source_before
+    assert result["tables"]["sample"] == 1
+    assert result["temporary_database_removed"] is True
+    assert list(drill_directory.iterdir()) == []
+    assert read_value(live_database) == "known-good-recovery-point"
+
+
+def test_restore_drill_rejects_corrupt_backup_without_creating_artifacts(tmp_path):
+    from app.operations.backup import run_restore_drill
+
+    corrupt = tmp_path / "corrupt.sqlite3"
+    corrupt.write_text("not sqlite")
+    drill_directory = tmp_path / "drills"
+
+    with pytest.raises(ValueError, match="not a readable SQLite"):
+        run_restore_drill(corrupt, drill_directory=drill_directory)
+
+    assert list(drill_directory.iterdir()) == []

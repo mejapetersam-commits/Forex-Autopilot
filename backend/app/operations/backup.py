@@ -261,6 +261,40 @@ def restore_backup(
         temporary_path.unlink(missing_ok=True)
 
 
+
+def run_restore_drill(
+    backup: str | Path,
+    *,
+    drill_directory: str | Path | None = None,
+) -> dict[str, Any]:
+    """Restore a snapshot into a disposable isolated directory and verify it.
+
+    The source backup and live telemetry database are never modified. The
+    temporary restored database is removed automatically after verification.
+    """
+    root = Path(drill_directory).expanduser() if drill_directory else None
+    if root is not None:
+        root.mkdir(parents=True, exist_ok=True)
+        if not root.is_dir():
+            raise ValueError("Restore drill directory must be a directory.")
+    with tempfile.TemporaryDirectory(
+        prefix="forex-autopilot-restore-drill-",
+        dir=str(root) if root is not None else None,
+    ) as temporary_directory:
+        isolated_database = Path(temporary_directory) / "restore-drill.sqlite3"
+        restored = restore_backup(backup, isolated_database)
+        verification = verify_backup(isolated_database)
+        if restored["integrity_check"] != "ok" or verification["integrity_check"] != "ok":
+            raise ValueError("Isolated restore drill did not pass SQLite integrity verification.")
+        return {
+            "status": "passed",
+            "integrity_check": verification["integrity_check"],
+            "source_sha256": restored["source_sha256"],
+            "restored_sha256": verification["sha256"],
+            "tables": verification["tables"],
+            "temporary_database_removed": True,
+        }
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="FOREX AUTOPILOT SQLite maintenance")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -276,6 +310,10 @@ def main() -> None:
     inventory_parser.add_argument("--directory", required=True)
     inventory_parser.add_argument("--max-age-hours", type=int, default=48)
 
+    drill_parser = subparsers.add_parser("drill")
+    drill_parser.add_argument("--backup", required=True)
+    drill_parser.add_argument("--directory")
+
     restore_parser = subparsers.add_parser("restore")
     restore_parser.add_argument("--backup", required=True)
     restore_parser.add_argument("--destination", required=True)
@@ -290,6 +328,8 @@ def main() -> None:
         result = inspect_backup_inventory(
             args.directory, max_age_hours=args.max_age_hours
         )
+    elif args.command == "drill":
+        result = run_restore_drill(args.backup, drill_directory=args.directory)
     else:
         result = restore_backup(
             args.backup, args.destination, replace=args.replace
