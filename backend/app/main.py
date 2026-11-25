@@ -10,10 +10,12 @@ from math import isfinite
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.broker.bridge import MT5AccountSnapshot, MT5CandleBatch, MT5CandleBulk, MT5Heartbeat, MT5ExecutionHistory, MT5ExecutionOrderHistory, MT5ExecutionState, MT5Quote, MT5SymbolSpecification
 from app.market_data.telemetry_store import TelemetryStore
+from app.paper_trading.engine import PaperTradingEngine
 from app.market_data.indicators import calculate_indicators
 from app.strategy.engine import StrategyConfig, evaluate_signal
 from app.backtesting.engine import BacktestConfig, run_backtest
@@ -34,7 +36,18 @@ from app.operations.event_outbox import EventOutbox
 from app.operations.backup import inspect_backup_inventory
 from app.portfolio.telemetry import build_portfolio_exposure
 
-app = FastAPI(title="FOREX AUTOPILOT API", version="0.4.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Quarantine uncertain terminal leases before serving requests.
+    quarantine_expired_execution_commands()
+    yield
+
+
+app = FastAPI(
+    title="FOREX AUTOPILOT API",
+    version="0.4.0",
+    lifespan=lifespan,
+)
 
 
 class RuntimeControlUpdate(BaseModel):
@@ -77,24 +90,51 @@ def execution_ledger() -> ExecutionLedger:
 
 
 def quarantine_expired_execution_commands() -> int:
-    """Mark timed-out terminal leases unknown; never redeliver them automatically."""
-    expired = execution_command_queue().expire_leases()
+    """Recover every expired command whose ledger transition was interrupted."""
+    queue = execution_command_queue()
+    queue.expire_leases()
     ledger = execution_ledger()
     changed = 0
-    for command in expired:
-        intent = ledger.get_intent(command["intent_id"])
-        if intent and intent["status"] == "approved":
-            ledger.transition(
-                command["intent_id"], "unknown",
-                event_type="command_lease_expired",
-                details={
-                    "command_id": command["command_id"],
-                    "terminal_id": command["terminal_id"],
-                    "attempts": command["attempts"],
-                    "recovery": "broker_history_required",
-                },
-            )
-            changed += 1
+    cursor = None
+
+    while True:
+        batch = queue.expired_commands(limit=1000, after=cursor)
+        if not batch:
+            break
+
+        for command in batch:
+            intent = ledger.get_intent(command["intent_id"])
+            if not intent or intent["status"] != "approved":
+                continue
+
+            try:
+                ledger.transition(
+                    command["intent_id"],
+                    "unknown",
+                    event_type="command_lease_expired",
+                    details={
+                        "command_id": command["command_id"],
+                        "terminal_id": command["terminal_id"],
+                        "attempts": command["attempts"],
+                        "recovery": "broker_history_required",
+                    },
+                )
+                changed += 1
+            except ValueError:
+                # Accept a race only when the exact recovery is durably recorded.
+                latest = ledger.get_intent(command["intent_id"])
+                if (
+                    not latest
+                    or latest["status"] != "unknown"
+                    or not ledger.has_command_lease_expiry_event(
+                        command["intent_id"], command["command_id"]
+                    )
+                ):
+                    raise
+
+        last = batch[-1]
+        cursor = (last["created_at"], last["command_id"])
+
     return changed
 
 
@@ -1290,19 +1330,44 @@ def record_execution_command_result(command_id: str, payload: MT5ExecutionResult
     intent = ledger.get_intent(result["intent_id"])
     if intent is None:
         raise HTTPException(status_code=409, detail="Command has no matching order intent.")
-    if intent["status"] == "approved":
-        if result["status"] == "rejected":
-            ledger.transition(result["intent_id"], "rejected",
-                              event_type="mt5_demo_rejected", details=payload.result)
+    outcome = result["status"]
+    current_status = intent["status"]
+    next_status = outcome
+
+    if current_status == "approved":
+        if outcome == "rejected":
+            ledger.transition(
+                result["intent_id"], "rejected",
+                event_type="mt5_demo_rejected", details=payload.result,
+            )
         else:
             order_id = payload.result.get("broker_order_id")
-            ledger.transition(result["intent_id"], "submitted",
-                              event_type="mt5_demo_submission_result",
-                              broker_order_id=str(order_id) if order_id else None,
-                              details={"command_id": command_id})
-            next_status = "acknowledged" if result["status"] == "acknowledged" else "unknown"
-            ledger.transition(result["intent_id"], next_status,
-                              event_type="mt5_demo_" + next_status, details=payload.result)
+            ledger.transition(
+                result["intent_id"], "submitted",
+                event_type="mt5_demo_submission_result",
+                broker_order_id=str(order_id) if order_id else None,
+                details={"command_id": command_id},
+            )
+            ledger.transition(
+                result["intent_id"], next_status,
+                event_type="mt5_demo_" + next_status, details=payload.result,
+            )
+    elif current_status == "submitted" and outcome in {"acknowledged", "unknown"}:
+        ledger.transition(
+            result["intent_id"], next_status,
+            event_type="mt5_demo_" + next_status, details=payload.result,
+        )
+    elif current_status == outcome:
+        # Exact duplicate callback: the ledger already reflects this outcome.
+        pass
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot apply terminal outcome '{outcome}' "
+                f"to intent in state '{current_status}'."
+            ),
+        )
     return {"command_id": result["command_id"], "status": result["status"],
             "intent_status": ledger.get_intent(result["intent_id"])["status"],
             "execution_mode": "demo_transport", "trading_enabled": False}
@@ -2183,3 +2248,16 @@ def mt5_telemetry_status():
         "execution_mode": "disabled",
         "trading_enabled": False,
     }
+
+
+@app.get("/api/v1/dashboard/paper-trading")
+def dashboard_paper_trading():
+    """Read-only view of the persistent forward paper-trading ledger."""
+    return PaperTradingEngine().snapshot()
+
+
+@app.post("/api/v1/dashboard/paper-trading/process")
+def process_paper_trading():
+    """Process newly ingested closed H1 candles; never dispatch broker orders."""
+    return PaperTradingEngine().process(telemetry_store())
+

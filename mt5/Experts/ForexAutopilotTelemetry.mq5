@@ -6,7 +6,7 @@
 #property version   "1.120"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
-input string InpApiBaseUrl = "https://YOUR-API-HOST";
+input string InpApiBaseUrl = "https://forex-telemetry.thebigvoicelimited.co.ke";
 input string InpBridgeToken = ""; // Set locally in MT5; never commit a real token.
 input string InpSymbols = "EURUSDm,GBPUSDm";
 input string InpTerminalId = "mt5-terminal-1";
@@ -14,6 +14,7 @@ input int    InpExecutionStateSeconds = 5;
 input int    InpHeartbeatSeconds = 15;
 input int    InpHttpTimeoutMs = 15000;
 input int    InpCandleBootstrapBars = 500;
+input int InpCandleHistoryTargetBars = 5000;
 input int    InpCandleRefreshSeconds = 60;
 input int    InpHistoryRefreshSeconds = 60;
 input int    InpHistoryLookbackDays = 2;
@@ -29,6 +30,7 @@ ulong  g_last_history_ms = 0;
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
 bool g_candle_bootstrap_complete = false;
+int g_candle_history_offset = 1;
 ulong g_candle_next_upload_ms = 0;
 
 string Trimmed(string value)
@@ -555,14 +557,14 @@ string BrokerTimeIso(datetime broker_time, int utc_offset_seconds)
 }
 
 bool BuildCandleBatchJson(string symbol, ENUM_TIMEFRAMES timeframe,
-                           int requested_bars, string &batch_json)
+                           int start_position, int requested_bars, string &batch_json)
 {
    int server_offset = (int)(TimeTradeServer() - TimeGMT());
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
 
    ResetLastError();
-   int copied = CopyRates(symbol, timeframe, 1, requested_bars, rates);
+   int copied = CopyRates(symbol, timeframe, start_position, requested_bars, rates);
    if(copied != requested_bars)
    {
       Print("FOREX AUTOPILOT: bulk bootstrap waiting for ", symbol, " ",
@@ -602,6 +604,7 @@ void SendBulkCandleBatches(ulong now_ms)
       return;
 
    int requested_bars = g_candle_bootstrap_complete ? 3 : InpCandleBootstrapBars;
+   int start_position = g_candle_bootstrap_complete ? 1 : g_candle_history_offset;
    string body = "{\"batches\":[";
    int batch_count = 0;
 
@@ -622,7 +625,7 @@ void SendBulkCandleBatches(ulong now_ms)
          string batch_json;
          if(!BuildCandleBatchJson(
                symbol, g_candle_timeframes[timeframe_index],
-               requested_bars, batch_json))
+                start_position, requested_bars, batch_json))
          {
             // MT5 may still be downloading history. Retry the complete upload
             // shortly; never mark a partial bootstrap as complete.
@@ -646,12 +649,28 @@ void SendBulkCandleBatches(ulong now_ms)
    {
       if(!g_candle_bootstrap_complete)
       {
-         g_candle_bootstrap_complete = true;
-         Print("FOREX AUTOPILOT: initial bulk candle bootstrap accepted for ",
-               batch_count, " groups and ", batch_count * requested_bars,
-               " candles.");
+         g_candle_history_offset += requested_bars;
+
+         if(g_candle_history_offset > InpCandleHistoryTargetBars)
+         {
+            g_candle_bootstrap_complete = true;
+            Print("FOREX AUTOPILOT: historical backfill complete; ",
+                  InpCandleHistoryTargetBars, " closed bars per series.");
+            g_candle_next_upload_ms =
+               now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+         }
+         else
+         {
+            Print("FOREX AUTOPILOT: history page accepted; next starting position=",
+                  g_candle_history_offset);
+            g_candle_next_upload_ms = now_ms + 1000;
+         }
       }
-      g_candle_next_upload_ms = now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+      else
+      {
+         g_candle_next_upload_ms =
+            now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+      }
    }
    else
    {
@@ -662,9 +681,9 @@ void SendBulkCandleBatches(ulong now_ms)
 
 int OnInit()
 {
-   if(StringFind(InpApiBaseUrl, "https://") != 0)
+   if(InpApiBaseUrl != "http://127.0.0.1:8000" && StringFind(InpApiBaseUrl, "https://") != 0)
    {
-      Print("FOREX AUTOPILOT: configure an HTTPS API base URL before starting.");
+      Print("FOREX AUTOPILOT: configure HTTPS or the approved localhost API URL.");
       return INIT_PARAMETERS_INCORRECT;
    }
    if(StringLen(Trimmed(InpBridgeToken)) < 32)
@@ -674,7 +693,10 @@ int OnInit()
    }
    if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000 ||
       InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 500 ||
-      InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || InpHistoryRefreshSeconds < 30 || InpHistoryRefreshSeconds > 3600 || InpHistoryLookbackDays < 1 || InpHistoryLookbackDays > 7 || StringLen(Trimmed(InpTerminalId)) < 3)
+       InpCandleHistoryTargetBars < InpCandleBootstrapBars ||
+       InpCandleHistoryTargetBars > 5000 ||
+       InpCandleHistoryTargetBars % InpCandleBootstrapBars != 0 ||
+       InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || InpHistoryRefreshSeconds < 30 || InpHistoryRefreshSeconds > 3600 || InpHistoryLookbackDays < 1 || InpHistoryLookbackDays > 7 || StringLen(Trimmed(InpTerminalId)) < 3)
    {
       Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
       return INIT_PARAMETERS_INCORRECT;
@@ -721,7 +743,7 @@ int OnInit()
    g_last_snapshot_ms = GetTickCount64();
    g_last_execution_state_ms = GetTickCount64();
    g_candle_next_upload_ms = GetTickCount64();
-   Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Initial history target: ", InpCandleBootstrapBars, " closed bars per combination.");
+   Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Historical target: ", InpCandleHistoryTargetBars, " closed bars per series; page size: ", InpCandleBootstrapBars);
    return INIT_SUCCEEDED;
 }
 

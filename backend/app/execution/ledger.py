@@ -228,6 +228,22 @@ class ExecutionLedger:
             "kill_switch_active": values.get("kill_switch_active", True),
         }
 
+    def has_command_lease_expiry_event(
+        self, idempotency_key: str, command_id: str
+    ) -> bool:
+        """Check durable evidence that this exact command was recovered."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT details_json FROM execution_audit
+                   WHERE idempotency_key = ?
+                     AND event_type = 'command_lease_expired'""",
+                (idempotency_key,),
+            ).fetchall()
+        return any(
+            json.loads(row["details_json"]).get("command_id") == command_id
+            for row in rows
+        )
+
     def audit_events(self, idempotency_key: str, limit: int = 100) -> list[dict[str, Any]]:
         safe_limit = min(max(int(limit), 1), 500)
         with self._connect() as connection:

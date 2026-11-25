@@ -337,3 +337,45 @@ def test_strategy_candidate_becomes_preflighted_intent_without_auto_queue(monkey
     assert result["trading_enabled"] is False
     assert ledger.get_intent(result["intent_id"])["status"] == "approved"
     assert queue.lease_next(terminal_id="demo-terminal") is None
+
+
+def test_acknowledgement_callback_retry_resumes_ledger_after_partial_failure(monkeypatch, tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    queue = ExecutionCommandQueue(str(tmp_path / "shared.sqlite3"))
+    key = make_intent(ledger, "intent-ack-retry")
+    ledger.transition(key, "approved", event_type="preflight_approved")
+    queue.enqueue_approved_intent(
+        command_id="cmd-ack-retry", intent_id=key,
+        payload=ledger.get_intent(key)["payload"],
+        environment="demo", trading_enabled=True,
+    )
+    queue.lease_next(terminal_id="terminal-ack-retry")
+    monkeypatch.setattr(main, "execution_ledger", lambda: ledger)
+    monkeypatch.setattr(main, "execution_command_queue", lambda: queue)
+
+    original_transition = ledger.transition
+    fail_once = {"enabled": True}
+
+    def flaky_transition(intent_id, target_status, **kwargs):
+        if target_status == "acknowledged" and fail_once["enabled"]:
+            fail_once["enabled"] = False
+            raise ValueError("simulated transient ledger failure")
+        return original_transition(intent_id, target_status, **kwargs)
+
+    monkeypatch.setattr(ledger, "transition", flaky_transition)
+    payload = main.MT5ExecutionResult(
+        terminal_id="terminal-ack-retry", outcome="acknowledged",
+        result={"intent_id": key, "broker_order_id": "123456"},
+    )
+
+    with pytest.raises(ValueError, match="simulated transient"):
+        main.record_execution_command_result("cmd-ack-retry", payload)
+
+    assert ledger.get_intent(key)["status"] == "submitted"
+
+    response = main.record_execution_command_result("cmd-ack-retry", payload)
+    assert response["intent_status"] == "acknowledged"
+    assert ledger.get_intent(key)["status"] == "acknowledged"
+
+    repeated = main.record_execution_command_result("cmd-ack-retry", payload)
+    assert repeated["intent_status"] == "acknowledged"

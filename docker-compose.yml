@@ -70,6 +70,7 @@ services:
       FOREX_AUTOPILOT_BRIDGE_TOKEN: ${FOREX_AUTOPILOT_BRIDGE_TOKEN:?Set a strong bridge token in the deployment environment}
       FOREX_AUTOPILOT_ADMIN_TOKEN: ${FOREX_AUTOPILOT_ADMIN_TOKEN:-}
       FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_BACKUP_DIR: /var/backups/forex-autopilot
       FOREX_AUTOPILOT_DASHBOARD_SYMBOLS: EURUSDm,GBPUSDm
       FOREX_AUTOPILOT_ENVIRONMENT: ${FOREX_AUTOPILOT_ENVIRONMENT:-demo}
       FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED: ${FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED:-false}
@@ -85,6 +86,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - telemetry_data:/var/lib/forex-autopilot
+      - telemetry_backups:/var/backups/forex-autopilot:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -141,6 +143,8 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./deploy/telemetry-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dashboard/dist:/usr/share/nginx/html:ro
+      - ./deploy/telemetry-gateway/.htpasswd:/etc/nginx/.htpasswd:ro
     read_only: true
     tmpfs:
       - /tmp

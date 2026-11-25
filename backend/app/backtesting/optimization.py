@@ -45,7 +45,7 @@ def optimize_walk_forward(
     if minimum_trades < 1 or minimum_trades > 100:
         raise ValueError("minimum_trades must be between 1 and 100.")
 
-    # Eight candidates: bounded enough for the API and broad enough to compare
+    # Sixteen candidates: bounded enough for the API and broad enough to compare
     # stop distance, reward/risk and momentum confirmation.
     candidates = [
         replace(
@@ -60,13 +60,14 @@ def optimize_walk_forward(
         )
     ]
 
-    # Two expanding folds. Each test segment is strictly later than its
-    # training segment; a 60-candle warm-up is included before OOS scoring.
+    # Two expanding folds. Each validation segment includes exactly the
+    # configured warm-up history before its out-of-sample scoring boundary.
+    warmup = base_config.minimum_candles
     first_cut = int(len(rows) * 0.55)
     second_cut = int(len(rows) * 0.75)
     folds = [
-        (rows[:first_cut], rows[max(0, first_cut - 60):second_cut]),
-        (rows[:second_cut], rows[max(0, second_cut - 60):]),
+        (rows[:first_cut], rows[max(0, first_cut - warmup):second_cut]),
+        (rows[:second_cut], rows[max(0, second_cut - warmup):]),
     ]
     fold_results = []
     for fold_number, (training, validation_with_warmup) in enumerate(folds, 1):
@@ -78,13 +79,44 @@ def optimize_walk_forward(
                 "training_result": training_result,
                 "score": _score(training_result, minimum_trades),
             })
-        ranked.sort(key=lambda item: item["score"], reverse=True)
-        best = ranked[0]
+        # A candidate is eligible only when its training backtest completed
+        # and met the minimum trade sample. Never select a failed candidate
+        # merely because every candidate received the same failure score.
+        eligible = [
+            item for item in ranked
+            if item["training_result"].get("status") == "completed"
+            and (item["training_result"].get("total_trades") or 0) >= minimum_trades
+        ]
+        if not eligible:
+            return {
+                "status": "insufficient_evidence",
+                "reason": (
+                    f"No candidate met the minimum of {minimum_trades} "
+                    f"training trades in fold {fold_number}."
+                ),
+                "candles_available": len(rows),
+                "candidate_count_per_fold": len(candidates),
+                "fold_count": fold_number,
+                "folds": fold_results + [{
+                    "fold": fold_number,
+                    "status": "insufficient_evidence",
+                    "training_candles": len(training),
+                    "validation_candles_including_warmup": len(validation_with_warmup),
+                    "eligible_candidate_count": 0,
+                    "minimum_training_trades": minimum_trades,
+                }],
+                "execution_enabled": False,
+                "research_status": "insufficient_training_evidence",
+            }
+
+        eligible.sort(key=lambda item: item["score"], reverse=True)
+        best = eligible[0]
         validation_result = run_backtest(validation_with_warmup, best["config"])
         fold_results.append({
             "fold": fold_number,
             "training_candles": len(training),
             "validation_candles_including_warmup": len(validation_with_warmup),
+            "eligible_candidate_count": len(eligible),
             "selected_parameters": {
                 "atr_stop_multiple": best["config"].atr_stop_multiple,
                 "reward_risk_ratio": best["config"].reward_risk_ratio,
@@ -98,7 +130,9 @@ def optimize_walk_forward(
             "out_of_sample_metrics": {
                 key: validation_result.get(key)
                 for key in ("status", "total_trades", "return_pct", "profit_factor",
-                            "max_drawdown_pct", "expectancy_per_trade", "win_rate_pct")
+                            "max_drawdown_pct", "mark_to_market_max_drawdown_pct",
+                            "qualification_drawdown_pct", "expectancy_per_trade",
+                            "win_rate_pct")
             },
         })
 
@@ -124,6 +158,11 @@ def optimize_walk_forward(
             ) if valid_oos else None,
             "worst_drawdown_pct": max(
                 (item.get("max_drawdown_pct", 0.0) or 0.0 for item in valid_oos), default=None
+            ),
+            "worst_qualification_drawdown_pct": max(
+                (item.get("qualification_drawdown_pct") for item in valid_oos
+                 if item.get("qualification_drawdown_pct") is not None),
+                default=None,
             ),
         },
         "methodology": {

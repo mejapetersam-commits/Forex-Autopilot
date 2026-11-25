@@ -76,3 +76,61 @@ def test_monitoring_health_api_is_authenticated(monkeypatch, tmp_path):
     assert accepted.status_code == 200
     assert accepted.json()["status"] == "critical"
     assert accepted.json()["trading_enabled"] is False
+
+
+
+def test_health_ignores_quotes_for_unconfigured_legacy_symbols(monkeypatch):
+    now = datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    stale = (now - timedelta(days=5)).isoformat()
+    monkeypatch.delenv("FOREX_AUTOPILOT_MONITORED_SYMBOLS", raising=False)
+    monkeypatch.delenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", raising=False)
+
+    result = assess_system_health(
+        {"terminal_connected": True, "observed_at": stamp},
+        {"equity": 1000, "margin": 200, "observed_at": stamp},
+        [
+            {"symbol": "EURUSD", "observed_at": stale},
+            {"symbol": "EURUSDM", "observed_at": stamp},
+            {"symbol": "GBPUSDM", "observed_at": stamp},
+        ],
+        now=now,
+    )
+
+    assert result["status"] == "healthy"
+    assert result["alerts"] == []
+    market = next(item for item in result["checks"] if item["name"] == "market_quotes")
+    assert market["fresh_count"] == 2
+    assert market["total_count"] == 2
+
+
+def test_health_still_alerts_on_stale_configured_symbol(monkeypatch):
+    now = datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    stale = (now - timedelta(minutes=5)).isoformat()
+    monkeypatch.setenv("FOREX_AUTOPILOT_MONITORED_SYMBOLS", "EURUSDm,GBPUSDm")
+
+    result = assess_system_health(
+        {"terminal_connected": True, "observed_at": stamp},
+        {"equity": 1000, "margin": 200, "observed_at": stamp},
+        [
+            {"symbol": "EURUSDm", "observed_at": stale},
+            {"symbol": "GBPUSDm", "observed_at": stamp},
+            {"symbol": "EURUSD", "observed_at": stale},
+        ],
+        now=now,
+    )
+
+    stale_alerts = [a for a in result["alerts"] if a["code"] == "QUOTE_STALE"]
+    assert len(stale_alerts) == 1
+    assert stale_alerts[0]["symbol"] == "EURUSDm"
+    market = next(item for item in result["checks"] if item["name"] == "market_quotes")
+    assert market["total_count"] == 2
+
+
+def test_explicit_monitoring_symbols_override_dashboard_symbols(monkeypatch):
+    from app.monitoring.health import monitoring_symbols
+
+    monkeypatch.setenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS", "EURUSDm,GBPUSDm")
+    monkeypatch.setenv("FOREX_AUTOPILOT_MONITORED_SYMBOLS", "GBPUSDm")
+    assert monitoring_symbols() == {"GBPUSDM"}

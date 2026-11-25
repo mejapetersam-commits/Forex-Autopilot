@@ -330,6 +330,9 @@ def run_backtest(
         "equity_curve": equity_curve_points,
         "mark_to_market_equity_curve": mark_to_market_curve,
         "mark_to_market_max_drawdown_pct": round(mark_to_market_max_drawdown_pct, 4),
+        "qualification_drawdown_pct": round(
+            max(max_drawdown_pct, mark_to_market_max_drawdown_pct), 4
+        ),
         "execution_enabled": False,
         "research_status": "historical_simulation_not_a_profitability_guarantee",
     }

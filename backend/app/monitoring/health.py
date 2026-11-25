@@ -1,8 +1,23 @@
 """Operational health assessment for the telemetry and risk data pipeline."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
+
+
+def monitoring_symbols() -> set[str]:
+    """Return the instruments whose quotes are part of operational health."""
+    configured = (
+        os.getenv("FOREX_AUTOPILOT_MONITORED_SYMBOLS")
+        or os.getenv("FOREX_AUTOPILOT_DASHBOARD_SYMBOLS")
+        or "EURUSDm,GBPUSDm"
+    )
+    return {
+        symbol.strip().upper()
+        for symbol in configured.split(",")
+        if symbol.strip()
+    }
 
 
 def _age(timestamp: str | None, now: datetime) -> float | None:
@@ -29,6 +44,11 @@ def assess_system_health(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     current = now or datetime.now(timezone.utc)
+    active_symbols = monitoring_symbols()
+    quotes = [
+        quote for quote in quotes
+        if str(quote.get('symbol') or '').strip().upper() in active_symbols
+    ]
     checks = []
     alerts = []
 

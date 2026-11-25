@@ -28,15 +28,16 @@ def test_partial_fills_accumulate_idempotently(tmp_path):
     snap=history(deal(1,12345,0.004),deal(2,12345,0.003))
     store.save_execution_history(snap); store.save_execution_history(snap)
     result=reconcile_broker_history(ledger,store,expected_magic=61119001,expected_terminal_id='demo-terminal',expected_server='Exness-MT5Trial')
-    assert result["status"]=="complete" and ledger.get_intent(key)["status"]=="partially_filled"
+    assert result["status"]=="pending" and ledger.get_intent(key)["status"]=="partially_filled"
     assert result["results"][0]["filled_volume_lots"]==pytest.approx(0.007)
 
 
 def test_full_fill_reconciliation_is_idempotent(tmp_path):
     ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3")); store=TelemetryStore(str(tmp_path/"shared.sqlite3")); key=approved_intent(ledger)
     store.save_execution_history(history(deal(3,12345,0.01)))
-    reconcile_broker_history(ledger,store,expected_magic=61119001)
-    reconcile_broker_history(ledger,store,expected_magic=61119001)
+    first = reconcile_broker_history(ledger,store,expected_magic=61119001)
+    second = reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert first["status"] == "complete" and second["status"] == "no_work"
     assert ledger.get_intent(key)["status"]=="reconciled" and len(ledger.audit_events(key))==6
 
 
@@ -52,6 +53,7 @@ def test_mismatched_evidence_requires_manual_review(tmp_path,kwargs,reason):
 def test_missing_history_does_not_infer_rejection(tmp_path):
     ledger=ExecutionLedger(str(tmp_path/"shared.sqlite3")); store=TelemetryStore(str(tmp_path/"shared.sqlite3")); key=approved_intent(ledger)
     result=reconcile_broker_history(ledger,store,expected_magic=61119001)
+    assert result["status"] == "pending"
     assert result["results"][0]["result"]=="awaiting_broker_history" and ledger.get_intent(key)["status"]=="acknowledged"
 
 
@@ -189,3 +191,58 @@ def test_fill_progress_reports_remaining_volume_for_partial_and_full_fills(tmp_p
     report=full["results"][0]
     assert report["remaining_volume_lots"] == 0.0
     assert report["fill_progress_pct"] == 100.0
+
+
+def test_empty_reconciliation_reports_no_work(tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    store = TelemetryStore(str(tmp_path / "shared.sqlite3"))
+
+    result = reconcile_broker_history(ledger, store, expected_magic=61119001)
+
+    assert result["status"] == "no_work"
+    assert result["intents_checked"] == 0
+    assert result["results"] == []
+    assert result["trading_enabled"] is False
+
+
+def test_successive_partial_fills_update_audit_without_duplicate_events(tmp_path):
+    ledger = ExecutionLedger(str(tmp_path / "shared.sqlite3"))
+    store = TelemetryStore(str(tmp_path / "shared.sqlite3"))
+    key = approved_intent(ledger, volume=0.01)
+
+    first = deal(70, 12345, 0.004)
+    second = deal(71, 12345, 0.003)
+    third = deal(72, 12345, 0.003)
+
+    store.save_execution_history(history(first))
+    result1 = reconcile_broker_history(ledger, store, expected_magic=61119001)
+    assert result1["results"][0]["filled_volume_lots"] == pytest.approx(0.004)
+
+    events1 = [
+        e for e in ledger.audit_events(key)
+        if e["event_type"] == "broker_history_partial_fill"
+    ]
+    assert len(events1) == 1
+
+    store.save_execution_history(history(first, second))
+    result2 = reconcile_broker_history(ledger, store, expected_magic=61119001)
+    assert result2["results"][0]["filled_volume_lots"] == pytest.approx(0.007)
+
+    events2 = [
+        e for e in ledger.audit_events(key)
+        if e["event_type"] == "broker_history_partial_fill"
+    ]
+    assert len(events2) == 2
+    assert events2[1]["details"] != events2[0]["details"]
+
+    reconcile_broker_history(ledger, store, expected_magic=61119001)
+    events3 = [
+        e for e in ledger.audit_events(key)
+        if e["event_type"] == "broker_history_partial_fill"
+    ]
+    assert len(events3) == 2
+
+    store.save_execution_history(history(first, second, third))
+    result3 = reconcile_broker_history(ledger, store, expected_magic=61119001)
+    assert result3["results"][0]["filled_volume_lots"] == pytest.approx(0.010)
+    assert ledger.get_intent(key)["status"] == "reconciled"

@@ -103,6 +103,7 @@ def test_terminal_order_states_reconcile_without_deal_fills(tmp_path, state, exp
                                       expected_terminal_id="demo-terminal",
                                       expected_server="Exness-MT5Trial")
     assert result["results"][0]["result"] == expected
+    assert result["status"] == "complete"
     assert ledger.get_intent(key)["status"] == "reconciled"
 
 

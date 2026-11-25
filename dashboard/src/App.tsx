@@ -41,7 +41,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "risk" | "system">("overview");
+  const [page, setPage] = useState<"overview" | "market" | "portfolio" | "strategies" | "system">("overview");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
   const [eventSeverity, setEventSeverity] = useState("all");
@@ -215,26 +215,26 @@ export default function App() {
 
   return <main className={`shell page-${page} theme-${theme}`}>
     <header className="topbar">
-      <div className="brand"><div className="brand-mark"><Activity size={21}/></div><div><b>FOREX AUTOPILOT</b><span>MARKET INTELLIGENCE · DEMO MONITORING</span></div></div>
+      <div className="brand"><div className="brand-mark"><Activity size={21}/></div><div><b>FOREX AUTOPILOT</b><span>MARKET INTELLIGENCE · {overview?.environment ? overview.environment.toUpperCase() : "ENVIRONMENT UNKNOWN"}</span></div></div>
       <div className="top-actions"><Status good={Boolean(overview?.bridge_connected)} unknown={!overview}>{!overview ? "MT5 status unknown" : overview.bridge_connected ? "MT5 connected" : "MT5 disconnected"}</Status><button className="notification-trigger" type="button" aria-label={`Open notifications, ${alerts.length} active alerts`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(value => !value)}><Bell size={16}/><span>Alerts</span>{alerts.length > 0 && <i>{alerts.length}</i>}</button><button className="refresh" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark mode" : "Light mode"}</button><button className="refresh" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/> Refresh</button></div>
     </header>
 
     <section className="hero">
-      <div><div className="eyebrow">SYSTEM OVERVIEW</div><h1>Trading operations, <em>under control.</em></h1><p>Read-only visibility into broker connectivity, account telemetry and strategy research.</p></div>
-      <div className="safety"><ShieldCheck size={19}/><div><b>PROTECTION ACTIVE</b><span>Execution disabled · Live trading unavailable</span></div></div>
+      <div><div className="eyebrow">FOREX AUTOPILOT</div><h1>Your trading system, <em>at a glance.</em></h1><p>A focused view of account telemetry, market data and operational safety.</p></div>
+      <div className="safety"><ShieldCheck size={19}/><div><b>READ-ONLY MODE</b><span>Demo monitoring · Order execution disabled</span></div></div>
     </section>
 
     <nav className="dashboard-nav" aria-label="Main navigation">
-      {([["overview","Overview"],["market","Market Watch"],["portfolio","Portfolio"],["strategies","Strategies"],["risk","Risk & Safety"],["system","System Centre"]] as const).map(([key,label]) => <button key={key} type="button" className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{label}{key === "system" && alerts.length > 0 && <span className="nav-count" aria-label={alerts.length + " active alerts"}>{alerts.length}</span>}</button>)}
+      {([["overview","Overview"],["market","Markets & Data"],["portfolio","Portfolio"],["strategies","Strategies"],["system","System & Safety"]] as const).map(([key,label]) => <button key={key} type="button" className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{label}{key === "system" && alerts.length > 0 && <span className="nav-count" aria-label={alerts.length + " active alerts"}>{alerts.length}</span>}</button>)}
     </nav>
-    <div className="page-intro"><div className="eyebrow">YOUR TRADING WORKSPACE</div><h2>{({overview:"Welcome to your overview",market:"Market Watch",portfolio:"Portfolio",strategies:"Strategies & research",risk:"Risk & safety",system:"System centre"} as const)[page]}</h2><p>{({overview:"Your essential account and system snapshot, all in one place.",market:"Quotes, candidate signals and historical market data.",portfolio:"Exposure, positions and portfolio risk information.",strategies:"Research, backtesting and strategy comparisons.",risk:"Operational safeguards, recovery and release readiness.",system:"Broker connectivity, specifications, notifications and event history."} as const)[page]}</p></div>
+    <div className="page-intro"><div className="eyebrow">YOUR TRADING WORKSPACE</div><h2>{({overview:"Overview",market:"Markets & data",portfolio:"Portfolio",strategies:"Strategy research",system:"System & safety"} as const)[page]}</h2><p>{({overview:"The essential account and system status, at a glance.",market:"Live quote freshness, research signals and market-data quality.",portfolio:"Broker-reported positions, exposure and stop risk.",strategies:"Backtesting, robustness, qualification and demo evidence.",system:"Connection, safeguards, recovery and operational diagnostics."} as const)[page]}</p></div>
 
     {error && <div className="error"><AlertTriangle size={17}/><span>Dashboard refresh warning: {error}. Available sections remain visible; retry refresh after checking the affected service.</span></div>}
 
     {page === "overview" && <section id="overview" className="metrics">
       <Metric label="ACCOUNT BALANCE" value={money(account?.balance, account?.account_currency)} detail={account?.fresh ? "Latest broker snapshot" : "No fresh account snapshot"}/>
       <Metric label="EQUITY" value={money(account?.equity, account?.account_currency)} detail={account?.fresh ? "Broker-reported equity" : "Awaiting account telemetry"}/>
-      <Metric label="FREE MARGIN" value={money(account?.free_margin, account?.account_currency)} detail={account?.fresh ? "Broker-reported available margin" : "Awaiting account telemetry"}/>
+      <Metric label="OPEN POSITIONS" value={String(portfolio?.open_position_count ?? "—")} detail={portfolio ? "Broker-reported positions" : "Position data unavailable"}/>
       <Metric label="SYSTEM HEALTH" value={health ? String(health).toUpperCase() : "—"} detail={alerts.length ? `${alerts.length} active alert(s)` : health ? "No alerts in latest health report" : "Health status unavailable"}/>
     </section>}
 
@@ -242,17 +242,16 @@ export default function App() {
       <article className="panel overview-card">
         <div className="section-head"><div><div className="eyebrow">ACCOUNT & CONNECTION</div><h2>Broker snapshot</h2></div><Status good={Boolean(overview?.heartbeat?.fresh && account?.fresh)}>{overview?.heartbeat?.fresh && account?.fresh ? "TELEMETRY FRESH" : "TELEMETRY UNVERIFIED"}</Status></div>
         <div className="snapshot-list">
-          <div><span>MT5 bridge</span><b>{!overview ? "Awaiting bridge report" : overview.bridge_connected ? "Connected" : "Disconnected"}</b></div>
-          <div><span>Terminal heartbeat</span><b>{overview?.heartbeat?.observed_at ? stamp(overview.heartbeat.observed_at) : "Not received"}</b></div>
-          <div><span>Account snapshot</span><b>{account?.observed_at ? stamp(account.observed_at) : "Not received"}</b></div>
-          <div><span>Account currency</span><b>{account?.account_currency ?? "Not reported"}</b></div>
+          <div><span>MT5 connection</span><b>{!overview ? "Unknown" : overview.bridge_connected ? "Connected" : "Disconnected"}</b></div>
+          <div><span>Terminal heartbeat</span><b>{overview?.heartbeat?.fresh ? "Fresh" : "Stale or missing"}</b></div>
+          <div><span>Account telemetry</span><b>{account?.fresh ? "Fresh" : "Stale or missing"}</b></div>
         </div>
         <p className="overview-note">A connected bridge does not by itself confirm fresh account data. Stale or missing telemetry remains unverified.</p>
       </article>
       <article className="panel overview-card">
         <div className="section-head"><div><div className="eyebrow">MARKET PULSE</div><h2>Latest quotes</h2></div><button className="text-action" type="button" onClick={() => setPage("market")}>Open Market Watch →</button></div>
         <div className="quote-list">
-          {(overview?.quotes ?? []).slice(0, 4).map(quote => <div className="quote-item" key={quote.symbol}>
+          {(overview?.quotes ?? []).slice(0, 2).map(quote => <div className="quote-item" key={quote.symbol}>
             <div><b>{quote.symbol}</b><span>{quote.fresh ? "Fresh quote" : "Stale quote"}</span></div>
             <div className="quote-values"><b>{Number.isFinite(quote.bid) ? quote.bid.toFixed(5) : "—"}</b><span>Bid</span></div>
             <div className="quote-values"><b>{Number.isFinite(quote.ask) ? quote.ask.toFixed(5) : "—"}</b><span>Ask</span></div>
@@ -263,19 +262,14 @@ export default function App() {
       </article>
       <article className="panel overview-card overview-activity">
         <div className="section-head"><div><div className="eyebrow">OPERATIONS JOURNAL</div><h2>Recent activity</h2></div><button className="text-action" type="button" onClick={() => setPage("system")}>View event log →</button></div>
-        {events.slice(0, 3).map(event => <div className="activity-item" key={event.event_id}>
+        {events.slice(0, 2).map(event => <div className="activity-item" key={event.event_id}>
           <span className={`activity-dot ${event.severity}`} />
           <div><b>{event.event_type.replaceAll("_", " ")}</b><span>{event.message}</span><small>{stamp(event.occurred_at)} · {event.delivery_status}</small></div>
           <span className="activity-severity">{event.severity}</span>
         </div>)}
         {!events.length && <p className="empty">No operational events have been recorded yet.</p>}
       </article>
-      <article className="panel overview-card overview-safety">
-        <div className="section-head"><div><div className="eyebrow">SAFETY POSTURE</div><h2>Execution remains disabled</h2></div><ShieldCheck size={22}/></div>
-        <p>This workspace is monitoring-only. It does not submit, modify, or close trades.</p>
-        <div className="safety-facts"><span>Trading enabled</span><b>No</b><span>Dashboard mode</span><b>Read only</b><span>Active alerts</span><b>{overview ? alerts.length : "Unknown"}</b></div>
-        <button className="text-action" type="button" onClick={() => setPage("risk")}>Review risk & safeguards →</button>
-      </article>
+
     </section>}
 
     {page === "market" && <section id="connectivity" className="panel">
@@ -312,7 +306,7 @@ export default function App() {
       </tbody></table></div>
     </section>}
 
-    {alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
+    {page === "overview" && alerts.length > 0 && <section className="panel alerts"><div className="section-head"><div><div className="eyebrow">ATTENTION REQUIRED</div><h2>System alerts</h2></div><AlertTriangle/></div>{alerts.map((a, i) => <div className="alert-row" key={i}><AlertTriangle size={16}/><span>{a.message ?? "System alert"}</span><b>{a.severity ?? "NOTICE"}</b></div>)}</section>}
 
     {page === "portfolio" && <section id="portfolio" className="panel">
       <div className="section-head"><div><div className="eyebrow">PORTFOLIO RISK & EXPOSURE</div><h2>Open-position concentration</h2><p className="subhead">Broker telemetry estimates converted into account currency. Missing or stale inputs are not guessed.</p></div><Status good={portfolio?.status === "healthy"}>{portfolio?.status?.toUpperCase() ?? "LOADING"}</Status></div>
@@ -359,55 +353,20 @@ export default function App() {
     </div>}
 
     {page === "system" && <div className="dashboard-group system-workspace">
-      <div className="group-heading"><div className="eyebrow">SYSTEM CONFIGURATION</div><h2>Broker & notification services</h2><p>A live operational view of terminal connectivity, telemetry freshness, broker reference data and the event pipeline.</p></div>
-      <div className="system-status-grid">
-        <article className={overview?.bridge_connected ? "system-status-card pass" : "system-status-card attention"}><span>MT5 BRIDGE</span><b>{overview ? (overview.bridge_connected ? "CONNECTED" : "DISCONNECTED") : "LOADING"}</b><small>{overview?.environment ? "Environment: " + overview.environment : "Awaiting environment report"}</small></article>
-        <article className={overview?.heartbeat?.fresh ? "system-status-card pass" : "system-status-card attention"}><span>TERMINAL HEARTBEAT</span><b>{overview?.heartbeat ? (overview.heartbeat.fresh ? "FRESH" : "STALE") : "NOT REPORTED"}</b><small>{overview?.heartbeat?.age_seconds != null ? Math.round(overview.heartbeat.age_seconds) + " seconds since last heartbeat" : "No heartbeat age available"}</small></article>
-        <article className={overview?.account?.fresh ? "system-status-card pass" : "system-status-card attention"}><span>ACCOUNT TELEMETRY</span><b>{overview?.account ? (overview.account.fresh ? "FRESH" : "STALE") : "NOT REPORTED"}</b><small>{overview?.account?.observed_at ? "Observed " + stamp(overview.account.observed_at) : "No account snapshot timestamp"}</small></article>
-        <article className={(overview?.quotes?.length ?? 0) > 0 && (overview?.quotes ?? []).every(quote => quote.fresh) ? "system-status-card pass" : "system-status-card attention"}><span>MARKET QUOTES</span><b>{overview ? (overview.quotes.filter(quote => quote.fresh).length + " / " + overview.quotes.length + " FRESH") : "LOADING"}</b><small>Fresh quotes / reported symbols</small></article>
+      <div className="system-connection-strip" aria-label="Connection and data status">
+        <div><span>MT5 bridge</span><Status good={Boolean(overview?.bridge_connected)} unknown={!overview}>{!overview ? "Unknown" : overview.bridge_connected ? "Connected" : "Disconnected"}</Status></div>
+        <div><span>Heartbeat</span><Status good={Boolean(overview?.heartbeat?.fresh)} unknown={!overview?.heartbeat}>{overview?.heartbeat ? (overview.heartbeat.fresh ? "Fresh" : "Stale") : "Unknown"}</Status></div>
+        <div><span>Account data</span><Status good={Boolean(account?.fresh)} unknown={!account}>{account ? (account.fresh ? "Fresh" : "Stale") : "Unknown"}</Status></div>
+        <div><span>Market quotes</span><Status good={Boolean((overview?.quotes?.length ?? 0) > 0 && (overview?.quotes ?? []).every(quote => quote.fresh))} unknown={!overview?.quotes?.length}>{overview ? ((overview.quotes ?? []).filter(quote => quote.fresh).length + " / " + (overview.quotes ?? []).length + " fresh") : "Unknown"}</Status></div>
       </div>
-      <section className="system-diagnostics" aria-label="Operational diagnostics">
-        <div className="section-head"><div><div className="eyebrow">OPERATIONAL DIAGNOSTICS</div><h2>Service checks & investigation cues</h2></div><span className="diagnostic-updated">{lastUpdated ? "Dashboard checked " + stamp(lastUpdated) : "Awaiting first dashboard check"}</span></div>
-        <div className="diagnostic-list">
-          <article className="diagnostic-row">
-            <div><b>Backup worker</b><small>{recovery?.backup_worker.observed_at ? "Last observed " + stamp(recovery.backup_worker.observed_at) : "Worker report not available"}</small></div>
-            <Status good={recovery?.backup_worker.fresh === true} unknown={!recovery}>{!recovery ? "UNKNOWN" : recovery.backup_worker.fresh ? "FRESH" : "STALE"}</Status>
-            <p>{!recovery ? "Refresh recovery status to inspect the backup worker." : recovery.backup_worker.fresh ? "Worker heartbeat is within its reported freshness window." : "Worker heartbeat is stale or has not met its freshness threshold."}</p>
-          </article>
-          <article className="diagnostic-row">
-            <div><b>Verified backup</b><small>{recovery?.backups.latest_backup ? "Latest backup " + stamp(recovery.backups.latest_backup ?? undefined) : "No verified backup timestamp"}</small></div>
-            <Status good={recovery?.backups.fresh_verified_backup === true && recovery.backups.invalid_count === 0} unknown={!recovery}>{!recovery ? "UNKNOWN" : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? "VERIFIED" : "ATTENTION"}</Status>
-            <p>{!recovery ? "Backup inventory has not been reported." : recovery.backups.fresh_verified_backup && recovery.backups.invalid_count === 0 ? recovery.backups.verified_count + " verified snapshot(s); no invalid snapshots reported." : recovery.backups.invalid_count + " invalid snapshot(s); a fresh verified backup is not confirmed."}</p>
-          </article>
-          <article className="diagnostic-row">
-            <div><b>Position reconciliation</b><small>{operations ? operations.reconciliation.managed_positions_checked + " managed position(s) checked" : "Operations report not available"}</small></div>
-            <Status good={operations?.reconciliation.status === "reconciled"} unknown={!operations}>{!operations ? "UNKNOWN" : operations.reconciliation.status === "reconciled" ? "RECONCILED" : "INVESTIGATE"}</Status>
-            <p>{!operations ? "Reconciliation evidence has not been received." : operations.reconciliation.status === "reconciled" ? "Latest reconciliation reports no outstanding mismatch." : "Latest state: " + operations.reconciliation.status.replaceAll("_"," ") + ". Review Risk & Safety before any operational decision."}</p>
-          </article>
-          <article className="diagnostic-row">
-            <div><b>Release checks</b><small>{releaseReadiness ? releaseReadiness.automated_passed + " / " + releaseReadiness.automated_total + " automated checks passed" : "Release report not available"}</small></div>
-            <Status good={releaseReadiness?.status === "ready" && releaseReadiness.manual_validation_required === 0} unknown={!releaseReadiness}>{!releaseReadiness ? "UNKNOWN" : releaseReadiness.status === "ready" && releaseReadiness.manual_validation_required === 0 ? "READY" : "NOT READY"}</Status>
-            <p>{!releaseReadiness ? "Release readiness evidence has not been received." : releaseReadiness.manual_validation_required + " manual validation(s) remain. A dashboard status is not permission to enable execution."}</p>
-          </article>
-        </div>
-      </section>
       <div className="system-section-list">
-        <details className="dashboard-accordion" open><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Broker specifications</b><small>Contract sizes, tick values, volume constraints and symbol freshness</small></span><em>Reference data</em></summary><BrokerSpecifications /></details>
+        <details className="dashboard-accordion"><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Broker specifications</b><small>Contract sizes, tick values, volume constraints and symbol freshness</small></span><em>Reference data</em></summary><BrokerSpecifications /></details>
         <details className="dashboard-accordion"><summary><span className="strategy-step">02</span><span className="strategy-summary-copy"><b>Notification pipeline</b><small>Outbox queue, delivery outcomes and active persisted alerts</small></span><em>Service health</em></summary><NotificationHealth /></details>
       </div>
     </div>}
 
     {page === "strategies" && <div id="strategy" className="dashboard-group strategies-workspace">
       <div className="group-heading"><div className="eyebrow">STRATEGY & PERFORMANCE</div><h2>Research results and trade evidence</h2><p>Move from historical simulation to robustness checks, cross-market comparison and broker-confirmed demo evidence. Each workspace can be opened independently.</p></div>
-      <div className="strategy-workflow" aria-label="Research workflow">
-        <div><span>01</span><b>Test</b><small>Historical simulation</small></div>
-        <i aria-hidden="true">→</i>
-        <div><span>02</span><b>Stress</b><small>Transaction costs</small></div>
-        <i aria-hidden="true">→</i>
-        <div><span>03</span><b>Compare</b><small>Markets and timeframes</small></div>
-        <i aria-hidden="true">→</i>
-        <div><span>04</span><b>Observe</b><small>Broker demo evidence</small></div>
-      </div>
       <div className="strategy-panel-list">
         <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">01</span><span className="strategy-summary-copy"><b>Strategy performance lab</b><small>Backtest, equity curve, drawdown and walk-forward validation</small></span><em>Historical research</em></summary><StrategyPerformance /></details>
         <details className="dashboard-accordion strategy-accordion"><summary><span className="strategy-step">02</span><span className="strategy-summary-copy"><b>Execution cost stress lab</b><small>Compare baseline, moderate, high and severe cost assumptions</small></span><em>Robustness check</em></summary><CostSensitivity /></details>
@@ -418,7 +377,7 @@ export default function App() {
       <p className="strategy-disclaimer">Research simulations, cross-market rankings and broker-reported demo results are separate evidence types. Historical results are not live performance, incomplete broker records are excluded from complete-only P&amp;L, and no panel submits orders.</p>
     </div>}
 
-    {page === "risk" && <div id="operations" className="dashboard-group risk-workspace">
+    {page === "system" && <div id="operations" className="dashboard-group risk-workspace">
     <div className="group-heading"><div className="eyebrow">OPERATIONS & SAFETY</div><h2>Execution oversight and operational continuity</h2><p>Understand the current protection posture, investigate exceptions and review what evidence is still required.</p></div>
     <div className="risk-posture-banner">
       <div className="risk-posture-icon"><ShieldCheck size={21}/></div>

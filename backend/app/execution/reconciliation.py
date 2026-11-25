@@ -266,13 +266,24 @@ def reconcile_broker_history(
                         details=details, broker_order_id=order_id,
                     )
                     current = updated["status"]
-            elif partial_fill and current != "partially_filled":
-                updated = ledger.transition(
-                    intent_id, "partially_filled",
-                    event_type="broker_history_partial_fill",
-                    details=details, broker_order_id=order_id,
+            elif partial_fill:
+                audit = ledger.audit_events(intent_id, limit=500)
+                latest = audit[-1] if audit else None
+
+                evidence_changed = (
+                    current != "partially_filled"
+                    or latest is None
+                    or latest["event_type"] != "broker_history_partial_fill"
+                    or latest["details"] != details
                 )
-                current = updated["status"]
+
+                if evidence_changed:
+                    updated = ledger.transition(
+                        intent_id, "partially_filled",
+                        event_type="broker_history_partial_fill",
+                        details=details, broker_order_id=order_id,
+                    )
+                    current = updated["status"]
         except (KeyError, ValueError):
             reports.append({
                 "intent_id": intent_id, "broker_order_id": order_id,
@@ -303,8 +314,24 @@ def reconcile_broker_history(
     needs_review = any(
         report["result"] == "manual_review_required" for report in reports
     )
+    terminal_results = {
+        "reconciled_full_fill",
+        "reconciled_canceled",
+        "reconciled_expired",
+        "reconciled_rejected",
+    }
+    fully_reconciled = bool(reports) and all(
+        report["result"] in terminal_results
+        for report in reports
+    )
+    aggregate_status = (
+        "review_required" if needs_review else
+        "no_work" if not reports else
+        "complete" if fully_reconciled else
+        "pending"
+    )
     return {
-        "status": "review_required" if needs_review else "complete",
+        "status": aggregate_status,
         "intents_checked": len(reports),
         "results": reports,
         "trading_enabled": False,
