@@ -1,31 +1,37 @@
 // FOREX AUTOPILOT - read-only MT5 telemetry bridge
-// This Expert Advisor sends connection, account, quote and OHLC candle telemetry only.
+// This Expert Advisor sends read-only connection, market, position and demo deal-history telemetry.
 // It contains NO trade execution, order, position modification or close functions.
 
 #property strict
-#property version   "1.04"
+#property version   "1.120"
 #property description "FOREX AUTOPILOT read-only telemetry bridge"
 
-input string InpApiBaseUrl = "https://YOUR-API-HOST";
+input string InpApiBaseUrl = "https://forex-telemetry.thebigvoicelimited.co.ke";
 input string InpBridgeToken = ""; // Set locally in MT5; never commit a real token.
-input string InpSymbols = "EURUSD,GBPUSD";
+input string InpSymbols = "EURUSDm,GBPUSDm";
+input string InpTerminalId = "mt5-terminal-1";
+input int    InpExecutionStateSeconds = 5;
 input int    InpHeartbeatSeconds = 15;
-input int    InpHttpTimeoutMs = 5000;
-input int    InpCandleBootstrapBars = 80;
+input int    InpHttpTimeoutMs = 15000;
+input int    InpCandleBootstrapBars = 500;
+input int InpCandleHistoryTargetBars = 5000;
 input int    InpCandleRefreshSeconds = 60;
+input int    InpHistoryRefreshSeconds = 60;
+input int    InpHistoryLookbackDays = 2;
+input ulong  InpExecutionMagicNumber = 61119001;
 
 string g_symbols[];
 ulong  g_last_quote_time_msc[];
 ulong  g_last_snapshot_ms = 0;
+ulong  g_last_specification_ms = 0;
+ulong  g_last_execution_state_ms = 0;
+ulong  g_last_history_ms = 0;
 
 ENUM_TIMEFRAMES g_candle_timeframes[4] = {PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4};
 int g_candle_next_index = 0;
 bool g_candle_bootstrap_complete = false;
-int g_candle_attempts[];
-bool g_candle_bootstrap_done[];
-#define CANDLE_MAX_ATTEMPTS 3
-ulong g_candle_last_request_ms = 0;
-ulong g_candle_cycle_wait_until_ms = 0;
+int g_candle_history_offset = 1;
+ulong g_candle_next_upload_ms = 0;
 
 string Trimmed(string value)
 {
@@ -44,8 +50,11 @@ string IsoUtcNow()
 
 string JsonEscape(string value)
 {
-   StringReplace(value, "\\", "\\\\");
-   StringReplace(value, "\"", "\\\"");
+   // Build escape characters numerically to avoid source-editor backslash parsing issues.
+   string slash = ShortToString(92);
+   string quote = ShortToString(34);
+   StringReplace(value, slash, slash + slash);
+   StringReplace(value, quote, slash + quote);
    return value;
 }
 
@@ -53,8 +62,8 @@ bool PostJson(string route, string body)
 {
    string url = InpApiBaseUrl + route;
    string headers = "Content-Type: application/json\r\nX-Bridge-Token: " + InpBridgeToken + "\r\n";
-   char data[];
-   char result[];
+   uchar data[];
+   uchar result[];
    string response_headers;
 
    int copied = StringToCharArray(body, data, 0, WHOLE_ARRAY, CP_UTF8);
@@ -122,6 +131,367 @@ void SendAccountSnapshot()
    PostJson("/api/v1/mt5/account", body);
 }
 
+// Send broker-provided symbol contract values. These are read-only metadata;
+// tick value is reported by MT5 in the account deposit currency.
+void SendSymbolSpecifications()
+{
+   string account_currency = JsonEscape(AccountInfoString(ACCOUNT_CURRENCY));
+   for(int i = 0; i < ArraySize(g_symbols); i++)
+   {
+      string symbol = g_symbols[i];
+      if(symbol == "" || !SymbolSelect(symbol, true))
+         continue;
+
+      long digits = SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      long stops_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+      long freeze_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+      long trade_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE);
+      string base_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE));
+      string profit_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT));
+      string margin_currency = JsonEscape(SymbolInfoString(symbol, SYMBOL_CURRENCY_MARGIN));
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tick_value_profit = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_PROFIT);
+      double tick_value_loss = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
+      double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+      double volume_min = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+      double volume_max = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+      double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+      bool trade_allowed = (
+         trade_mode == SYMBOL_TRADE_MODE_FULL ||
+         trade_mode == SYMBOL_TRADE_MODE_LONGONLY ||
+         trade_mode == SYMBOL_TRADE_MODE_SHORTONLY
+      );
+      if(point <= 0 || tick_size <= 0 || tick_value_loss <= 0 ||
+         contract_size <= 0 || volume_min <= 0 || volume_max < volume_min ||
+         volume_step <= 0)
+      {
+         Print("FOREX AUTOPILOT: broker specifications not ready for ", symbol,
+               "; will retry on the next refresh.");
+         continue;
+      }
+
+      string body = StringFormat(
+         "{\"symbol\":\"%s\",\"digits\":%I64d,\"point\":%.10f,"
+         "\"tick_size\":%.10f,\"tick_value_profit\":%.10f,"
+         "\"tick_value_loss\":%.10f,\"contract_size\":%.4f,"
+         "\"volume_min\":%.4f,\"volume_max\":%.4f,\"volume_step\":%.4f,"
+         "\"stops_level_points\":%I64d,\"freeze_level_points\":%I64d,"
+         "\"trade_allowed\":%s,\"base_currency\":\"%s\","
+         "\"profit_currency\":\"%s\",\"margin_currency\":\"%s\","
+         "\"account_currency\":\"%s\",\"observed_at\":\"%s\"}",
+         JsonEscape(symbol), digits,
+         point, tick_size, tick_value_profit, tick_value_loss,
+         contract_size, volume_min, volume_max, volume_step,
+         stops_level, freeze_level,
+         trade_allowed ? "true" : "false",
+         base_currency, profit_currency, margin_currency,
+         account_currency, IsoUtcNow()
+      );
+      PostJson("/api/v1/mt5/specifications", body);
+   }
+}
+
+
+
+double CalculateDailyLossPct()
+{
+   datetime server_now = TimeTradeServer();
+   MqlDateTime day_parts;
+   TimeToStruct(server_now, day_parts);
+   day_parts.hour = 0;
+   day_parts.min = 0;
+   day_parts.sec = 0;
+   datetime day_start = StructToTime(day_parts);
+
+   double realized_net = 0.0;
+   if(!HistorySelect(day_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: unable to read today's broker deal history; daily-loss gate will fail closed.");
+      return 1000.0;
+   }
+   int deals = HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      ulong deal_ticket = HistoryDealGetTicket(i);
+      if(deal_ticket == 0)
+         continue;
+      long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+      // Use deal types supported across MT5 terminal builds.
+      if(deal_type == DEAL_TYPE_BALANCE || deal_type == DEAL_TYPE_CREDIT
+         || deal_type == DEAL_TYPE_BONUS || deal_type == DEAL_TYPE_CORRECTION
+         || deal_type == DEAL_TYPE_INTEREST)
+      {
+         Print("FOREX AUTOPILOT: non-trading balance operation detected today; daily-loss gate will fail closed.");
+         return 1000.0;
+      }
+      bool trade_deal = (deal_type == DEAL_TYPE_BUY || deal_type == DEAL_TYPE_SELL);
+      bool commission_deal = (
+         deal_type == DEAL_TYPE_COMMISSION
+         || deal_type == DEAL_TYPE_COMMISSION_DAILY
+         || deal_type == DEAL_TYPE_COMMISSION_MONTHLY
+         || deal_type == DEAL_TYPE_COMMISSION_AGENT_DAILY
+         || deal_type == DEAL_TYPE_COMMISSION_AGENT_MONTHLY
+         || deal_type == DEAL_TYPE_CHARGE
+      );
+      if(!trade_deal && !commission_deal)
+         continue;
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_SWAP);
+      realized_net += HistoryDealGetDouble(deal_ticket, DEAL_FEE);
+   }
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double floating_net = equity - AccountInfoDouble(ACCOUNT_BALANCE);
+   double total_day_net = realized_net + floating_net;
+   double estimated_start_equity = equity - total_day_net;
+   if(estimated_start_equity <= 0.0)
+      return 1000.0;
+   return (total_day_net < 0.0)
+      ? (-total_day_net / estimated_start_equity) * 100.0
+      : 0.0;
+}
+
+string AccountEnvironment()
+{
+   long mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   if(mode == ACCOUNT_TRADE_MODE_DEMO)
+      return "demo";
+   if(mode == ACCOUNT_TRADE_MODE_REAL)
+      return "real";
+   return "contest";
+}
+
+// Read-only snapshot of open positions. No trade or position-modification calls.
+void SendExecutionState()
+{
+   string server = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
+   string body = StringFormat(
+      "{\"terminal_id\":\"%s\",\"environment\":\"%s\","
+      "\"server\":\"%s\",\"observed_at\":\"%s\",\"daily_loss_pct\":%.6f,\"positions\":[",
+      JsonEscape(InpTerminalId), AccountEnvironment(), server, IsoUtcNow(), CalculateDailyLossPct()
+   );
+   int count = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      string symbol = JsonEscape(PositionGetString(POSITION_SYMBOL));
+      string side = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? "buy" : "sell";
+      string comment = JsonEscape(PositionGetString(POSITION_COMMENT));
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+      double stop_loss = PositionGetDouble(POSITION_SL);
+      double take_profit = PositionGetDouble(POSITION_TP);
+      ulong magic = (ulong)PositionGetInteger(POSITION_MAGIC);
+      ulong position_id = (ulong)PositionGetInteger(POSITION_IDENTIFIER);
+      if(position_id == 0)
+         continue;
+      if(count > 0)
+         body += ",";
+      body += StringFormat(
+         "{\"ticket\":\"%I64u\",\"position_id\":\"%I64u\","
+         "\"symbol\":\"%s\",\"side\":\"%s\","
+         "\"volume_lots\":%.4f,\"open_price\":%.10f,\"stop_loss\":%.10f,"
+         "\"take_profit\":%.10f,\"magic\":%I64u,\"comment\":\"%s\"}",
+         ticket, position_id, symbol, side, volume, open_price, stop_loss, take_profit, magic, comment
+      );
+      count++;
+   }
+   body += "]}";
+   PostJson("/api/v1/mt5/execution/state", body);
+}
+
+string BrokerTimeIso(datetime broker_time, int utc_offset_seconds); // forward declaration
+
+// Read-only demo deal-history upload. This reports broker records only;
+// it never submits, changes, or closes an order.
+void SendExecutionHistory()
+{
+   if(AccountEnvironment() != "demo")
+      return;
+
+   datetime server_now = TimeTradeServer();
+   datetime history_start = server_now - (datetime)(InpHistoryLookbackDays * 86400);
+   if(!HistorySelect(history_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: broker execution history unavailable; reconciliation remains pending.");
+      return;
+   }
+
+   int total = HistoryDealsTotal();
+   int server_offset = (int)(TimeTradeServer() - TimeGMT());
+   string body = StringFormat(
+      "{\"terminal_id\":\"%s\",\"environment\":\"demo\","
+      "\"server\":\"%s\",\"history_from\":\"%s\","
+      "\"history_to\":\"%s\",\"observed_at\":\"%s\",\"deals\":[",
+      JsonEscape(InpTerminalId), JsonEscape(AccountInfoString(ACCOUNT_SERVER)),
+      BrokerTimeIso(history_start, server_offset),
+      BrokerTimeIso(server_now, server_offset), IsoUtcNow()
+   );
+
+   int included = 0;
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0 || (ulong)HistoryDealGetInteger(ticket, DEAL_MAGIC) != InpExecutionMagicNumber)
+         continue;
+
+      long deal_type = HistoryDealGetInteger(ticket, DEAL_TYPE);
+      if(deal_type != DEAL_TYPE_BUY && deal_type != DEAL_TYPE_SELL)
+         continue;
+
+      long entry_type = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      string entry = "";
+      if(entry_type == DEAL_ENTRY_IN) entry = "in";
+      else if(entry_type == DEAL_ENTRY_OUT) entry = "out";
+      else if(entry_type == DEAL_ENTRY_INOUT) entry = "inout";
+      else if(entry_type == DEAL_ENTRY_OUT_BY) entry = "out_by";
+      else continue;
+
+      ulong order_ticket = (ulong)HistoryDealGetInteger(ticket, DEAL_ORDER);
+      ulong position_id = (ulong)HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
+      double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+      double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+      double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+      double commission = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+      double swap = HistoryDealGetDouble(ticket, DEAL_SWAP);
+      double fee = HistoryDealGetDouble(ticket, DEAL_FEE);
+      ulong deal_magic = (ulong)HistoryDealGetInteger(ticket, DEAL_MAGIC);
+      datetime deal_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+      string symbol = JsonEscape(HistoryDealGetString(ticket, DEAL_SYMBOL));
+      string comment = JsonEscape(HistoryDealGetString(ticket, DEAL_COMMENT));
+      string side = (deal_type == DEAL_TYPE_BUY) ? "buy" : "sell";
+      if(order_ticket == 0 || position_id == 0 || volume <= 0 || price <= 0 || deal_time <= 0 || symbol == "")
+         continue;
+      if(included >= 1000)
+      {
+         Print("FOREX AUTOPILOT: managed execution history exceeds the 1000-deal safety batch; upload skipped.");
+         return;
+      }
+
+      if(included > 0)
+         body += ",";
+      body += StringFormat(
+         "{\"deal_ticket\":\"%I64u\",\"order_ticket\":\"%I64u\","
+         "\"position_id\":\"%I64u\",\"symbol\":\"%s\","
+         "\"side\":\"%s\",\"entry\":\"%s\","
+         "\"volume_lots\":%.4f,\"price\":%.10f,\"magic\":%I64u,"
+         "\"comment\":\"%s\",\"profit\":%.8f,\"commission\":%.8f,"
+         "\"swap\":%.8f,\"fee\":%.8f,\"occurred_at\":\"%s\"}",
+         ticket, order_ticket, position_id, symbol, side, entry, volume, price,
+         deal_magic, comment, profit, commission, swap, fee,
+         BrokerTimeIso(deal_time, server_offset)
+      );
+      included++;
+   }
+
+   body += "]}";
+   if(PostJson("/api/v1/mt5/execution/history", body))
+      Print("FOREX AUTOPILOT: demo broker history accepted; matching deals=", included);
+}
+
+// Read-only broker order-history snapshot; this function never sends or edits orders.
+string BrokerOrderType(long value)
+{
+   int order_type = (int)value;
+   if(order_type == (int)ORDER_TYPE_BUY) return "buy";
+   if(order_type == (int)ORDER_TYPE_SELL) return "sell";
+   if(order_type == (int)ORDER_TYPE_BUY_LIMIT) return "buy_limit";
+   if(order_type == (int)ORDER_TYPE_SELL_LIMIT) return "sell_limit";
+   if(order_type == (int)ORDER_TYPE_BUY_STOP) return "buy_stop";
+   if(order_type == (int)ORDER_TYPE_SELL_STOP) return "sell_stop";
+   if(order_type == (int)ORDER_TYPE_BUY_STOP_LIMIT) return "buy_stop_limit";
+   if(order_type == (int)ORDER_TYPE_SELL_STOP_LIMIT) return "sell_stop_limit";
+   return "";
+}
+
+string BrokerOrderState(long value)
+{
+   int order_state = (int)value;
+   if(order_state == (int)ORDER_STATE_STARTED) return "started";
+   if(order_state == (int)ORDER_STATE_PLACED) return "placed";
+   if(order_state == (int)ORDER_STATE_CANCELED) return "canceled";
+   if(order_state == (int)ORDER_STATE_PARTIAL) return "partial";
+   if(order_state == (int)ORDER_STATE_FILLED) return "filled";
+   if(order_state == (int)ORDER_STATE_REJECTED) return "rejected";
+   if(order_state == (int)ORDER_STATE_EXPIRED) return "expired";
+   if(order_state == (int)ORDER_STATE_REQUEST_ADD) return "request_add";
+   if(order_state == (int)ORDER_STATE_REQUEST_MODIFY) return "request_modify";
+   if(order_state == (int)ORDER_STATE_REQUEST_CANCEL) return "request_cancel";
+   return "";
+}
+
+void SendExecutionOrderHistory()
+{
+   if(AccountEnvironment() != "demo")
+      return;
+   datetime server_now = TimeTradeServer();
+   datetime history_start = server_now - (datetime)(InpHistoryLookbackDays * 86400);
+   if(!HistorySelect(history_start, server_now))
+   {
+      Print("FOREX AUTOPILOT: broker order history unavailable; order reconciliation remains pending.");
+      return;
+   }
+
+   int total = HistoryOrdersTotal();
+   int server_offset = (int)(TimeTradeServer() - TimeGMT());
+   string body = StringFormat(
+      "{\"terminal_id\":\"%s\",\"environment\":\"demo\","
+      "\"server\":\"%s\",\"history_from\":\"%s\","
+      "\"history_to\":\"%s\",\"observed_at\":\"%s\",\"orders\":[",
+      JsonEscape(InpTerminalId), JsonEscape(AccountInfoString(ACCOUNT_SERVER)),
+      BrokerTimeIso(history_start, server_offset),
+      BrokerTimeIso(server_now, server_offset), IsoUtcNow()
+   );
+   int included = 0;
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryOrderGetTicket(i);
+      if(ticket == 0 || (ulong)HistoryOrderGetInteger(ticket, ORDER_MAGIC) != InpExecutionMagicNumber)
+         continue;
+      string order_type = BrokerOrderType(HistoryOrderGetInteger(ticket, ORDER_TYPE));
+      string state = BrokerOrderState(HistoryOrderGetInteger(ticket, ORDER_STATE));
+      string symbol = JsonEscape(HistoryOrderGetString(ticket, ORDER_SYMBOL));
+      string comment = JsonEscape(HistoryOrderGetString(ticket, ORDER_COMMENT));
+      double initial_volume = HistoryOrderGetDouble(ticket, ORDER_VOLUME_INITIAL);
+      double current_volume = HistoryOrderGetDouble(ticket, ORDER_VOLUME_CURRENT);
+      double price = HistoryOrderGetDouble(ticket, ORDER_PRICE_OPEN);
+      double stop_loss = HistoryOrderGetDouble(ticket, ORDER_SL);
+      double take_profit = HistoryOrderGetDouble(ticket, ORDER_TP);
+      datetime setup_at = (datetime)HistoryOrderGetInteger(ticket, ORDER_TIME_SETUP);
+      datetime done_at = (datetime)HistoryOrderGetInteger(ticket, ORDER_TIME_DONE);
+      if(order_type == "" || state == "" || symbol == "" || initial_volume <= 0 || setup_at <= 0)
+         continue;
+      if(included >= 1000)
+      {
+         Print("FOREX AUTOPILOT: managed order history exceeds the 1000-order safety batch; upload skipped.");
+         return;
+      }
+      if(included > 0)
+         body += ",";
+      string done_stamp = (done_at > 0) ? BrokerTimeIso(done_at, server_offset) : "";
+      body += StringFormat(
+         "{\"order_ticket\":\"%I64u\",\"symbol\":\"%s\","
+         "\"order_type\":\"%s\",\"state\":\"%s\","
+         "\"initial_volume\":%.4f,\"current_volume\":%.4f,"
+         "\"price\":%.10f,\"stop_loss\":%.10f,\"take_profit\":%.10f,"
+         "\"magic\":%I64u,\"comment\":\"%s\","
+         "\"setup_at\":\"%s\",\"done_at\":%s}",
+         ticket, symbol, order_type, state, initial_volume, current_volume,
+         price, stop_loss, take_profit, InpExecutionMagicNumber, comment,
+         BrokerTimeIso(setup_at, server_offset),
+         (done_at > 0) ? StringFormat("\"%s\"", done_stamp) : "null"
+      );
+      included++;
+   }
+   body += "]}";
+   if(PostJson("/api/v1/mt5/execution/orders", body))
+      Print("FOREX AUTOPILOT: demo broker order history accepted; matching orders=", included);
+}
+
 // Sample each configured symbol independently on the one-second timer.
 // A quote is posted only when MT5 reports a genuinely newer market tick.
 void SendQuotes()
@@ -142,7 +512,8 @@ void SendQuotes()
       if(!SymbolInfoTick(symbol, tick) || tick.bid <= 0 || tick.ask < tick.bid)
          continue;
 
-      if(tick.time_msc == 0 || tick.time_msc <= g_last_quote_time_msc[i])
+      ulong tick_time_msc = (ulong)tick.time_msc;
+      if(tick_time_msc == (ulong)0 || tick_time_msc <= g_last_quote_time_msc[i])
          continue;
 
       string body = StringFormat(
@@ -153,7 +524,7 @@ void SendQuotes()
       // Advance the per-symbol tick marker only after a successful delivery.
       // Failed requests are retried on the next timer cycle.
       if(PostJson("/api/v1/mt5/quote", body))
-         g_last_quote_time_msc[i] = tick.time_msc;
+         g_last_quote_time_msc[i] = tick_time_msc;
    }
 }
 
@@ -185,31 +556,24 @@ string BrokerTimeIso(datetime broker_time, int utc_offset_seconds)
    return StringFormat("%s%s%02d:%02d", stamp, sign, hours, minutes);
 }
 
-bool SendCandleBatch(string symbol, ENUM_TIMEFRAMES timeframe, int requested_bars)
+bool BuildCandleBatchJson(string symbol, ENUM_TIMEFRAMES timeframe,
+                           int start_position, int requested_bars, string &batch_json)
 {
    int server_offset = (int)(TimeTradeServer() - TimeGMT());
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
 
    ResetLastError();
-   int copied = CopyRates(symbol, timeframe, 1, requested_bars, rates);
-   if(copied < 1)
+   int copied = CopyRates(symbol, timeframe, start_position, requested_bars, rates);
+   if(copied != requested_bars)
    {
-      Print("FOREX AUTOPILOT: candle history not ready for ", symbol,
-            " ", TimeframeName(timeframe), "; copied=", copied,
-            "; terminal_error=", GetLastError());
+      Print("FOREX AUTOPILOT: bulk bootstrap waiting for ", symbol, " ",
+            TimeframeName(timeframe), "; requested=", requested_bars,
+            "; copied=", copied, "; terminal_error=", GetLastError());
       return false;
    }
 
-   if(requested_bars > 3 && copied < requested_bars)
-   {
-      Print("FOREX AUTOPILOT: waiting for ", requested_bars,
-            " historical candles for ", symbol, " ", TimeframeName(timeframe),
-            "; currently available=", copied);
-      return false;
-   }
-
-   string body = StringFormat(
+   batch_json = StringFormat(
       "{\"symbol\":\"%s\",\"timeframe\":\"%s\",\"candles\":[",
       JsonEscape(symbol), TimeframeName(timeframe)
    );
@@ -217,9 +581,9 @@ bool SendCandleBatch(string symbol, ENUM_TIMEFRAMES timeframe, int requested_bar
    for(int i = 0; i < copied; i++)
    {
       if(i > 0)
-         body += ",";
+         batch_json += ",";
 
-      body += StringFormat(
+      batch_json += StringFormat(
          "{\"opened_at\":\"%s\",\"open\":%.10f,\"high\":%.10f,"
          "\"low\":%.10f,\"close\":%.10f,\"tick_volume\":%I64d}",
          BrokerTimeIso(rates[i].time, server_offset),
@@ -228,102 +592,98 @@ bool SendCandleBatch(string symbol, ENUM_TIMEFRAMES timeframe, int requested_bar
       );
    }
 
+   batch_json += "]}";
+   return true;
+}
+
+// One request carries all configured symbol/timeframe groups. Initial upload
+// contains 500 closed bars per group; later uploads refresh the latest 3 bars.
+void SendBulkCandleBatches(ulong now_ms)
+{
+   if(now_ms < g_candle_next_upload_ms)
+      return;
+
+   int requested_bars = g_candle_bootstrap_complete ? 3 : InpCandleBootstrapBars;
+   int start_position = g_candle_bootstrap_complete ? 1 : g_candle_history_offset;
+   string body = "{\"batches\":[";
+   int batch_count = 0;
+
+   for(int symbol_index = 0; symbol_index < ArraySize(g_symbols); symbol_index++)
+   {
+      string symbol = g_symbols[symbol_index];
+      if(!SymbolSelect(symbol, true))
+      {
+         Print("FOREX AUTOPILOT: bulk candle upload waiting for symbol ", symbol);
+         g_candle_next_upload_ms = now_ms + 10000;
+         return;
+      }
+
+      for(int timeframe_index = 0;
+          timeframe_index < ArraySize(g_candle_timeframes);
+          timeframe_index++)
+      {
+         string batch_json;
+         if(!BuildCandleBatchJson(
+               symbol, g_candle_timeframes[timeframe_index],
+                start_position, requested_bars, batch_json))
+         {
+            // MT5 may still be downloading history. Retry the complete upload
+            // shortly; never mark a partial bootstrap as complete.
+            g_candle_next_upload_ms = now_ms + 10000;
+            return;
+         }
+
+         if(batch_count > 0)
+            body += ",";
+         body += batch_json;
+         batch_count++;
+      }
+   }
+
    body += "]}";
-   return PostJson("/api/v1/mt5/candles", body);
-}
+   Print("FOREX AUTOPILOT: submitting one bulk candle request; groups=",
+         batch_count, "; bars_per_group=", requested_bars,
+         "; total_candles=", batch_count * requested_bars);
 
-// Bootstrap each symbol/timeframe once, then refresh the most recent three
-// closed bars. One request is sent every two seconds to avoid network bursts.
-void AdvanceCandleCombination(int combinations, ulong now_ms)
-{
-   g_candle_next_index++;
-   if(g_candle_next_index < combinations)
-      return;
-
-   g_candle_next_index = 0;
-   bool all_bootstrapped = true;
-   for(int i = 0; i < combinations; i++)
+   if(PostJson("/api/v1/mt5/candles/bulk", body))
    {
-      if(!g_candle_bootstrap_done[i])
+      if(!g_candle_bootstrap_complete)
       {
-         all_bootstrapped = false;
-         break;
+         g_candle_history_offset += requested_bars;
+
+         if(g_candle_history_offset > InpCandleHistoryTargetBars)
+         {
+            g_candle_bootstrap_complete = true;
+            Print("FOREX AUTOPILOT: historical backfill complete; ",
+                  InpCandleHistoryTargetBars, " closed bars per series.");
+            g_candle_next_upload_ms =
+               now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+         }
+         else
+         {
+            Print("FOREX AUTOPILOT: history page accepted; next starting position=",
+                  g_candle_history_offset);
+            g_candle_next_upload_ms = now_ms + 1000;
+         }
       }
-   }
-
-   if(all_bootstrapped && !g_candle_bootstrap_complete)
-   {
-      g_candle_bootstrap_complete = true;
-      Print("FOREX AUTOPILOT: initial candle history bootstrap complete for all ",
-            combinations, " symbol/timeframe combinations.");
-   }
-
-   // Retry incomplete bootstrap combinations soon; normal refreshes use the
-   // configured refresh interval after every combination has bootstrapped.
-   ulong wait_ms = g_candle_bootstrap_complete
-                   ? (ulong)InpCandleRefreshSeconds * 1000
-                   : 5000;
-   g_candle_cycle_wait_until_ms = now_ms + wait_ms;
-}
-
-void SendNextCandleBatch(ulong now_ms)
-{
-   if(now_ms - g_candle_last_request_ms < 2000)
-      return;
-   if(g_candle_cycle_wait_until_ms > 0 && now_ms < g_candle_cycle_wait_until_ms)
-      return;
-
-   int combinations = ArraySize(g_symbols) * ArraySize(g_candle_timeframes);
-   if(combinations < 1)
-      return;
-
-   int index = g_candle_next_index;
-   int symbol_index = index / ArraySize(g_candle_timeframes);
-   int timeframe_index = index % ArraySize(g_candle_timeframes);
-   string symbol = g_symbols[symbol_index];
-   ENUM_TIMEFRAMES timeframe = g_candle_timeframes[timeframe_index];
-
-   int bars_to_send = g_candle_bootstrap_done[index] ? 3 : InpCandleBootstrapBars;
-   Print("FOREX AUTOPILOT: candle scheduler attempting ", symbol, " ",
-         TimeframeName(timeframe), "; bars=", bars_to_send,
-         "; attempt=", g_candle_attempts[index] + 1, "/", CANDLE_MAX_ATTEMPTS);
-
-   bool accepted = false;
-   if(SymbolSelect(symbol, true))
-      accepted = SendCandleBatch(symbol, timeframe, bars_to_send);
-   else
-      Print("FOREX AUTOPILOT: cannot select candle symbol ", symbol,
-            "; scheduler will retry.");
-
-   if(accepted)
-   {
-      Print("FOREX AUTOPILOT: candles accepted for ", symbol, " ",
-            TimeframeName(timeframe), "; bars=", bars_to_send);
-      g_candle_attempts[index] = 0;
-      g_candle_bootstrap_done[index] = true;
-      AdvanceCandleCombination(combinations, now_ms);
+      else
+      {
+         g_candle_next_upload_ms =
+            now_ms + (ulong)InpCandleRefreshSeconds * 1000;
+      }
    }
    else
    {
-      g_candle_attempts[index]++;
-      if(g_candle_attempts[index] >= CANDLE_MAX_ATTEMPTS)
-      {
-         Print("FOREX AUTOPILOT: moving past ", symbol, " ",
-               TimeframeName(timeframe), " after ", CANDLE_MAX_ATTEMPTS,
-               " failed attempts; it will be retried next cycle.");
-         g_candle_attempts[index] = 0;
-         AdvanceCandleCombination(combinations, now_ms);
-      }
+      Print("FOREX AUTOPILOT: bulk candle upload failed; retrying in 10 seconds.");
+      g_candle_next_upload_ms = now_ms + 10000;
    }
-
-   g_candle_last_request_ms = now_ms;
 }
 
 int OnInit()
 {
-   if(StringFind(InpApiBaseUrl, "https://") != 0)
+   if(InpApiBaseUrl != "http://127.0.0.1:8000" && StringFind(InpApiBaseUrl, "https://") != 0)
    {
-      Print("FOREX AUTOPILOT: configure an HTTPS API base URL before starting.");
+      Print("FOREX AUTOPILOT: configure HTTPS or the approved localhost API URL.");
       return INIT_PARAMETERS_INCORRECT;
    }
    if(StringLen(Trimmed(InpBridgeToken)) < 32)
@@ -332,8 +692,11 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    }
    if(InpHeartbeatSeconds < 5 || InpHttpTimeoutMs < 1000 ||
-      InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 200 ||
-      InpCandleRefreshSeconds < 30)
+      InpCandleBootstrapBars < 20 || InpCandleBootstrapBars > 500 ||
+       InpCandleHistoryTargetBars < InpCandleBootstrapBars ||
+       InpCandleHistoryTargetBars > 5000 ||
+       InpCandleHistoryTargetBars % InpCandleBootstrapBars != 0 ||
+       InpCandleRefreshSeconds < 30 || InpExecutionStateSeconds < 5 || InpExecutionStateSeconds > 60 || InpHistoryRefreshSeconds < 30 || InpHistoryRefreshSeconds > 3600 || InpHistoryLookbackDays < 1 || InpHistoryLookbackDays > 7 || StringLen(Trimmed(InpTerminalId)) < 3)
    {
       Print("FOREX AUTOPILOT: invalid timer or HTTP timeout setting.");
       return INIT_PARAMETERS_INCORRECT;
@@ -349,11 +712,6 @@ int OnInit()
 
    ArrayResize(g_symbols, count);
    ArrayResize(g_last_quote_time_msc, count);
-   int candle_combinations = count * ArraySize(g_candle_timeframes);
-   ArrayResize(g_candle_attempts, candle_combinations);
-   ArrayResize(g_candle_bootstrap_done, candle_combinations);
-   ArrayInitialize(g_candle_attempts, 0);
-   ArrayInitialize(g_candle_bootstrap_done, false);
    for(int i = 0; i < count; i++)
    {
       g_symbols[i] = Trimmed(configured_symbols[i]);
@@ -376,10 +734,16 @@ int OnInit()
 
    SendHeartbeat();
    SendAccountSnapshot();
+   SendSymbolSpecifications();
+   SendExecutionState();
+   SendExecutionHistory();
+   SendExecutionOrderHistory();
    SendQuotes();
+   g_last_history_ms = GetTickCount64();
    g_last_snapshot_ms = GetTickCount64();
-   g_candle_last_request_ms = GetTickCount64() - 2000;
-   Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Initial history target: ", InpCandleBootstrapBars, " closed bars per combination.");
+   g_last_execution_state_ms = GetTickCount64();
+   g_candle_next_upload_ms = GetTickCount64();
+   Print("FOREX AUTOPILOT: candle collection enabled for M5, M15, H1 and H4. Historical target: ", InpCandleHistoryTargetBars, " closed bars per series; page size: ", InpCandleBootstrapBars);
    return INIT_SUCCEEDED;
 }
 
@@ -405,7 +769,26 @@ void OnTimer()
    }
 
    SendQuotes();
-   SendNextCandleBatch(now_ms);
+   SendBulkCandleBatches(now_ms);
+
+   if(now_ms - g_last_history_ms >= (ulong)InpHistoryRefreshSeconds * 1000)
+   {
+      SendExecutionHistory();
+      SendExecutionOrderHistory();
+      g_last_history_ms = now_ms;
+   }
+
+   if(now_ms - g_last_execution_state_ms >= (ulong)InpExecutionStateSeconds * 1000)
+   {
+      SendExecutionState();
+      g_last_execution_state_ms = now_ms;
+   }
+
+   if(now_ms - g_last_specification_ms >= 300000)
+   {
+      SendSymbolSpecifications();
+      g_last_specification_ms = now_ms;
+   }
 
    if(now_ms - g_last_snapshot_ms >= snapshot_interval_ms)
    {

@@ -2,17 +2,31 @@ name: Backend tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/bulk-candle-ingestion]
     paths:
       - "backend/**"
+      - "dashboard/**"
+      - "mt5/**"
+      - "trading-engine/**"
+      - "config/**"
       - ".github/workflows/backend-tests.yml"
       - "docker-compose.yml"
       - ".dockerignore"
+      - "README.md"
+      - "documentation/**"
   pull_request:
     branches: [main]
     paths:
       - "backend/**"
+      - "dashboard/**"
+      - "mt5/**"
+      - "trading-engine/**"
+      - "config/**"
       - ".github/workflows/backend-tests.yml"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      - "README.md"
+      - "documentation/**"
   workflow_dispatch:
 
 permissions:
@@ -48,3 +62,31 @@ jobs:
       - name: Build API container
         working-directory: .
         run: docker build -f backend/Dockerfile -t forex-autopilot-api:test backend
+
+      - name: Validate Docker Compose configuration
+        working-directory: .
+        env:
+          FOREX_AUTOPILOT_BRIDGE_TOKEN: ci-placeholder-token-that-is-not-used-for-trading
+        run: docker compose config --quiet
+
+  dashboard:
+    name: Dashboard production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dashboard dependencies
+        run: npm install
+
+      - name: Build dashboard
+        run: npm run build

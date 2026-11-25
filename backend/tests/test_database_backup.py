@@ -1,0 +1,262 @@
+from pathlib import Path
+import sqlite3
+
+import pytest
+
+from app.operations.backup import (
+    create_backup, inspect_backup_inventory, restore_backup, verify_backup,
+)
+
+
+def make_database(path, value="original"):
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("CREATE TABLE IF NOT EXISTS sample (value TEXT NOT NULL)")
+        connection.execute("DELETE FROM sample")
+        connection.execute("INSERT INTO sample(value) VALUES (?)", (value,))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def read_value(path):
+    with sqlite3.connect(path) as connection:
+        return connection.execute("SELECT value FROM sample").fetchone()[0]
+
+
+def test_online_backup_is_verified_and_contains_rows(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    backup = tmp_path / "backups" / "snapshot.sqlite3"
+    make_database(source)
+
+    result = create_backup(source, backup)
+
+    assert result["status"] == "verified"
+    assert result["integrity_check"] == "ok"
+    assert result["tables"]["sample"] == 1
+    assert read_value(backup) == "original"
+    assert verify_backup(backup)["sha256"] == result["sha256"]
+
+
+def test_backup_refuses_source_as_destination(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    make_database(source)
+
+    with pytest.raises(ValueError, match="must differ"):
+        create_backup(source, source)
+
+
+def test_restore_refuses_overwrite_without_explicit_flag(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    backup = tmp_path / "backup.sqlite3"
+    destination = tmp_path / "destination.sqlite3"
+    make_database(source, "backup")
+    create_backup(source, backup)
+    make_database(destination, "existing")
+
+    with pytest.raises(FileExistsError):
+        restore_backup(backup, destination)
+
+    assert read_value(destination) == "existing"
+
+
+def test_restore_is_atomic_and_preserves_pre_restore_backup(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    backup = tmp_path / "backup.sqlite3"
+    destination = tmp_path / "destination.sqlite3"
+    make_database(source, "restored")
+    create_backup(source, backup)
+    make_database(destination, "pre-restore")
+    Path(str(destination) + "-wal").write_bytes(b"stale wal")
+    Path(str(destination) + "-shm").write_bytes(b"stale shm")
+
+    result = restore_backup(backup, destination, replace=True)
+    assert not Path(str(destination) + "-wal").exists()
+    assert not Path(str(destination) + "-shm").exists()
+
+    assert result["status"] == "restored"
+    assert result["integrity_check"] == "ok"
+    assert read_value(destination) == "restored"
+    assert result["pre_restore_backup"]["status"] == "verified"
+    assert read_value(result["pre_restore_backup"]["path"]) == "pre-restore"
+
+
+def test_verify_rejects_non_sqlite_file(tmp_path):
+    corrupt = tmp_path / "corrupt.sqlite3"
+    corrupt.write_text("not a database")
+
+    with pytest.raises(ValueError, match="not a readable SQLite"):
+        verify_backup(corrupt)
+
+
+
+def test_inventory_reports_recent_verified_snapshot_and_corrupt_file(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    recent = directory / "telemetry-20261120T100000Z.sqlite3"
+    make_database(recent, "fresh")
+    corrupt = directory / "telemetry-20261119T000000Z.sqlite3"
+    corrupt.write_text("not sqlite")
+    (directory / "notes.txt").write_text("ignore")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 11, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "degraded"
+    assert result["snapshot_count"] == 2
+    assert result["verified_count"] == 1
+    assert result["invalid_count"] == 1
+    assert result["latest_backup"] == recent.name
+    assert result["latest_backup_age_hours"] == 1.0
+    assert result["fresh_verified_backup"] is True
+
+
+def test_inventory_requires_recent_verified_recovery_point(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    stale = directory / "telemetry-20261110T000000Z.sqlite3"
+    make_database(stale, "stale")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "attention_required"
+    assert result["fresh_verified_backup"] is False
+    assert result["latest_backup_age_hours"] == 240.0
+
+
+def test_inventory_handles_missing_directory_and_rejects_naive_time(tmp_path):
+    from datetime import datetime
+
+    result = inspect_backup_inventory(tmp_path / "not-created")
+    assert result["status"] == "missing_directory"
+    assert result["fresh_verified_backup"] is False
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        inspect_backup_inventory(
+            tmp_path, now=datetime(2026, 11, 20)
+        )
+
+
+
+def test_inventory_does_not_accept_future_dated_snapshot_as_fresh(tmp_path):
+    from datetime import datetime, timezone
+
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    future = directory / "telemetry-20261121T000000Z.sqlite3"
+    make_database(future, "future")
+
+    result = inspect_backup_inventory(
+        directory,
+        max_age_hours=48,
+        now=datetime(2026, 11, 20, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["fresh_verified_backup"] is False
+    assert result["verified_count"] == 0
+    assert result["invalid_count"] == 1
+    assert result["snapshots"][0]["status"] == "future_dated"
+
+
+
+def test_isolated_restore_drill_verifies_recovery_without_touching_source(tmp_path):
+    live_database = tmp_path / "live.sqlite3"
+    recovery_point = tmp_path / "telemetry-backup.sqlite3"
+    isolated_drill = tmp_path / "drill" / "restored.sqlite3"
+    make_database(live_database, "known-good-recovery-point")
+    create_backup(live_database, recovery_point)
+    make_database(live_database, "newer-live-value")
+
+    result = restore_backup(recovery_point, isolated_drill)
+
+    assert result["status"] == "restored"
+    assert result["integrity_check"] == "ok"
+    assert read_value(isolated_drill) == "known-good-recovery-point"
+    assert read_value(live_database) == "newer-live-value"
+    assert verify_backup(isolated_drill)["integrity_check"] == "ok"
+
+
+
+def test_isolated_restore_drill_reports_verified_recovery_and_cleans_up(tmp_path):
+    from app.operations.backup import run_restore_drill
+
+    live_database = tmp_path / "live.sqlite3"
+    recovery_point = tmp_path / "telemetry-verified.sqlite3"
+    drill_directory = tmp_path / "drills"
+    make_database(live_database, "known-good-recovery-point")
+    create_backup(live_database, recovery_point)
+    source_before = verify_backup(recovery_point)["sha256"]
+
+    result = run_restore_drill(recovery_point, drill_directory=drill_directory)
+
+    assert result["status"] == "passed"
+    assert result["integrity_check"] == "ok"
+    assert result["source_sha256"] == source_before
+    assert result["restored_sha256"] == source_before
+    assert result["tables"]["sample"] == 1
+    assert result["temporary_database_removed"] is True
+    assert list(drill_directory.iterdir()) == []
+    assert read_value(live_database) == "known-good-recovery-point"
+
+
+def test_restore_drill_rejects_corrupt_backup_without_creating_artifacts(tmp_path):
+    from app.operations.backup import run_restore_drill
+
+    corrupt = tmp_path / "corrupt.sqlite3"
+    corrupt.write_text("not sqlite")
+    drill_directory = tmp_path / "drills"
+
+    with pytest.raises(ValueError, match="not a readable SQLite"):
+        run_restore_drill(corrupt, drill_directory=drill_directory)
+
+    assert list(drill_directory.iterdir()) == []
+
+
+def test_backup_cleans_temporary_sqlite_sidecars(tmp_path):
+    source = tmp_path / "source-wal.sqlite3"
+    backup = tmp_path / "snapshot.sqlite3"
+
+    connection = sqlite3.connect(source)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("CREATE TABLE sample (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO sample VALUES ('wal-backed')")
+        connection.commit()
+    finally:
+        connection.close()
+
+    result = create_backup(source, backup)
+
+    assert result["status"] == "verified"
+    assert read_value(backup) == "wal-backed"
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp"))
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp-wal"))
+    assert not list(tmp_path.glob(f".{backup.name}.*.tmp-shm"))
+
+
+def test_restore_cleans_temporary_sqlite_sidecars(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    backup = tmp_path / "backup.sqlite3"
+    destination = tmp_path / "destination.sqlite3"
+
+    make_database(source, "recovered")
+    create_backup(source, backup)
+
+    result = restore_backup(backup, destination)
+
+    assert result["status"] == "restored"
+    assert read_value(destination) == "recovered"
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore"))
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore-wal"))
+    assert not list(tmp_path.glob(f".{destination.name}.*.restore-shm"))

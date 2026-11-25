@@ -7,6 +7,55 @@ services:
       - telemetry_data:/data
     restart: "no"
 
+
+  backup-volume-init:
+    image: alpine:3.21
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /backups && chown -R 10001:10001 /backups"]
+    volumes:
+      - telemetry_backups:/backups
+    restart: "no"
+
+  telemetry-backup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "10001:10001"
+    command: ["python", "-m", "app.operations.backup_scheduler"]
+    depends_on:
+      api:
+        condition: service_healthy
+      telemetry-volume-init:
+        condition: service_completed_successfully
+      backup-volume-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_BACKUP_DIR: /var/backups/forex-autopilot
+      FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS: ${FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS:-86400}
+      FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS: ${FOREX_AUTOPILOT_BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - telemetry_data:/var/lib/forex-autopilot
+      - telemetry_backups:/var/backups/forex-autopilot
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import datetime,json,os,time; p='/var/backups/forex-autopilot/backup-worker-heartbeat.json'; d=json.load(open(p)); t=datetime.datetime.fromisoformat(d['observed_at'].replace('Z','+00:00')).timestamp(); age=time.time()-t; limit=max(7200,int(os.getenv('FOREX_AUTOPILOT_BACKUP_INTERVAL_SECONDS','86400'))*2+300); raise SystemExit(0 if d.get('status')=='ok' and -300<=age<=limit else 1)"
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
   api:
     build:
       context: ./backend
@@ -19,12 +68,25 @@ services:
     environment:
       APP_ENV: production
       FOREX_AUTOPILOT_BRIDGE_TOKEN: ${FOREX_AUTOPILOT_BRIDGE_TOKEN:?Set a strong bridge token in the deployment environment}
+      FOREX_AUTOPILOT_ADMIN_TOKEN: ${FOREX_AUTOPILOT_ADMIN_TOKEN:-}
       FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_BACKUP_DIR: /var/backups/forex-autopilot
       FOREX_AUTOPILOT_DASHBOARD_SYMBOLS: EURUSDm,GBPUSDm
+      FOREX_AUTOPILOT_ENVIRONMENT: ${FOREX_AUTOPILOT_ENVIRONMENT:-demo}
+      FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED: ${FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED:-false}
+      FOREX_AUTOPILOT_EXECUTION_SYMBOLS: ${FOREX_AUTOPILOT_EXECUTION_SYMBOLS:-}
+      FOREX_AUTOPILOT_EXECUTION_STATE_STALE_SECONDS: ${FOREX_AUTOPILOT_EXECUTION_STATE_STALE_SECONDS:-20}
+      FOREX_AUTOPILOT_EXECUTION_MAGIC: ${FOREX_AUTOPILOT_EXECUTION_MAGIC:-61119001}
+      FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT: ${FOREX_AUTOPILOT_MAX_DAILY_LOSS_PCT:-1.0}
+      FOREX_AUTOPILOT_MAX_OPEN_POSITIONS: ${FOREX_AUTOPILOT_MAX_OPEN_POSITIONS:-1}
+      FOREX_AUTOPILOT_MAX_VOLUME_LOTS: ${FOREX_AUTOPILOT_MAX_VOLUME_LOTS:-0.01}
+      FOREX_AUTOPILOT_MAX_RISK_PER_TRADE_PCT: ${FOREX_AUTOPILOT_MAX_RISK_PER_TRADE_PCT:-0.25}
+      FOREX_AUTOPILOT_MAX_SPREAD_PIPS: ${FOREX_AUTOPILOT_MAX_SPREAD_PIPS:-2.0}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - telemetry_data:/var/lib/forex-autopilot
+      - telemetry_backups:/var/backups/forex-autopilot:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -43,6 +105,31 @@ services:
       retries: 3
       start_period: 10s
 
+
+  telemetry-health-monitor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "10001:10001"
+    command: ["python", "-m", "app.operations.health_monitor"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      FOREX_AUTOPILOT_TELEMETRY_DB: /var/lib/forex-autopilot/telemetry.sqlite3
+      FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS: ${FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS:-60}
+      FOREX_AUTOPILOT_HEALTH_MONITOR_INTERVAL_SECONDS: ${FOREX_AUTOPILOT_HEALTH_MONITOR_INTERVAL_SECONDS:-30}
+    volumes:
+      - telemetry_data:/var/lib/forex-autopilot
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   telemetry-gateway:
     image: nginx:1.28-alpine
     user: "101:101"
@@ -56,6 +143,8 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./deploy/telemetry-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dashboard/dist:/usr/share/nginx/html:ro
+      - ./deploy/telemetry-gateway/.htpasswd:/etc/nginx/.htpasswd:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -66,3 +155,4 @@ services:
 
 volumes:
   telemetry_data:
+  telemetry_backups:

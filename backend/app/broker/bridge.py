@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from math import isfinite
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -155,8 +156,307 @@ class MT5CandleBatch(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_unique_candle_times(self):
+    def validate_candle_time_order(self):
         times = [candle.opened_at for candle in self.candles]
-        if len(times) != len(set(times)):
-            raise ValueError("Candle timestamps must be unique within a batch.")
+        if any(current <= previous for previous, current in zip(times, times[1:])):
+            raise ValueError(
+                "Candle timestamps must be strictly increasing within a batch."
+            )
+        return self
+
+
+
+class MT5CandleBulk(BaseModel):
+    """Atomic upload of multiple bounded symbol/timeframe candle batches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    batches: list[MT5CandleBatch] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_bulk_batches(self):
+        keys = [(batch.symbol, batch.timeframe) for batch in self.batches]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Bulk candle batches must have unique symbol/timeframe pairs.")
+        total = sum(len(batch.candles) for batch in self.batches)
+        if total > 4000:
+            raise ValueError("Bulk candle upload cannot exceed 4000 candles.")
+        return self
+
+
+
+class MT5SymbolSpecification(BaseModel):
+    """Broker-provided contract and volume metadata in the account currency."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=32)
+    digits: int = Field(ge=0, le=10)
+    point: float = Field(gt=0)
+    tick_size: float = Field(gt=0)
+    tick_value_profit: float = Field(ge=0)
+    tick_value_loss: float = Field(gt=0)
+    contract_size: float = Field(gt=0)
+    volume_min: float = Field(gt=0)
+    volume_max: float = Field(gt=0)
+    volume_step: float = Field(gt=0)
+    stops_level_points: int = Field(ge=0)
+    freeze_level_points: int = Field(ge=0)
+    trade_allowed: bool
+    base_currency: str = Field(min_length=3, max_length=8)
+    profit_currency: str = Field(min_length=3, max_length=8)
+    margin_currency: str = Field(min_length=3, max_length=8)
+    account_currency: str = Field(min_length=3, max_length=8)
+    observed_at: datetime
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("base_currency", "profit_currency", "margin_currency", "account_currency")
+    @classmethod
+    def normalize_currencies(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator(
+        "point", "tick_size", "tick_value_profit", "tick_value_loss",
+        "contract_size", "volume_min", "volume_max", "volume_step",
+    )
+    @classmethod
+    def require_finite_spec_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Broker specification values must be finite.")
+        return value
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Specification timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_volume_constraints(self):
+        if self.volume_max < self.volume_min or self.volume_step > self.volume_max:
+            raise ValueError("Invalid broker volume constraints.")
+        return self
+
+
+
+class MT5OpenPosition(BaseModel):
+    """Read-only broker position details used for reconciliation and stop audits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ticket: str = Field(min_length=1, max_length=32)
+    position_id: str = Field(default="", max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    side: Literal["buy", "sell"]
+    volume_lots: float = Field(gt=0)
+    open_price: float = Field(gt=0)
+    stop_loss: float = Field(ge=0)
+    take_profit: float = Field(ge=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_position_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("volume_lots", "open_price", "stop_loss", "take_profit")
+    @classmethod
+    def require_finite_position_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Position values must be finite.")
+        return value
+
+
+class MT5ExecutionState(BaseModel):
+    """Point-in-time open-position snapshot from a specific MT5 terminal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo", "real", "contest"]
+    server: str = Field(min_length=1, max_length=128)
+    observed_at: datetime
+    daily_loss_pct: float = Field(ge=0)
+    positions: list[MT5OpenPosition] = Field(max_length=100)
+
+    @field_validator("daily_loss_pct")
+    @classmethod
+    def require_finite_daily_loss(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Daily loss percentage must be finite.")
+        return value
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_execution_state_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Execution-state timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_unique_position_tickets(self):
+        tickets = [position.ticket for position in self.positions]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Position tickets must be unique in a snapshot.")
+        return self
+
+
+class MT5ExecutionDeal(BaseModel):
+    """A broker-reported deal row. Tickets are strings to preserve 64-bit IDs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    deal_ticket: str = Field(min_length=1, max_length=32)
+    order_ticket: str = Field(min_length=1, max_length=32)
+    position_id: str = Field(default="", max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    side: Literal["buy", "sell"]
+    entry: Literal["in", "out", "inout", "out_by"]
+    volume_lots: float = Field(gt=0)
+    price: float = Field(gt=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+    profit: float | None = None
+    commission: float | None = None
+    swap: float | None = None
+    fee: float | None = None
+    occurred_at: datetime
+
+    @field_validator("profit", "commission", "swap", "fee")
+    @classmethod
+    def require_finite_cash_amounts(cls, value: float | None) -> float | None:
+        if value is not None and not isfinite(value):
+            raise ValueError("Broker deal cash amounts must be finite.")
+        return value
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_deal_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("volume_lots", "price")
+    @classmethod
+    def require_finite_deal_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Deal values must be finite.")
+        return value
+
+    @field_validator("occurred_at")
+    @classmethod
+    def normalize_deal_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Deal timestamp must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+
+class MT5ExecutionHistory(BaseModel):
+    """Bounded history snapshot from one explicitly identified demo terminal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo"]
+    server: str = Field(min_length=1, max_length=128)
+    history_from: datetime
+    history_to: datetime
+    observed_at: datetime
+    deals: list[MT5ExecutionDeal] = Field(max_length=1000)
+
+    @field_validator("history_from", "history_to", "observed_at")
+    @classmethod
+    def normalize_history_timestamps(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("History timestamps must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_history_window(self):
+        if self.history_to <= self.history_from:
+            raise ValueError("History window must have a positive duration.")
+        if self.history_to > self.observed_at:
+            raise ValueError("History window cannot extend beyond observation time.")
+        tickets = [deal.deal_ticket for deal in self.deals]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Deal tickets must be unique in a history snapshot.")
+        if any(not self.history_from <= deal.occurred_at <= self.history_to for deal in self.deals):
+            raise ValueError("Deal timestamp falls outside the declared history window.")
+        return self
+
+
+class MT5ExecutionOrder(BaseModel):
+    """Broker order snapshot. State is broker-reported, not inferred from deals."""
+    model_config = ConfigDict(extra="forbid")
+    order_ticket: str = Field(min_length=1, max_length=32)
+    symbol: str = Field(min_length=1, max_length=32)
+    order_type: Literal["buy", "sell", "buy_limit", "sell_limit", "buy_stop", "sell_stop", "buy_stop_limit", "sell_stop_limit"]
+    state: Literal["started", "placed", "canceled", "partial", "filled", "rejected", "expired", "request_add", "request_modify", "request_cancel"]
+    initial_volume: float = Field(gt=0)
+    current_volume: float = Field(ge=0)
+    price: float = Field(ge=0)
+    stop_loss: float = Field(ge=0)
+    take_profit: float = Field(ge=0)
+    magic: int = Field(ge=0)
+    comment: str = Field(default="", max_length=128)
+    setup_at: datetime
+    done_at: datetime | None = None
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_order_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("initial_volume", "current_volume", "price", "stop_loss", "take_profit")
+    @classmethod
+    def require_finite_order_values(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("Order values must be finite.")
+        return value
+
+    @field_validator("setup_at", "done_at")
+    @classmethod
+    def normalize_order_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None:
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("Order timestamps must include a timezone.")
+            return value.astimezone(timezone.utc)
+        return None
+
+    @model_validator(mode="after")
+    def validate_order_volume(self):
+        if self.current_volume > self.initial_volume:
+            raise ValueError("Remaining order volume cannot exceed initial volume.")
+        return self
+
+
+class MT5ExecutionOrderHistory(BaseModel):
+    """Bounded broker order-history snapshot from a demo terminal."""
+    model_config = ConfigDict(extra="forbid")
+    terminal_id: str = Field(min_length=3, max_length=128)
+    environment: Literal["demo"]
+    server: str = Field(min_length=1, max_length=128)
+    history_from: datetime
+    history_to: datetime
+    observed_at: datetime
+    orders: list[MT5ExecutionOrder] = Field(max_length=1000)
+
+    @field_validator("history_from", "history_to", "observed_at")
+    @classmethod
+    def normalize_order_history_timestamps(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Order history timestamps must include a timezone.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_order_history_window(self):
+        if self.history_to <= self.history_from or self.history_to > self.observed_at:
+            raise ValueError("Invalid broker order-history window.")
+        tickets = [order.order_ticket for order in self.orders]
+        if len(tickets) != len(set(tickets)):
+            raise ValueError("Order tickets must be unique in a history snapshot.")
         return self

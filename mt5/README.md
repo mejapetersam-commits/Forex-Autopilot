@@ -1,63 +1,94 @@
-# FOREX AUTOPILOT MT5 read-only Expert Advisor
+# FOREX AUTOPILOT — MetaTrader 5 integration
 
-## Purpose
+This directory contains two deliberately separate Expert Advisors. Keep their roles distinct:
 
-This Expert Advisor (EA) sends MT5 connection status, a limited account snapshot and selected bid/ask quotes to the FOREX AUTOPILOT FastAPI service. It is intentionally telemetry-only.
+| Expert Advisor | Role | Trading capability |
+|---|---|---|
+| `ForexAutopilotTelemetry.mq5` | Market, account, position and broker-history telemetry | Read-only; cannot submit, modify or close orders |
+| `ForexAutopilotDemoExecution.mq5` | Receives and processes approved execution commands | Demo account only; explicit input defaults OFF |
 
-**It cannot open, modify or close trades.** No trade execution functions or remote command polling are included.
+The telemetry EA is the normal integration component. The execution EA is a separate, disabled-by-default adapter and is not required for research, candle ingestion or dashboard monitoring.
 
-## Current prerequisites
+## Telemetry EA
 
-- A Windows installation of MetaTrader 5 connected to the Exness demo account.
-- The FOREX AUTOPILOT API deployed at an HTTPS address reachable from that Windows terminal.
-- A strong unique bridge token configured as the API environment variable `FOREX_AUTOPILOT_BRIDGE_TOKEN`.
-- The same token entered locally in the EA input parameters. Never put a real token in this repository, source code, screenshots or chat.
-- In MT5, add the exact HTTPS API origin to Tools → Options → Expert Advisors → Allow WebRequest for listed URL.
+### What it sends
 
-The API host must use valid HTTPS. Do not expose an unencrypted HTTP endpoint to the public internet.
+- Terminal heartbeat and broker server.
+- Account currency, balance, equity, margin, free margin and leverage.
+- Bid/ask quotes for configured symbols when a new tick is observed.
+- Broker symbol specifications: digits, point, tick size/value, contract size, volume limits/step, stop/freeze levels and currency metadata.
+- Open-position snapshots, including ticket, stable position identifier, symbol, side, volume, open price, stop, target, magic and comment.
+- Bounded demo deal history, including deal/order/position identifiers, volume, price, magic, comment, profit, commission, swap, fee and broker event time.
+- Broker order history, including pending, placed, partial, filled, cancelled, rejected and expired states.
+- Bulk closed-candle history for M5, M15, H1 and H4 across configured symbols.
 
-## Install
+### Default collection settings
 
-1. In MT5, select File → Open Data Folder.
-2. Open MQL5 → Experts.
+- Candle bootstrap target: 500 closed bars per symbol/timeframe group.
+- Candle refresh: 60 seconds.
+- Execution position state: every 5 seconds.
+- Deal and order history refresh: every 60 seconds.
+- Broker-history lookback: 2 days.
+- Heartbeat/account refresh: every 15 seconds.
+- Symbol specifications refresh: every 5 minutes.
+
+The history upload is bounded by the configured lookback and execution magic number. A successful HTTP response does not prove that matching deals were found; check the EA's reported included-deal/order counts and compare with the broker's actual history. Manual trades with a different magic number are not necessarily included.
+
+### Install
+
+1. In MT5, choose **File → Open Data Folder**.
+2. Open **MQL5 → Experts**.
 3. Copy `ForexAutopilotTelemetry.mq5` into that folder.
-4. Open MetaEditor, compile the file, and return to MT5.
-5. Attach the EA to a chart in the demo account.
-6. In EA inputs, set the API base URL, bridge token, symbols and heartbeat interval.
-7. Enable algorithmic trading only if MT5 requires it to run an EA; this EA has no trade execution code. Do not enable any other trading robot.
-8. Add the API origin to the WebRequest allowlist as described above.
+4. Open MetaEditor and compile the file.
+5. Return to MT5 and attach the EA to a chart on the intended demo terminal.
+6. Set the HTTPS API base URL, bridge token, exact broker symbols and terminal ID in the EA inputs.
+7. Add the exact HTTPS API origin under **Tools → Options → Expert Advisors → Allow WebRequest for listed URL**.
+8. Confirm heartbeat, quotes, specifications, candle groups, position state and broker-history upload in the backend/dashboard.
 
-## Inputs
+The EA may require MT5's global Algo Trading setting to be enabled to run an Expert Advisor. The telemetry EA itself contains no order-execution functions. Do not attach unrelated trading robots.
 
-- `InpApiBaseUrl`: HTTPS origin of the deployed API, without a trailing slash.
-- `InpBridgeToken`: unique secret of at least 32 characters; enter locally, never commit.
-- `InpSymbols`: comma-separated symbols exactly as named by the broker (for example, EURUSD,GBPUSD). Broker suffixes may be required.
-- `InpHeartbeatSeconds`: telemetry interval; minimum 5 seconds.
-- `InpHttpTimeoutMs`: request timeout; minimum 1000 ms.
+### Inputs
 
-## Data sent
+- `InpApiBaseUrl`: HTTPS API origin, without a trailing slash.
+- `InpBridgeToken`: unique secret of at least 32 characters; configure locally only.
+- `InpSymbols`: comma-separated exact broker symbols (defaults are EURUSDm and GBPUSDm).
+- `InpTerminalId`: stable identifier shared with the separate execution adapter.
+- `InpExecutionStateSeconds`: position snapshot interval.
+- `InpHeartbeatSeconds`: heartbeat/account interval.
+- `InpHttpTimeoutMs`: HTTP timeout.
+- `InpCandleBootstrapBars`: initial closed bars per symbol/timeframe (20–500).
+- `InpCandleRefreshSeconds`: candle refresh interval.
+- `InpHistoryRefreshSeconds`: broker history refresh interval.
+- `InpHistoryLookbackDays`: broker history lookback (1–7 days).
+- `InpExecutionMagicNumber`: magic number used to select managed execution history.
 
-- Heartbeat: server, terminal connectivity and UTC observation time.
-- Account: account currency, balance, equity, margin, free margin, leverage, server and UTC observation time. No account login or password is sent.
-- Quote: symbol, bid, ask and UTC observation time.
+### Safety and limitations
 
-The quote timestamp is the time the EA observed the tick, expressed in UTC. It is not represented as the broker's raw tick timestamp because MT5 server-time offset semantics must be configured explicitly before using broker timestamps for historical analysis.
+- The telemetry EA is read-only. It does not poll execution commands and does not call order submission, modification or close functions.
+- The EA requires HTTPS and a bridge token of at least 32 characters.
+- The telemetry EA's daily-loss figure is an operational fail-closed estimate, not an audited broker statement.
+- The backend health check confirms API process readiness, not broker connectivity or data completeness.
+- Static Python contract tests do not compile MQL5. Compile the latest source in MetaEditor and validate against the broker demo terminal.
+- Do not use a live account.
 
-## Important limitations
+## Demo execution EA — separate and default-off
 
-- The EA has not been compiled against MetaEditor in this repository's CI environment. Python CI now checks its API routes, JSON field contract, HTTPS/token guards and absence of common order-execution calls; these static checks do not replace compilation. Compile and test it on the Windows MT5 terminal before use.
-- This code does not establish a connection by itself; the API must first be deployed and secured.
-- The backend persists heartbeat, account and quote observations in SQLite. The latest-value and bounded quote-history read endpoints are protected by the same bridge token. The deployment uses a persistent Docker volume; backups and retention monitoring must still be configured.
-- Do not use a live account. This stage is demo-only.
+`ForexAutopilotDemoExecution.mq5` is a separate adapter. It is not the telemetry EA and should not replace it.
 
+Its `InpEnableDemoExecution` input defaults to `false`; it refuses non-demo accounts and applies local symbol, volume, position, stop/target, margin and terminal-permission checks. Backend dispatch is independently disabled by default and also requires approved intents, fresh telemetry, an explicit symbol allowlist and cleared operator controls.
 
-## API deployment preparation
+For the current development and validation phase:
 
-The repository includes a container build at `backend/Dockerfile` and a hardened single-service Compose deployment at the repository root. The API binds to loopback port 8000 only; place it behind a reverse proxy or managed ingress that terminates valid HTTPS before allowing the MT5 terminal to connect. Do not expose port 8000 directly to the public internet.
+- Keep `InpEnableDemoExecution=false`.
+- Keep backend `FOREX_AUTOPILOT_DEMO_EXECUTION_ENABLED=false`.
+- Keep the backend execution symbol allowlist empty.
+- Do not clear the pause/kill switch to test order flow.
+- Never retry an uncertain broker command blindly; reconcile it against broker order/deal history.
 
-Set `FOREX_AUTOPILOT_BRIDGE_TOKEN` in the deployment environment to a cryptographically random secret of at least 32 characters. Do not store it in Git, source code, screenshots or chat. Compose persists SQLite data in the named `telemetry_data` volume and runs the API as a non-root user. Back up that volume and verify restore before relying on the telemetry history.
+No demo execution pilot is authorised by a successful compile or passing backend tests alone.
 
-The API container health check verifies process readiness only; it does not verify Exness connectivity or MT5 telemetry. The EA must be compiled in MetaEditor and tested against a deployed HTTPS endpoint before this integration is considered operational.
+## Credentials and network
 
+Use a unique random bridge token of at least 32 characters in the deployment environment and enter the same value locally in MT5. Never commit credentials, screenshots containing tokens, account identifiers or `.env` files. Do not paste secrets into chat.
 
-The authenticated monitoring endpoint `GET /api/v1/mt5/status` summarizes heartbeat and quote freshness. Its default stale threshold is 60 seconds and can be changed with `FOREX_AUTOPILOT_TELEMETRY_STALE_AFTER_SECONDS`. This is a monitoring aid, not proof that the broker is healthy and not a permission to trade.
+The API should remain bound to loopback behind the restricted HTTPS telemetry gateway. Do not expose the API/admin surface directly to the public internet.

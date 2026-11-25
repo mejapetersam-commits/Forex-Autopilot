@@ -8,7 +8,7 @@
 <style>
 :root{color-scheme:dark;--bg:#0b1220;--panel:#121d30;--line:#26354d;--muted:#91a2bb;--text:#edf3fb;--green:#38d996;--red:#ff7185;--amber:#f3bd62;--blue:#79aaff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% -10%,#1b3151 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
-main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.title{font-size:clamp(28px,4vw,40px);letter-spacing:-.04em;margin:5px 0}.sub{color:var(--muted);margin:0}.pill{border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:28px}.panel{background:linear-gradient(145deg,#152239,#101a2b);border:1px solid var(--line);border-radius:16px;padding:19px;min-width:0}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:25px;font-weight:700;letter-spacing:-.03em;margin:8px 0 2px;overflow-wrap:anywhere}.hint{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}.ok{background:var(--green)}.bad{background:var(--red)}.warn{background:var(--amber)}.section{margin-top:20px}.section h2{font-size:17px;margin:0 0 12px}.wide{grid-column:span 2}.quote{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line)}.quote:first-child{border-top:0}.quote strong{font-size:16px}.price{text-align:right;font-variant-numeric:tabular-nums}.empty{color:var(--muted);padding:18px 0}.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:20px}.notice{margin-top:20px;border:1px solid #725b32;background:#2a2418;color:#f5d99e;border-radius:12px;padding:12px 15px;font-size:13px}button{background:#203452;border:1px solid #385276;color:var(--text);padding:8px 12px;border-radius:9px;cursor:pointer}button:hover{background:#294366}
+main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.title{font-size:clamp(28px,4vw,40px);letter-spacing:-.04em;margin:5px 0}.sub{color:var(--muted);margin:0}.pill{border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:28px}.panel{background:linear-gradient(145deg,#152239,#101a2b);border:1px solid var(--line);border-radius:16px;padding:19px;min-width:0}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:25px;font-weight:700;letter-spacing:-.03em;margin:8px 0 2px;overflow-wrap:anywhere}.hint{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}.ok{background:var(--green)}.bad{background:var(--red)}.warn{background:var(--amber)}.section{margin-top:20px}.section h2{font-size:17px;margin:0 0 12px}.wide{grid-column:span 2}.quote{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line)}.quote:first-child{border-top:0}.quote strong{font-size:16px}.price{text-align:right;font-variant-numeric:tabular-nums}.empty{color:var(--muted);padding:18px 0}.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:20px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.controls button.danger{border-color:#874455;background:#452431}.controls button.safe{border-color:#356a59;background:#183b32}.alert-list{display:grid;gap:8px}.alert-item{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#0e192a}.alert-critical{border-color:#874455}.alert-warning{border-color:#725b32}.signal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.signal-card{background:#0e192a;border:1px solid var(--line);border-radius:10px;padding:12px}.signal-card strong{display:block;font-size:15px}.signal-card .hint{margin-top:4px}.signal-buy{color:var(--green)}.signal-sell{color:var(--red)}.signal-flat{color:var(--amber)}@media(max-width:650px){.signal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}.notice{margin-top:20px;border:1px solid #725b32;background:#2a2418;color:#f5d99e;border-radius:12px;padding:12px 15px;font-size:13px}button{background:#203452;border:1px solid #385276;color:var(--text);padding:8px 12px;border-radius:9px;cursor:pointer}button:hover{background:#294366}
 @media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){main{padding:24px 15px}.grid{grid-template-columns:1fr}.wide{grid-column:span 1}}
 </style>
 </head>
@@ -20,7 +20,7 @@ main{max-width:1180px;margin:auto;padding:36px 24px 60px}.top{display:flex;justi
 <div class="panel"><div class="label">Equity</div><div class="value" id="equity">—</div><div class="hint" id="accountAge">No account snapshot</div></div>
 <div class="panel"><div class="label">Terminal heartbeat</div><div class="value" id="heartbeat">—</div><div class="hint" id="heartbeatAge">Waiting for heartbeat</div></div>
 <div class="panel wide"><h2>Market quotes</h2><div id="quotes" class="empty">No quotes received yet.</div></div>
-<div class="panel wide"><h2>Safety & runtime</h2><div class="quote"><span>Environment</span><strong>DEMO</strong></div><div class="quote"><span>Execution</span><strong id="execution">DISABLED</strong></div><div class="quote"><span>Trading enabled</span><strong id="trading">NO</strong></div><div class="quote"><span>Freshness limit</span><strong id="freshness">60 seconds</strong></div></div>
+<div class="panel wide"><h2>Operational health & alerts</h2><div id="healthStatus" class="value">—</div><div id="healthAlerts" class="alert-list"><div class="empty">Waiting for health checks…</div></div></div><div class="panel wide"><h2>Strategy research · closed candles</h2><div id="research" class="signal-grid"><div class="empty">Waiting for historical candles…</div></div><div class="hint" id="researchUpdated">Signals are research candidates, not trade instructions.</div></div><div class="panel wide"><h2>Operator controls</h2><div class="quote"><span>Automation pause</span><strong id="pauseState">PAUSED</strong></div><div class="quote"><span>Emergency stop</span><strong id="killState">ACTIVE</strong></div><div class="controls"><button id="pauseBtn">Pause automation</button><button id="resumeBtn" class="safe">Resume automation</button><button id="killBtn" class="danger">Emergency stop</button><button id="clearKillBtn">Clear emergency stop</button></div><div class="hint" id="controlHint">Controls require the separate admin token. Trading remains disabled in this build.</div></div><div class="panel wide"><h2>Safety & runtime</h2><div class="quote"><span>Environment</span><strong>DEMO</strong></div><div class="quote"><span>Execution</span><strong id="execution">DISABLED</strong></div><div class="quote"><span>Trading enabled</span><strong id="trading">NO</strong></div><div class="quote"><span>Freshness limit</span><strong id="freshness">60 seconds</strong></div></div>
 </section>
 <div class="notice">Local monitoring only. This dashboard displays stored telemetry; it does not place, modify, or close trades. Current sample records may be simulated.</div>
 <footer class="foot"><span id="updated">Not yet updated</span><span>Auto-refresh approximately every 2 seconds · Local API</span></footer>
@@ -50,6 +50,17 @@ async function refresh(){
   $('execution').textContent=String(d.execution_mode||'disabled').toUpperCase();
   $('trading').textContent=d.trading_enabled?'YES':'NO';
   $('freshness').textContent=d.stale_after_seconds+' seconds';
+  if(d.system_health){
+   $('healthStatus').textContent=String(d.system_health.status).toUpperCase();
+   const alerts=$('healthAlerts');alerts.replaceChildren();
+   if(!d.system_health.alerts.length){const ok=document.createElement('div');ok.className='empty';ok.textContent='No active telemetry alerts.';alerts.append(ok)}
+   for(const item of d.system_health.alerts){
+    const row=document.createElement('div');row.className='alert-item '+(item.severity==='critical'?'alert-critical':'alert-warning');
+    const heading=document.createElement('strong');heading.textContent=item.severity.toUpperCase()+' · '+item.code;
+    const message=document.createElement('div');message.className='hint';message.textContent=item.message;
+    row.append(heading,message);alerts.append(row);
+   }
+  }
   const quotes=$('quotes');quotes.replaceChildren();
   if(!d.quotes.length){quotes.textContent='No quotes received yet.';quotes.className='empty'}
   else{
@@ -70,5 +81,52 @@ async function refresh(){
   window.setTimeout(refresh,REFRESH_INTERVAL_MS);
  }
 }
-$('refresh').addEventListener('click',refresh);refresh();
+async function refreshControls(){
+ try{
+  const response=await fetch('/api/v1/dashboard/controls',{cache:'no-store'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const state=await response.json();
+  $('pauseState').textContent=state.trading_paused?'PAUSED':'UNPAUSED';
+  $('killState').textContent=state.kill_switch_active?'ACTIVE':'CLEAR';
+ }catch(e){$('controlHint').textContent='Control status unavailable: '+e.message}
+}
+async function setRuntimeControl(key,enabled){
+ if(!window.confirm(enabled?'Confirm this safety action?':'Confirm clearing this safety lock?'))return;
+ const token=window.prompt('Enter the FOREX AUTOPILOT admin token. It will not be saved.');
+ if(!token)return;
+ try{
+  const response=await fetch('/api/v1/admin/controls/'+encodeURIComponent(key),{
+   method:'POST',headers:{'Content-Type':'application/json','X-Admin-Token':token},
+   body:JSON.stringify({enabled})
+  });
+  const payload=await response.json();
+  if(!response.ok)throw new Error(payload.detail||('HTTP '+response.status));
+  $('controlHint').textContent='Control updated. Trading remains disabled; this does not enable order execution.';
+  await refreshControls();
+ }catch(e){$('controlHint').textContent='Control update failed: '+e.message}
+}
+$('pauseBtn').addEventListener('click',()=>setRuntimeControl('trading_paused',true));
+$('resumeBtn').addEventListener('click',()=>setRuntimeControl('trading_paused',false));
+$('killBtn').addEventListener('click',()=>setRuntimeControl('kill_switch_active',true));
+$('clearKillBtn').addEventListener('click',()=>setRuntimeControl('kill_switch_active',false));
+async function refreshResearch(){
+ try{
+  const response=await fetch('/api/v1/dashboard/research',{cache:'no-store'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const data=await response.json(),root=$('research');root.replaceChildren();
+  for(const item of data.items){
+   const card=document.createElement('div');card.className='signal-card';
+   const title=document.createElement('strong');title.textContent=item.symbol+' · '+item.timeframe;
+   const signal=document.createElement('div');signal.className=item.signal==='buy'?'signal-buy':item.signal==='sell'?'signal-sell':'signal-flat';
+   signal.textContent=String(item.signal).toUpperCase();
+   const details=document.createElement('div');details.className='hint';
+   details.textContent=item.candles+' candles · '+item.data_quality+' · '+item.gap_count+' gaps';
+   const reason=document.createElement('div');reason.className='hint';reason.textContent=item.reason;
+   card.append(title,signal,details,reason);root.append(card);
+  }
+  $('researchUpdated').textContent='Updated '+new Date(data.updated_at).toLocaleTimeString()+' · execution disabled';
+ }catch(e){$('research').textContent='Research feed unavailable: '+e.message}
+}
+$('refresh').addEventListener('click',()=>{refresh();refreshResearch()});refresh();refreshResearch();refreshControls();
+window.setInterval(refreshResearch,15000);window.setInterval(refreshControls,5000);
 </script></body></html>

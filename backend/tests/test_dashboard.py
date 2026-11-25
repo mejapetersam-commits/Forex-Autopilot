@@ -84,3 +84,32 @@ def test_dashboard_hides_legacy_symbols_but_preserves_quote_history(monkeypatch,
         "EURUSDM", "GBPUSDM"
     }
     assert len(store.quote_history("EURUSD")) == 1
+
+
+
+def test_dashboard_candle_ingestion_exposes_configured_upload_freshness(monkeypatch, tmp_path):
+    from app.market_data.telemetry_store import TelemetryStore
+    from app.broker.bridge import MT5CandleBatch
+
+    monkeypatch.setenv(
+        "FOREX_AUTOPILOT_TELEMETRY_DB", str(tmp_path / "candle-freshness.sqlite3")
+    )
+    monkeypatch.setenv("FOREX_AUTOPILOT_CANDLE_UPLOAD_STALE_AFTER_SECONDS", "120")
+    TelemetryStore().save_candle_batch(MT5CandleBatch(
+        symbol="EURUSDm",
+        timeframe="M5",
+        candles=[{
+            "opened_at": "2026-11-20T09:00:00Z",
+            "open": 1.1000, "high": 1.1020, "low": 1.0990,
+            "close": 1.1010, "tick_volume": 100,
+        }],
+    ))
+
+    response = client.get("/api/v1/dashboard/candle-ingestion")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stale_after_seconds"] == 120
+    assert data["series"][0]["upload_freshness"] == "recent"
+    assert data["stale_series_count"] == 0
+    assert data["freshness_status"] == "recent"
+    assert data["trading_enabled"] is False
